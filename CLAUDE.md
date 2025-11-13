@@ -24,10 +24,10 @@ Centralizes all operations for aesthetic centers that currently use disconnected
 - **Celery** with Redis broker for asynchronous tasks (notifications, reports)
 
 ### Frontend
-- **React 18+** (Single Page Application)
+- **React 18+ with TypeScript** (Single Page Application)
 - **React Spring** for smooth animations
 - **Axios** for API communication
-- **Zustand** or Context API for state management
+- **Zustand** for state management
 
 ### Infrastructure
 - **Docker** + **Docker Compose** for containerization
