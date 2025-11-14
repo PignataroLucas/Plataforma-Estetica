@@ -78,6 +78,7 @@ const Modal = ({
       <div
         className={`
           relative bg-white rounded-lg shadow-xl w-full
+          max-h-[90vh] flex flex-col
           ${sizeClasses[size]}
           animate-fadeIn
         `}
@@ -86,11 +87,11 @@ const Modal = ({
         {showCloseButton && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            className="absolute top-4 right-4 z-10 text-gray-400 hover:text-gray-600 transition-colors bg-white rounded-full p-1 hover:bg-gray-100"
             aria-label="Cerrar modal"
           >
             <svg
-              className="h-6 w-6"
+              className="h-5 w-5"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -117,7 +118,7 @@ const Modal = ({
  */
 export const ModalHeader = ({ children, className = '', ...rest }: ModalHeaderProps) => {
   return (
-    <div className={`px-6 py-4 border-b border-gray-200 ${className}`} {...rest}>
+    <div className={`px-6 py-4 border-b border-gray-200 flex-shrink-0 ${className}`} {...rest}>
       {children}
     </div>
   )
@@ -128,7 +129,7 @@ export const ModalHeader = ({ children, className = '', ...rest }: ModalHeaderPr
  */
 export const ModalBody = ({ children, className = '', ...rest }: ModalBodyProps) => {
   return (
-    <div className={`px-6 py-4 ${className}`} {...rest}>
+    <div className={`px-6 py-4 overflow-y-auto flex-1 ${className}`} {...rest}>
       {children}
     </div>
   )
@@ -139,7 +140,7 @@ export const ModalBody = ({ children, className = '', ...rest }: ModalBodyProps)
  */
 export const ModalFooter = ({ children, className = '', ...rest }: ModalFooterProps) => {
   return (
-    <div className={`px-6 py-4 border-t border-gray-200 flex justify-end gap-2 ${className}`} {...rest}>
+    <div className={`px-6 py-4 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0 ${className}`} {...rest}>
       {children}
     </div>
   )

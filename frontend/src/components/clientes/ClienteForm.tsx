@@ -15,6 +15,8 @@ interface ClienteFormProps {
   onSubmit: (data: Partial<Cliente>) => Promise<void>
   onCancel: () => void
   loading?: boolean
+  formId?: string
+  showButtons?: boolean
 }
 
 export default function ClienteForm({
@@ -22,6 +24,8 @@ export default function ClienteForm({
   onSubmit,
   onCancel,
   loading = false,
+  formId = 'cliente-form',
+  showButtons = true,
 }: ClienteFormProps) {
   const [formData, setFormData] = useState<Partial<Cliente>>({
     nombre: '',
@@ -86,18 +90,13 @@ export default function ClienteForm({
       newErrors.apellido = 'El apellido es requerido'
     }
 
-    if (!formData.email?.trim()) {
-      newErrors.email = 'El email es requerido'
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    // Email es opcional, pero si se ingresa debe ser válido
+    if (formData.email?.trim() && !/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email inválido'
     }
 
     if (!formData.telefono?.trim()) {
       newErrors.telefono = 'El teléfono es requerido'
-    }
-
-    if (!formData.numero_documento?.trim()) {
-      newErrors.numero_documento = 'El número de documento es requerido'
     }
 
     setErrors(newErrors)
@@ -139,7 +138,7 @@ export default function ClienteForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       {/* Datos Personales */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -173,8 +172,8 @@ export default function ClienteForm({
             value={formData.email}
             onChange={handleChange}
             error={errors.email}
-            required
             fullWidth
+            placeholder="correo@ejemplo.com"
           />
 
           <Input
@@ -183,30 +182,6 @@ export default function ClienteForm({
             name="fecha_nacimiento"
             value={formData.fecha_nacimiento}
             onChange={handleChange}
-            fullWidth
-          />
-
-          <Select
-            label="Tipo de Documento"
-            name="tipo_documento"
-            value={formData.tipo_documento}
-            onChange={handleChange}
-            options={[
-              { value: 'DNI', label: 'DNI' },
-              { value: 'PASAPORTE', label: 'Pasaporte' },
-              { value: 'OTRO', label: 'Otro' },
-            ]}
-            required
-            fullWidth
-          />
-
-          <Input
-            label="Número de Documento"
-            name="numero_documento"
-            value={formData.numero_documento}
-            onChange={handleChange}
-            error={errors.numero_documento}
-            required
             fullWidth
           />
         </div>
@@ -372,23 +347,25 @@ export default function ClienteForm({
       </div>
 
       {/* Botones de Acción */}
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-          disabled={loading}
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="submit"
-          variant="primary"
-          loading={loading}
-        >
-          {cliente ? 'Actualizar Cliente' : 'Crear Cliente'}
-        </Button>
-      </div>
+      {showButtons && (
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={loading}
+          >
+            {cliente ? 'Actualizar Cliente' : 'Crear Cliente'}
+          </Button>
+        </div>
+      )}
     </form>
   )
 }

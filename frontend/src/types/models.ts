@@ -1,5 +1,13 @@
 // Tipos que coinciden con los modelos de Django
 
+// Tipo genérico para respuestas paginadas de Django REST Framework
+export interface PaginatedResponse<T> {
+  count: number
+  next: string | null
+  previous: string | null
+  results: T[]
+}
+
 export interface CentroEstetica {
   id: number
   nombre: string

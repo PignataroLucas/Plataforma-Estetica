@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
     'django_extensions',
+    'django_filters',
 
     # Local apps (en orden de dependencias)
     'apps.empleados',  # PRIMERO - tiene Usuario, CentroEstetica, Sucursal

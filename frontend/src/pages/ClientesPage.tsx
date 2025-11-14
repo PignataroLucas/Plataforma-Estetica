@@ -206,7 +206,8 @@ export default function ClientesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        size="xl"
+        size="md"
+        showCloseButton={true}
       >
         <ModalHeader>
           <h2 className="text-xl font-bold text-gray-900">
@@ -234,10 +235,12 @@ export default function ClientesPage() {
                     <span className="font-medium text-gray-700">Teléfono:</span>
                     <p>{selectedCliente.telefono}</p>
                   </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Documento:</span>
-                    <p>{selectedCliente.tipo_documento} {selectedCliente.numero_documento}</p>
-                  </div>
+                  {selectedCliente.fecha_nacimiento && (
+                    <div>
+                      <span className="font-medium text-gray-700">Fecha de Nacimiento:</span>
+                      <p>{new Date(selectedCliente.fecha_nacimiento).toLocaleDateString('es-AR')}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -272,16 +275,37 @@ export default function ClientesPage() {
               onSubmit={handleFormSubmit}
               onCancel={handleCloseModal}
               loading={loading}
+              formId="cliente-form"
+              showButtons={false}
             />
           )}
         </ModalBody>
-        {modalMode === 'view' && (
+        {modalMode === 'view' ? (
           <ModalFooter>
             <Button variant="secondary" onClick={handleCloseModal}>
               Cerrar
             </Button>
             <Button variant="primary" onClick={() => setModalMode('edit')}>
               Editar
+            </Button>
+          </ModalFooter>
+        ) : (
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCloseModal}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="cliente-form"
+              variant="primary"
+              loading={loading}
+            >
+              {modalMode === 'edit' ? 'Actualizar Cliente' : 'Crear Cliente'}
             </Button>
           </ModalFooter>
         )}

@@ -42,7 +42,7 @@ class ClienteSerializer(serializers.ModelSerializer):
             'actualizado_en',
             'ultima_visita',
         ]
-        read_only_fields = ['id', 'creado_en', 'actualizado_en', 'nombre_completo']
+        read_only_fields = ['id', 'centro_estetica', 'creado_en', 'actualizado_en', 'nombre_completo']
 
     def create(self, validated_data):
         """
