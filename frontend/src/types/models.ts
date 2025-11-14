@@ -158,6 +158,22 @@ export interface Turno {
   creado_por?: number
 }
 
+// Turno con datos nested para listados
+export interface TurnoList extends Turno {
+  cliente_nombre: string
+  servicio_nombre: string
+  profesional_nombre?: string
+  duracion_minutos: number
+}
+
+// Turno con objetos completos nested para detalle
+export interface TurnoDetail extends Turno {
+  cliente_data: Cliente
+  servicio_data: Servicio
+  profesional_data?: Usuario
+  creado_por_data?: Usuario
+}
+
 export interface CategoriaProducto {
   id: number
   sucursal: number
