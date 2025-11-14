@@ -31,13 +31,13 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_extensions',
 
-    # Local apps
+    # Local apps (en orden de dependencias)
+    'apps.empleados',  # PRIMERO - tiene Usuario, CentroEstetica, Sucursal
     'apps.clientes',
-    'apps.turnos',
     'apps.servicios',
+    'apps.turnos',
     'apps.inventario',
     'apps.finanzas',
-    'apps.empleados',
     'apps.notificaciones',
     'apps.analytics',
 ]
@@ -178,8 +178,8 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-# Custom User Model (will be created later)
-# AUTH_USER_MODEL = 'empleados.Usuario'
+# Custom User Model
+AUTH_USER_MODEL = 'empleados.Usuario'
 
 # Security Settings (for production)
 if not DEBUG:

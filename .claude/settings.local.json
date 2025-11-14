@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose exec backend find:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(docker-compose logs backend --tail=50)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

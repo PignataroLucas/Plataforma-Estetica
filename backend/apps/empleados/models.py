@@ -83,7 +83,9 @@ class Usuario(AbstractUser):
     centro_estetica = models.ForeignKey(
         CentroEstetica,
         on_delete=models.CASCADE,
-        related_name='usuarios'
+        related_name='usuarios',
+        null=True,
+        blank=True
     )
     sucursal = models.ForeignKey(
         Sucursal,
@@ -115,10 +117,28 @@ class Usuario(AbstractUser):
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
+    # Sobrescribir relaciones de AbstractUser para evitar conflictos
+    groups = models.ManyToManyField(
+        'auth.Group',
+        verbose_name='groups',
+        blank=True,
+        help_text='The groups this user belongs to.',
+        related_name='usuario_set',
+        related_query_name='usuario',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        verbose_name='user permissions',
+        blank=True,
+        help_text='Specific permissions for this user.',
+        related_name='usuario_set',
+        related_query_name='usuario',
+    )
+
     class Meta:
         verbose_name = 'Usuario'
         verbose_name_plural = 'Usuarios'
-        ordering = ['centro_estetica', 'last_name', 'first_name']
+        ordering = ['last_name', 'first_name']
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.get_rol_display()})"
@@ -132,51 +152,53 @@ class Usuario(AbstractUser):
         return self.rol in [self.Rol.ADMIN, self.Rol.MANAGER]
 
 
-class Comision(models.Model):
-    """
-    Sistema de comisiones para empleados
-    Nota: Simplificado para MVP - solo % por servicio
-    """
-    usuario = models.ForeignKey(
-        Usuario,
-        on_delete=models.CASCADE,
-        related_name='comisiones'
-    )
-
-    # Relación con turno o venta de producto
-    turno = models.ForeignKey(
-        'turnos.Turno',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='comisiones'
-    )
-
-    # Cálculo de comisión
-    monto_base = models.DecimalField(max_digits=10, decimal_places=2)
-    porcentaje = models.DecimalField(max_digits=5, decimal_places=2)
-    monto_comision = models.DecimalField(max_digits=10, decimal_places=2)
-
-    # Estado de pago
-    pagada = models.BooleanField(default=False)
-    fecha_pago = models.DateField(null=True, blank=True)
-
-    # Notas
-    notas = models.TextField(blank=True)
-
-    # Timestamps
-    creado_en = models.DateTimeField(auto_now_add=True)
-    actualizado_en = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Comisión'
-        verbose_name_plural = 'Comisiones'
-        ordering = ['-creado_en']
-
-    def __str__(self):
-        return f"Comisión {self.usuario.get_full_name()} - ${self.monto_comision}"
-
-    def save(self, *args, **kwargs):
-        # Calcular monto de comisión automáticamente
-        self.monto_comision = self.monto_base * (self.porcentaje / 100)
-        super().save(*args, **kwargs)
+# TEMPORAL: Comision comentado para evitar dependencia circular
+# Se agregará en una migración posterior
+# class Comision(models.Model):
+#     """
+#     Sistema de comisiones para empleados
+#     Nota: Simplificado para MVP - solo % por servicio
+#     """
+#     usuario = models.ForeignKey(
+#         Usuario,
+#         on_delete=models.CASCADE,
+#         related_name='comisiones'
+#     )
+#
+#     # Relación con turno o venta de producto
+#     turno = models.ForeignKey(
+#         'turnos.Turno',
+#         on_delete=models.CASCADE,
+#         null=True,
+#         blank=True,
+#         related_name='comisiones'
+#     )
+#
+#     # Cálculo de comisión
+#     monto_base = models.DecimalField(max_digits=10, decimal_places=2)
+#     porcentaje = models.DecimalField(max_digits=5, decimal_places=2)
+#     monto_comision = models.DecimalField(max_digits=10, decimal_places=2)
+#
+#     # Estado de pago
+#     pagada = models.BooleanField(default=False)
+#     fecha_pago = models.DateField(null=True, blank=True)
+#
+#     # Notas
+#     notas = models.TextField(blank=True)
+#
+#     # Timestamps
+#     creado_en = models.DateTimeField(auto_now_add=True)
+#     actualizado_en = models.DateTimeField(auto_now=True)
+#
+#     class Meta:
+#         verbose_name = 'Comisión'
+#         verbose_name_plural = 'Comisiones'
+#         ordering = ['-creado_en']
+#
+#     def __str__(self):
+#         return f"Comisión {self.usuario.get_full_name()} - ${self.monto_comision}"
+#
+#     def save(self, *args, **kwargs):
+#         # Calcular monto de comisión automáticamente
+#         self.monto_comision = self.monto_base * (self.porcentaje / 100)
+#         super().save(*args, **kwargs)
