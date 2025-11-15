@@ -17,17 +17,18 @@ interface NavigationItem {
   name: string
   href: string
   icon: LucideIcon
+  roles?: string[] // Roles permitidos para ver este item. Si no se especifica, todos pueden verlo
 }
 
 const navigation: NavigationItem[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Clientes', href: '/clientes', icon: Users },
-  { name: 'Turnos', href: '/turnos', icon: Calendar },
-  { name: 'Servicios', href: '/servicios', icon: Briefcase },
-  { name: 'Inventario', href: '/inventario', icon: Package },
-  { name: 'Finanzas', href: '/finanzas', icon: DollarSign },
-  { name: 'Empleados', href: '/empleados', icon: UserCog },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard }, // Todos
+  { name: 'Clientes', href: '/clientes', icon: Users }, // Todos
+  { name: 'Turnos', href: '/turnos', icon: Calendar }, // Todos
+  { name: 'Servicios', href: '/servicios', icon: Briefcase }, // Todos
+  { name: 'Inventario', href: '/inventario', icon: Package, roles: ['ADMIN', 'MANAGER'] },
+  { name: 'Finanzas', href: '/finanzas', icon: DollarSign, roles: ['ADMIN'] },
+  { name: 'Empleados', href: '/empleados', icon: UserCog, roles: ['ADMIN', 'MANAGER'] },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
 ]
 
 export default function Layout() {
@@ -37,6 +38,14 @@ export default function Layout() {
   const handleLogout = () => {
     logout()
   }
+
+  // Filtrar navegación según el rol del usuario
+  const filteredNavigation = navigation.filter((item) => {
+    // Si no tiene roles especificados, todos pueden verlo
+    if (!item.roles) return true
+    // Si tiene roles, verificar que el usuario tenga uno de esos roles
+    return user?.rol && item.roles.includes(user.rol)
+  })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -52,7 +61,7 @@ export default function Layout() {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {filteredNavigation.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname === item.href
 
@@ -81,6 +90,13 @@ export default function Layout() {
                   {user?.first_name} {user?.last_name}
                 </p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
+                {user?.rol && (
+                  <p className="text-xs text-primary-600 font-semibold mt-1">
+                    {user.rol === 'ADMIN' && '👑 Administrador'}
+                    {user.rol === 'MANAGER' && '⭐ Manager'}
+                    {user.rol === 'EMPLEADO' && '👤 Empleado'}
+                  </p>
+                )}
               </div>
             </div>
             <button

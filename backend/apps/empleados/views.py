@@ -16,6 +16,7 @@ from .serializers import (
     SucursalSerializer,
     CustomTokenObtainPairSerializer
 )
+from .permissions import IsAdminOrManager
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -28,8 +29,10 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class UsuarioViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de empleados/usuarios
+    IMPORTANTE: Requiere rol ADMIN o MANAGER para CRUD
+    Los endpoints 'me' y 'profesionales' son accesibles por todos los autenticados
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['rol', 'activo', 'sucursal']
     search_fields = ['username', 'first_name', 'last_name', 'email', 'especialidades']
@@ -61,19 +64,21 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             return UsuarioDetailSerializer
         return UsuarioListSerializer
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
         """
         Endpoint para obtener los datos del usuario actual
+        Accesible por todos los usuarios autenticados
         """
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def profesionales(self, request):
         """
         Obtener solo usuarios que sean profesionales (activos)
         Útil para selects de profesionales en turnos
+        Accesible por todos los usuarios autenticados
         """
         profesionales = self.get_queryset().filter(activo=True)
         serializer = UsuarioListSerializer(profesionales, many=True)
