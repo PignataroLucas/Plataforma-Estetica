@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, Button, Input, Modal, ModalHeader, ModalBody, ModalFooter } from '../components/ui'
 import { TurnosList } from '../components/turnos/TurnosList'
 import { TurnoForm } from '../components/turnos/TurnoForm'
@@ -16,6 +16,8 @@ export default function TurnosPage() {
     createTurno,
     updateTurno,
     deleteTurno,
+    cambiarEstado,
+    clearError,
   } = useTurnos()
 
   const [activeTab, setActiveTab] = useState<TabType>('hoy')
@@ -79,6 +81,7 @@ export default function TurnosPage() {
     try {
       await createTurno(data)
       setIsCreateModalOpen(false)
+      loadTurnos() // Recargar con filtros actuales
     } catch (err) {
       console.error('Error creating turno:', err)
     }
@@ -91,6 +94,7 @@ export default function TurnosPage() {
       await updateTurno(selectedTurno.id, data)
       setIsEditModalOpen(false)
       setSelectedTurno(null)
+      loadTurnos() // Recargar con filtros actuales
     } catch (err) {
       console.error('Error updating turno:', err)
     }
@@ -103,10 +107,31 @@ export default function TurnosPage() {
     if (success) {
       setIsDeleteModalOpen(false)
       setSelectedTurno(null)
+      loadTurnos() // Recargar con filtros actuales
+    }
+  }
+
+  const handleQuickAction = async (turnoId: number, newEstado: string) => {
+    const estadoLabels: Record<string, string> = {
+      COMPLETADO: 'completado',
+      CANCELADO: 'cancelado',
+      NO_SHOW: 'No Show',
+    }
+
+    const confirm = window.confirm(
+      `¿Confirmas que deseas marcar este turno como ${estadoLabels[newEstado]}?`
+    )
+
+    if (!confirm) return
+
+    const success = await cambiarEstado(turnoId, newEstado)
+    if (success) {
+      loadTurnos() // Recargar para reflejar el cambio
     }
   }
 
   const openEditModal = (turno: TurnoList) => {
+    clearError()
     setSelectedTurno(turno)
     setIsEditModalOpen(true)
   }
@@ -133,7 +158,10 @@ export default function TurnosPage() {
           <h1 className="text-3xl font-bold text-gray-900">Turnos</h1>
           <p className="text-gray-600 mt-1">Gestiona las citas y reservas</p>
         </div>
-        <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
+        <Button variant="primary" onClick={() => {
+          clearError()
+          setIsCreateModalOpen(true)
+        }}>
           + Nuevo Turno
         </Button>
       </div>
@@ -207,25 +235,25 @@ export default function TurnosPage() {
         </div>
 
         <div className="p-6">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-md">
-              {error}
-            </div>
-          )}
-
           <TurnosList
             turnos={filteredTurnos}
             onEdit={openEditModal}
             onDelete={openDeleteModal}
+            onQuickAction={handleQuickAction}
             loading={loading}
           />
         </div>
       </Card>
 
       {/* Modal de Crear */}
-      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} size="large">
+      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} size="lg">
         <ModalHeader>Nuevo Turno</ModalHeader>
         <ModalBody>
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
           <TurnoForm
             formId="create-turno-form"
             onSubmit={handleCreateTurno}
@@ -243,9 +271,14 @@ export default function TurnosPage() {
       </Modal>
 
       {/* Modal de Editar */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} size="large">
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} size="lg">
         <ModalHeader>Editar Turno</ModalHeader>
         <ModalBody>
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
           {selectedTurno && (
             <TurnoForm
               formId="edit-turno-form"

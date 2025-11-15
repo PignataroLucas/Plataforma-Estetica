@@ -15,6 +15,7 @@ interface UseTurnosReturn {
   fetchTurnosProximos: () => Promise<TurnoList[]>
   verificarDisponibilidad: (data: DisponibilidadData) => Promise<DisponibilidadResponse>
   cambiarEstado: (id: number, estado: string) => Promise<Turno | null>
+  clearError: () => void
 }
 
 interface FetchTurnosParams {
@@ -102,7 +103,7 @@ export const useTurnos = (): UseTurnosReturn => {
       const cleanedData = cleanTurnoData(data)
       console.log('Sending turno data:', cleanedData)
       const response = await api.post('/turnos/turnos/', cleanedData)
-      await fetchTurnos()
+      // No recargar automáticamente - dejar que el componente decida
       return response.data
     } catch (err: any) {
       console.error('Full error response:', JSON.stringify(err.response?.data, null, 2))
@@ -133,7 +134,7 @@ export const useTurnos = (): UseTurnosReturn => {
     try {
       const cleanedData = cleanTurnoData(data)
       const response = await api.put(`/turnos/turnos/${id}/`, cleanedData)
-      await fetchTurnos()
+      // No recargar automáticamente - dejar que el componente decida
       return response.data
     } catch (err: any) {
       const errorMessage = err.response?.data?.fecha_hora_inicio?.[0] ||
@@ -152,7 +153,7 @@ export const useTurnos = (): UseTurnosReturn => {
     setError(null)
     try {
       await api.delete(`/turnos/turnos/${id}/`)
-      await fetchTurnos()
+      // No recargar automáticamente - dejar que el componente decida
       return true
     } catch (err: any) {
       setError(err.response?.data?.message || 'Error al eliminar el turno')
@@ -212,7 +213,7 @@ export const useTurnos = (): UseTurnosReturn => {
     setError(null)
     try {
       const response = await api.post(`/turnos/turnos/${id}/cambiar_estado/`, { estado })
-      await fetchTurnos()
+      // No recargar automáticamente - dejar que el componente decida
       return response.data
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al cambiar el estado')
@@ -221,6 +222,10 @@ export const useTurnos = (): UseTurnosReturn => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const clearError = () => {
+    setError(null)
   }
 
   return {
@@ -236,5 +241,6 @@ export const useTurnos = (): UseTurnosReturn => {
     fetchTurnosProximos,
     verificarDisponibilidad,
     cambiarEstado,
+    clearError,
   }
 }

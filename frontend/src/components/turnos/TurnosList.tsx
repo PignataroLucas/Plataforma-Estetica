@@ -6,10 +6,11 @@ interface TurnosListProps {
   turnos: TurnoList[]
   onEdit: (turno: TurnoList) => void
   onDelete: (turno: TurnoList) => void
+  onQuickAction: (turnoId: number, newEstado: string) => void
   loading?: boolean
 }
 
-const getEstadoBadgeVariant = (estado: string): 'success' | 'warning' | 'error' | 'info' | 'default' => {
+const getEstadoBadgeVariant = (estado: string): 'success' | 'warning' | 'danger' | 'info' | 'gray' => {
   switch (estado) {
     case 'CONFIRMADO':
       return 'success'
@@ -19,22 +20,22 @@ const getEstadoBadgeVariant = (estado: string): 'success' | 'warning' | 'error' 
       return 'info'
     case 'CANCELADO':
     case 'NO_SHOW':
-      return 'error'
+      return 'danger'
     default:
-      return 'default'
+      return 'gray'
   }
 }
 
-const getEstadoPagoBadgeVariant = (estado: string): 'success' | 'warning' | 'error' | 'info' | 'default' => {
+const getEstadoPagoBadgeVariant = (estado: string): 'success' | 'warning' | 'danger' | 'info' | 'gray' => {
   switch (estado) {
     case 'PAGADO':
       return 'success'
     case 'CON_SENA':
       return 'warning'
     case 'PENDIENTE':
-      return 'error'
+      return 'danger'
     default:
-      return 'default'
+      return 'gray'
   }
 }
 
@@ -88,7 +89,7 @@ const getEstadoPagoLabel = (estado: string) => {
   return labels[estado] || estado
 }
 
-export const TurnosList: React.FC<TurnosListProps> = ({ turnos, onEdit, onDelete, loading }) => {
+export const TurnosList: React.FC<TurnosListProps> = ({ turnos, onEdit, onDelete, onQuickAction, loading }) => {
   const columns = [
     {
       key: 'fecha_hora_inicio',
@@ -148,24 +149,61 @@ export const TurnosList: React.FC<TurnosListProps> = ({ turnos, onEdit, onDelete
     {
       key: 'acciones',
       header: 'Acciones',
-      accessor: (turno: TurnoList) => (
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            size="small"
-            onClick={() => onEdit(turno)}
-          >
-            Editar
-          </Button>
-          <Button
-            variant="danger"
-            size="small"
-            onClick={() => onDelete(turno)}
-          >
-            Eliminar
-          </Button>
-        </div>
-      ),
+      accessor: (turno: TurnoList) => {
+        const isFinalized = ['COMPLETADO', 'CANCELADO', 'NO_SHOW'].includes(turno.estado)
+
+        return (
+          <div className="flex gap-1 flex-wrap">
+            {/* Botones de acción rápida solo para turnos activos */}
+            {!isFinalized && (
+              <>
+                <Button
+                  variant="success"
+                  size="sm"
+                  onClick={() => onQuickAction(turno.id, 'COMPLETADO')}
+                  title="Marcar como completado"
+                >
+                  ✅
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => onQuickAction(turno.id, 'CANCELADO')}
+                  title="Cancelar turno"
+                >
+                  ❌
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onQuickAction(turno.id, 'NO_SHOW')}
+                  title="Marcar como No Show"
+                >
+                  🚫
+                </Button>
+              </>
+            )}
+
+            {/* Botones de editar/eliminar siempre disponibles */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => onEdit(turno)}
+              title="Editar"
+            >
+              ✏️
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => onDelete(turno)}
+              title="Eliminar"
+            >
+              🗑️
+            </Button>
+          </div>
+        )
+      },
     },
   ]
 

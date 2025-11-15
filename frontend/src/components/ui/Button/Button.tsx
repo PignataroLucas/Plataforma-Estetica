@@ -23,6 +23,7 @@ const Button = ({
     primary: 'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800',
     secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400',
     danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
+    success: 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800',
     ghost: 'bg-transparent text-gray-700 hover:bg-gray-100',
   }
 

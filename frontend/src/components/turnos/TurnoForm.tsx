@@ -82,12 +82,12 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     }
   }, [initialData])
 
-  // Cargar turnos del día cuando cambie la fecha o profesional
+  // Cargar turnos del día cuando cambie la fecha, profesional o servicio
   useEffect(() => {
     if (selectedDate && formData.profesional) {
       loadTurnosDelDia()
     }
-  }, [selectedDate, formData.profesional])
+  }, [selectedDate, formData.profesional, formData.servicio])
 
   const loadTurnosDelDia = async () => {
     if (!selectedDate) return
@@ -99,11 +99,17 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
           fecha_desde: `${selectedDate}T00:00:00`,
           fecha_hasta: `${selectedDate}T23:59:59`,
           profesional: formData.profesional,
-          estado: 'CONFIRMADO,PENDIENTE'
         }
       })
-      const data = Array.isArray(response.data) ? response.data : response.data.results || []
-      setTurnosDelDia(data)
+      const allData = Array.isArray(response.data) ? response.data : response.data.results || []
+
+      // Filtrar solo turnos confirmados y pendientes (los que realmente ocupan el horario)
+      const filteredData = allData.filter(turno =>
+        turno.estado === 'CONFIRMADO' || turno.estado === 'PENDIENTE'
+      )
+
+      console.log('Turnos del día cargados:', filteredData)
+      setTurnosDelDia(filteredData)
     } catch (err) {
       console.error('Error loading turnos del día:', err)
       setTurnosDelDia([])
@@ -164,19 +170,48 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     return Object.keys(newErrors).length === 0
   }
 
-  // Verificar si un horario está ocupado
+  // Verificar si un horario está ocupado (considerando duración del servicio)
   const isTimeSlotOccupied = (time: string) => {
-    if (!turnosDelDia.length) return false
+    if (!turnosDelDia.length || !servicioSeleccionado) {
+      return false
+    }
 
     const [hours, minutes] = time.split(':').map(Number)
     const selectedDateTime = new Date(selectedDate)
     selectedDateTime.setHours(hours, minutes, 0)
 
-    return turnosDelDia.some(turno => {
-      const inicio = new Date(turno.fecha_hora_inicio)
-      const fin = new Date(turno.fecha_hora_fin)
-      return selectedDateTime >= inicio && selectedDateTime < fin
+    // Calcular fin del turno según duración del servicio
+    const finTurno = new Date(selectedDateTime)
+    finTurno.setMinutes(finTurno.getMinutes() + servicioSeleccionado.duracion_minutos)
+
+    // Verificar si hay conflicto con algún turno existente
+    const hasConflict = turnosDelDia.some(turno => {
+      // Si estamos editando, excluir el turno actual de la verificación
+      if (initialData?.id && turno.id === initialData.id) {
+        return false
+      }
+
+      const inicioExistente = new Date(turno.fecha_hora_inicio)
+      const finExistente = new Date(turno.fecha_hora_fin)
+
+      // Hay conflicto si:
+      // 1. El nuevo turno empieza durante un turno existente
+      // 2. El nuevo turno termina durante un turno existente
+      // 3. El nuevo turno engloba completamente un turno existente
+      const conflict = (
+        (selectedDateTime >= inicioExistente && selectedDateTime < finExistente) || // Empieza durante
+        (finTurno > inicioExistente && finTurno <= finExistente) || // Termina durante
+        (selectedDateTime <= inicioExistente && finTurno >= finExistente) // Engloba
+      )
+
+      if (conflict) {
+        console.log(`Slot ${time}: OCUPADO - Conflicto con turno ${inicioExistente.toLocaleTimeString()} - ${finExistente.toLocaleTimeString()}`)
+      }
+
+      return conflict
     })
+
+    return hasConflict
   }
 
   // Obtener el servicio seleccionado para calcular duración
@@ -311,6 +346,11 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
           </select>
           {errors.fecha_hora_inicio && (
             <p className="mt-1 text-sm text-red-600">{errors.fecha_hora_inicio}</p>
+          )}
+          {selectedDate && (!formData.servicio || !formData.profesional) && (
+            <p className="mt-1 text-sm text-blue-600">
+              💡 Selecciona servicio y profesional para ver disponibilidad
+            </p>
           )}
         </div>
       </div>
