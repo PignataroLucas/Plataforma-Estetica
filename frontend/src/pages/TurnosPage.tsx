@@ -5,6 +5,8 @@ import { TurnoForm } from '../components/turnos/TurnoForm'
 import { useTurnos } from '../hooks/useTurnos'
 import type { TurnoList, Turno } from '../types/models'
 
+type TabType = 'hoy' | 'proximos' | 'historial'
+
 export default function TurnosPage() {
   const {
     turnos,
@@ -16,22 +18,60 @@ export default function TurnosPage() {
     deleteTurno,
   } = useTurnos()
 
+  const [activeTab, setActiveTab] = useState<TabType>('hoy')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [selectedTurno, setSelectedTurno] = useState<TurnoList | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterEstado, setFilterEstado] = useState('')
-  const [filterFecha, setFilterFecha] = useState('')
+  const [filterProfesional, setFilterProfesional] = useState('')
 
   useEffect(() => {
     loadTurnos()
-  }, [filterEstado, filterFecha])
+  }, [activeTab, filterEstado, filterProfesional])
+
+  const getDateFilters = () => {
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const nowISO = now.toISOString()
+
+    switch (activeTab) {
+      case 'hoy':
+        // Solo turnos de hoy que NO han pasado (desde ahora hasta fin del día)
+        const endOfToday = `${todayStr}T23:59:59`
+        return {
+          fecha_desde: nowISO,
+          fecha_hasta: endOfToday,
+        }
+      case 'proximos':
+        // Turnos desde mañana hasta 7 días en el futuro
+        const tomorrow = new Date(now)
+        tomorrow.setDate(now.getDate() + 1)
+        tomorrow.setHours(0, 0, 0, 0)
+        const in7Days = new Date(tomorrow)
+        in7Days.setDate(tomorrow.getDate() + 7)
+        return {
+          fecha_desde: tomorrow.toISOString(),
+          fecha_hasta: in7Days.toISOString(),
+        }
+      case 'historial':
+        // Turnos que ya pasaron (últimos 30 días hasta ahora)
+        const ago30Days = new Date(now)
+        ago30Days.setDate(now.getDate() - 30)
+        return {
+          fecha_desde: ago30Days.toISOString(),
+          fecha_hasta: nowISO,
+        }
+      default:
+        return {}
+    }
+  }
 
   const loadTurnos = () => {
-    const params: any = {}
+    const params: any = { ...getDateFilters() }
     if (filterEstado) params.estado = filterEstado
-    if (filterFecha) params.fecha_desde = filterFecha
+    if (filterProfesional) params.profesional = filterProfesional
     fetchTurnos(params)
   }
 
@@ -98,7 +138,41 @@ export default function TurnosPage() {
         </Button>
       </div>
 
-      <Card>
+      {/* Tabs */}
+      <div className="flex space-x-1 border-b border-gray-200 bg-white rounded-t-lg px-4">
+        <button
+          onClick={() => setActiveTab('hoy')}
+          className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'hoy'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          📅 Hoy
+        </button>
+        <button
+          onClick={() => setActiveTab('proximos')}
+          className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'proximos'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          🔜 Próximos
+        </button>
+        <button
+          onClick={() => setActiveTab('historial')}
+          className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'historial'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          📊 Historial
+        </button>
+      </div>
+
+      <Card className="rounded-t-none">
         <div className="p-4 border-b border-gray-200">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
@@ -121,12 +195,14 @@ export default function TurnosPage() {
               <option value="NO_SHOW">No Show</option>
             </select>
 
-            <Input
-              type="date"
-              placeholder="Filtrar por fecha"
-              value={filterFecha}
-              onChange={(e) => setFilterFecha(e.target.value)}
-            />
+            <select
+              value={filterProfesional}
+              onChange={(e) => setFilterProfesional(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los profesionales</option>
+              {/* TODO: Cargar lista de profesionales dinámicamente */}
+            </select>
           </div>
         </div>
 

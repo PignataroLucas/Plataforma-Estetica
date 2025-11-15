@@ -1,5 +1,175 @@
 # Mejoras Pendientes - Plataforma de Gestión Estética
 
+## 🔴 PRIORIDAD ALTA: Sistema de Turnos - Gestión y Visualización
+
+### Problemas Actuales Identificados
+**Fecha identificación**: 2025-01-14
+
+1. **❌ Turnos pasados no se filtran automáticamente**
+   - La lista muestra TODOS los turnos (pasados, presentes y futuros) mezclados
+   - Dificulta ver la agenda del día actual
+   - No hay distinción visual entre turnos pasados y futuros
+   - **Impacto**: Confusión, pérdida de tiempo buscando turnos relevantes
+
+2. **❌ Falta gestión rápida de estados**
+   - Para marcar un turno como "Completado" hay que abrir modal de edición
+   - No hay botones de acción rápida (Completar, Cancelar, No-Show)
+   - Proceso tedioso para cambios de estado frecuentes
+   - **Impacto**: Flujo de trabajo lento, frustración del usuario
+
+3. **❌ Vista poco práctica para uso diario**
+   - Solo hay una tabla larga sin organización
+   - No hay vista de "Agenda del día"
+   - Falta contexto visual de la jornada
+   - No hay filtros rápidos por fecha (Hoy, Mañana, Esta semana)
+   - **Impacto**: Mala experiencia de usuario, sistema poco práctico
+
+4. **❌ No hay gestión de turnos pasados**
+   - Los turnos viejos permanecen en la lista principal indefinidamente
+   - No hay separación entre turnos activos e históricos
+   - **Impacto**: Performance degradada con el tiempo, lista interminable
+
+### Soluciones Propuestas - Orden de Implementación
+
+#### ✅ Fase 1: Vista con Tabs y Filtros (30 min) - PRIORITARIO
+**Estado**: ✅ COMPLETADO (2025-01-14)
+**Complejidad**: Baja
+**Impacto**: Alto
+
+**Descripción**:
+- Agregar sistema de **tabs** en TurnosPage:
+  - 📅 **"Hoy"** - Turnos del día actual (default)
+  - 🔜 **"Próximos"** - Turnos futuros (próximos 7 días)
+  - 📊 **"Historial"** - Turnos pasados (últimos 30 días)
+- Cambiar comportamiento por defecto: mostrar solo "Hoy" al cargar
+- Ordenar turnos por fecha/hora ascendente
+- Filtro rápido por profesional en cada tab
+
+**Implementación**:
+```typescript
+// frontend/src/pages/TurnosPage.tsx
+const [activeTab, setActiveTab] = useState<'hoy' | 'proximos' | 'historial'>('hoy')
+
+useEffect(() => {
+  const today = new Date().toISOString().split('T')[0]
+  const params = {
+    fecha_desde: activeTab === 'hoy' ? `${today}T00:00:00` : undefined,
+    fecha_hasta: activeTab === 'hoy' ? `${today}T23:59:59` : undefined,
+    // ... otros filtros según tab
+  }
+  fetchTurnos(params)
+}, [activeTab])
+```
+
+**Archivos a modificar**:
+- `frontend/src/pages/TurnosPage.tsx` - Agregar tabs y lógica de filtrado
+
+---
+
+#### ✅ Fase 2: Acciones Rápidas de Estado (20 min) - PRIORITARIO
+**Estado**: Pendiente
+**Complejidad**: Baja
+**Impacto**: Muy Alto
+
+**Descripción**:
+- Agregar botones de acción rápida en cada fila de la tabla:
+  - ✅ **"Completar"** - Cambia a COMPLETADO
+  - ❌ **"Cancelar"** - Cambia a CANCELADO
+  - 🚫 **"No-Show"** - Cambia a NO_SHOW
+- Solo mostrar acciones relevantes según estado actual
+- Confirmación simple antes de cambiar estado (sin modal grande)
+- Usar el endpoint `cambiar_estado` del backend
+
+**Implementación**:
+```typescript
+// frontend/src/components/turnos/TurnosList.tsx
+const QuickActions = ({ turno }) => {
+  if (turno.estado === 'COMPLETADO' || turno.estado === 'CANCELADO') {
+    return <Badge>Finalizado</Badge>
+  }
+
+  return (
+    <div className="flex gap-1">
+      <Button size="small" onClick={() => onQuickAction(turno.id, 'COMPLETADO')}>
+        ✅ Completar
+      </Button>
+      <Button size="small" variant="danger" onClick={() => onQuickAction(turno.id, 'CANCELADO')}>
+        ❌ Cancelar
+      </Button>
+      <Button size="small" variant="secondary" onClick={() => onQuickAction(turno.id, 'NO_SHOW')}>
+        🚫 No-Show
+      </Button>
+    </div>
+  )
+}
+```
+
+**Archivos a modificar**:
+- `frontend/src/components/turnos/TurnosList.tsx` - Agregar botones de acción rápida
+- `frontend/src/pages/TurnosPage.tsx` - Manejar cambios de estado
+
+---
+
+#### ✅ Fase 3: Validación Inteligente de Horarios (40 min)
+**Estado**: Pendiente
+**Complejidad**: Media
+**Impacto**: Alto
+
+**Descripción**:
+- Mejorar `isTimeSlotOccupied()` para considerar duración del servicio
+- Calcular automáticamente qué slots ocupará el servicio seleccionado
+- Deshabilitar todos los slots que interfieran con turnos existentes
+- Mostrar mensaje claro si no hay disponibilidad ese día
+
+**Implementación**:
+```typescript
+const isTimeSlotAvailable = (time: string, serviceDuration: number) => {
+  const slotsNeeded = Math.ceil(serviceDuration / 30)
+
+  for (let i = 0; i < slotsNeeded; i++) {
+    const slotTime = addMinutes(time, i * 30)
+    if (isSlotOccupied(slotTime)) return false
+  }
+
+  return true
+}
+```
+
+**Archivos a modificar**:
+- `frontend/src/components/turnos/TurnoForm.tsx` - Mejorar lógica de validación
+
+---
+
+#### 🔄 Fase 4: Vista de Agenda del Día (Opcional - 1-2 horas)
+**Estado**: Pendiente
+**Complejidad**: Media-Alta
+**Impacto**: Muy Alto
+
+**Descripción**:
+- Vista alternativa tipo "agenda" con bloques de tiempo
+- Timeline visual de 8am a 7pm
+- Turnos mostrados como bloques en su horario
+- Espacios en blanco = horarios disponibles
+- Código de colores por profesional o tipo de servicio
+
+**Librerías recomendadas**:
+- [react-big-calendar](https://github.com/jquense/react-big-calendar)
+- [FullCalendar](https://fullcalendar.io/)
+- Custom con CSS Grid
+
+---
+
+### Recomendación de Implementación
+1. **Fase 1** (30 min) ← EMPEZAR AQUÍ
+2. **Fase 2** (20 min) ← SEGUIR ACÁ
+3. **Fase 3** (40 min)
+4. **Fase 4** (Opcional, más adelante)
+
+**Total tiempo Fases 1-3**: ~90 minutos
+**Impacto**: Sistema de turnos profesional y funcional
+
+---
+
 ## Sistema de Turnos - Disponibilidad de Horarios
 
 ### Problema Actual
