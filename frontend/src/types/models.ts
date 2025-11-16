@@ -229,6 +229,46 @@ export interface Producto {
   actualizado_en: string
 }
 
+// Producto con datos nested para listados
+export interface ProductoList extends Producto {
+  categoria_nombre?: string
+  proveedor_nombre?: string
+  margen_ganancia: number
+  stock_bajo: boolean
+}
+
+// Producto con objetos completos nested para detalle
+export interface ProductoDetail extends Producto {
+  categoria_data?: CategoriaProducto
+  proveedor_data?: Proveedor
+  margen_ganancia: number
+  stock_bajo: boolean
+}
+
+export enum TipoMovimiento {
+  ENTRADA = 'ENTRADA',
+  SALIDA = 'SALIDA',
+  AJUSTE = 'AJUSTE',
+  TRANSFERENCIA_IN = 'TRANSFERENCIA_IN',
+  TRANSFERENCIA_OUT = 'TRANSFERENCIA_OUT',
+}
+
+export interface MovimientoInventario {
+  id: number
+  producto: number
+  producto_nombre: string
+  tipo: TipoMovimiento
+  cantidad: number
+  stock_anterior: number
+  stock_nuevo: number
+  motivo: string
+  notas: string
+  costo_unitario?: number
+  usuario?: number
+  usuario_nombre?: string
+  creado_en: string
+}
+
 export enum TipoTransaccion {
   INGRESO_SERVICIO = 'INGRESO_SERVICIO',
   INGRESO_PRODUCTO = 'INGRESO_PRODUCTO',
