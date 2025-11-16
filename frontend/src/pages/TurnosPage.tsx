@@ -34,13 +34,30 @@ export default function TurnosPage() {
 
   useEffect(() => {
     loadTurnos()
-  }, [activeTab, filterEstado, filterProfesional])
+  }, [activeTab, filterEstado, filterProfesional, viewType])
 
   const getDateFilters = () => {
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
     const nowISO = now.toISOString()
 
+    // Si estamos en vista calendario, cargar un rango amplio
+    if (viewType === 'calendar') {
+      const ago7Days = new Date(now)
+      ago7Days.setDate(now.getDate() - 7)
+      ago7Days.setHours(0, 0, 0, 0)
+
+      const in30Days = new Date(now)
+      in30Days.setDate(now.getDate() + 30)
+      in30Days.setHours(23, 59, 59)
+
+      return {
+        fecha_desde: ago7Days.toISOString(),
+        fecha_hasta: in30Days.toISOString(),
+      }
+    }
+
+    // Si estamos en vista lista, aplicar filtros por tab
     switch (activeTab) {
       case 'hoy':
         // Solo turnos de hoy que NO han pasado (desde ahora hasta fin del día)
@@ -75,8 +92,13 @@ export default function TurnosPage() {
 
   const loadTurnos = () => {
     const params: any = { ...getDateFilters() }
-    if (filterEstado) params.estado = filterEstado
-    if (filterProfesional) params.profesional = filterProfesional
+
+    // Solo aplicar filtros de estado y profesional en vista lista
+    if (viewType === 'list') {
+      if (filterEstado) params.estado = filterEstado
+      if (filterProfesional) params.profesional = filterProfesional
+    }
+
     fetchTurnos(params)
   }
 
