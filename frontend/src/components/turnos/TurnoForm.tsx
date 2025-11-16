@@ -104,7 +104,7 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
       const allData = Array.isArray(response.data) ? response.data : response.data.results || []
 
       // Filtrar solo turnos confirmados y pendientes (los que realmente ocupan el horario)
-      const filteredData = allData.filter(turno =>
+      const filteredData = allData.filter((turno: TurnoList) =>
         turno.estado === 'CONFIRMADO' || turno.estado === 'PENDIENTE'
       )
 

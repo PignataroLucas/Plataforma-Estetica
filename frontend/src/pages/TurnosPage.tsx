@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Card, Button, Input, Modal, ModalHeader, ModalBody, ModalFooter } from '../components/ui'
 import { TurnosList } from '../components/turnos/TurnosList'
+import { CalendarView } from '../components/turnos/CalendarView'
 import { TurnoForm } from '../components/turnos/TurnoForm'
 import { useTurnos } from '../hooks/useTurnos'
 import type { TurnoList, Turno } from '../types/models'
 
 type TabType = 'hoy' | 'proximos' | 'historial'
+type ViewType = 'list' | 'calendar'
 
 export default function TurnosPage() {
   const {
@@ -21,6 +23,7 @@ export default function TurnosPage() {
   } = useTurnos()
 
   const [activeTab, setActiveTab] = useState<TabType>('hoy')
+  const [viewType, setViewType] = useState<ViewType>('list')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -141,6 +144,18 @@ export default function TurnosPage() {
     setIsDeleteModalOpen(true)
   }
 
+  // Handlers para el calendario
+  const handleCalendarSelectEvent = (turno: TurnoList) => {
+    openEditModal(turno)
+  }
+
+  const handleCalendarSelectSlot = (_slotInfo: { start: Date; end: Date }) => {
+    // Pre-llenar el modal de creación con la fecha/hora seleccionada
+    clearError()
+    setIsCreateModalOpen(true)
+    // TODO: Pre-llenar fecha y hora en el formulario usando slotInfo
+  }
+
   const filteredTurnos = turnos.filter(turno => {
     if (!searchTerm) return true
     const search = searchTerm.toLowerCase()
@@ -158,16 +173,42 @@ export default function TurnosPage() {
           <h1 className="text-3xl font-bold text-gray-900">Turnos</h1>
           <p className="text-gray-600 mt-1">Gestiona las citas y reservas</p>
         </div>
-        <Button variant="primary" onClick={() => {
-          clearError()
-          setIsCreateModalOpen(true)
-        }}>
-          + Nuevo Turno
-        </Button>
+        <div className="flex gap-2">
+          {/* Toggle de vistas */}
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewType('list')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                viewType === 'list'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📋 Lista
+            </button>
+            <button
+              onClick={() => setViewType('calendar')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                viewType === 'calendar'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📅 Calendario
+            </button>
+          </div>
+          <Button variant="primary" onClick={() => {
+            clearError()
+            setIsCreateModalOpen(true)
+          }}>
+            + Nuevo Turno
+          </Button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex space-x-1 border-b border-gray-200 bg-white rounded-t-lg px-4">
+      {/* Tabs - Solo mostrar en vista de lista */}
+      {viewType === 'list' && (
+        <div className="flex space-x-1 border-b border-gray-200 bg-white rounded-t-lg px-4">
         <button
           onClick={() => setActiveTab('hoy')}
           className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
@@ -198,51 +239,67 @@ export default function TurnosPage() {
         >
           📊 Historial
         </button>
-      </div>
+        </div>
+      )}
 
-      <Card className="rounded-t-none">
-        <div className="p-4 border-b border-gray-200">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              type="search"
-              placeholder="Buscar por cliente, servicio o profesional..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      <Card className={viewType === 'list' ? 'rounded-t-none' : ''}>
+        {/* Filtros - Solo en vista lista */}
+        {viewType === 'list' && (
+          <div className="p-4 border-b border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Input
+                type="search"
+                placeholder="Buscar por cliente, servicio o profesional..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
 
-            <select
-              value={filterEstado}
-              onChange={(e) => setFilterEstado(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos los estados</option>
-              <option value="PENDIENTE">Pendiente</option>
-              <option value="CONFIRMADO">Confirmado</option>
-              <option value="COMPLETADO">Completado</option>
-              <option value="CANCELADO">Cancelado</option>
-              <option value="NO_SHOW">No Show</option>
-            </select>
+              <select
+                value={filterEstado}
+                onChange={(e) => setFilterEstado(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todos los estados</option>
+                <option value="PENDIENTE">Pendiente</option>
+                <option value="CONFIRMADO">Confirmado</option>
+                <option value="COMPLETADO">Completado</option>
+                <option value="CANCELADO">Cancelado</option>
+                <option value="NO_SHOW">No Show</option>
+              </select>
 
-            <select
-              value={filterProfesional}
-              onChange={(e) => setFilterProfesional(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos los profesionales</option>
-              {/* TODO: Cargar lista de profesionales dinámicamente */}
-            </select>
+              <select
+                value={filterProfesional}
+                onChange={(e) => setFilterProfesional(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todos los profesionales</option>
+                {/* TODO: Cargar lista de profesionales dinámicamente */}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="p-6">
-          <TurnosList
-            turnos={filteredTurnos}
-            onEdit={openEditModal}
-            onDelete={openDeleteModal}
-            onQuickAction={handleQuickAction}
-            loading={loading}
-          />
-        </div>
+        {/* Contenido según vista seleccionada */}
+        {viewType === 'list' ? (
+          <div className="p-6">
+            <TurnosList
+              turnos={filteredTurnos}
+              onEdit={openEditModal}
+              onDelete={openDeleteModal}
+              onQuickAction={handleQuickAction}
+              loading={loading}
+            />
+          </div>
+        ) : (
+          <div className="p-6">
+            <CalendarView
+              turnos={turnos}
+              onSelectEvent={handleCalendarSelectEvent}
+              onSelectSlot={handleCalendarSelectSlot}
+              loading={loading}
+            />
+          </div>
+        )}
       </Card>
 
       {/* Modal de Crear */}
