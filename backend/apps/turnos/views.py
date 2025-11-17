@@ -12,6 +12,10 @@ from .serializers import (
     TurnoDetailSerializer,
     TurnoCreateUpdateSerializer
 )
+from apps.notificaciones.tasks import (
+    enviar_confirmacion_turno_task,
+    enviar_cancelacion_turno_task
+)
 
 
 class TurnoViewSet(viewsets.ModelViewSet):
@@ -56,6 +60,17 @@ class TurnoViewSet(viewsets.ModelViewSet):
         elif self.action in ['create', 'update', 'partial_update']:
             return TurnoCreateUpdateSerializer
         return TurnoListSerializer
+
+    def perform_create(self, serializer):
+        """
+        Al crear un turno, enviar notificación de confirmación
+        """
+        turno = serializer.save(creado_por=self.request.user)
+
+        # Enviar confirmación de turno por WhatsApp de forma asíncrona
+        enviar_confirmacion_turno_task.delay(turno.id)
+
+        return turno
 
     @action(detail=False, methods=['get'])
     def hoy(self, request):
@@ -152,6 +167,7 @@ class TurnoViewSet(viewsets.ModelViewSet):
         Cambiar el estado de un turno
         """
         turno = self.get_object()
+        estado_anterior = turno.estado
         nuevo_estado = request.data.get('estado')
 
         if nuevo_estado not in dict(Turno.Estado.choices):
@@ -162,6 +178,10 @@ class TurnoViewSet(viewsets.ModelViewSet):
 
         turno.estado = nuevo_estado
         turno.save()
+
+        # Si se cancela un turno, enviar notificación
+        if nuevo_estado == Turno.Estado.CANCELADO and estado_anterior != Turno.Estado.CANCELADO:
+            enviar_cancelacion_turno_task.delay(turno.id)
 
         serializer = self.get_serializer(turno)
         return Response(serializer.data)

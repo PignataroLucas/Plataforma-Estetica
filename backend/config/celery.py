@@ -18,15 +18,10 @@ app.autodiscover_tasks()
 
 # Periodic tasks configuration
 app.conf.beat_schedule = {
-    # Send appointment reminders 24 hours before
-    'send-24h-reminders': {
-        'task': 'apps.notificaciones.tasks.send_24h_reminders',
-        'schedule': crontab(hour=9, minute=0),  # Every day at 9 AM
-    },
-    # Send appointment reminders 2 hours before
-    'send-2h-reminders': {
-        'task': 'apps.notificaciones.tasks.send_2h_reminders',
-        'schedule': crontab(minute='*/30'),  # Every 30 minutes
+    # Process pending reminders (24h and 2h before appointments)
+    'procesar-recordatorios-turnos': {
+        'task': 'apps.notificaciones.tasks.procesar_recordatorios_pendientes',
+        'schedule': crontab(minute=0),  # Every hour on the hour
     },
     # Check low inventory levels
     'check-low-inventory': {

@@ -72,14 +72,16 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
 
-    def validate_precio_venta(self, value):
+    def validate(self, data):
         """Validar que el precio de venta sea mayor que el costo"""
-        precio_costo = self.initial_data.get('precio_costo')
-        if precio_costo and value < precio_costo:
-            raise serializers.ValidationError(
-                "El precio de venta debe ser mayor o igual al precio de costo"
-            )
-        return value
+        precio_costo = data.get('precio_costo')
+        precio_venta = data.get('precio_venta')
+
+        if precio_costo and precio_venta and precio_venta < precio_costo:
+            raise serializers.ValidationError({
+                'precio_venta': "El precio de venta debe ser mayor o igual al precio de costo"
+            })
+        return data
 
     def validate_stock_minimo(self, value):
         """Validar que el stock mínimo sea positivo"""
