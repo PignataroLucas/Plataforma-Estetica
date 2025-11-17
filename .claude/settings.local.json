@@ -17,7 +17,8 @@
       "Bash(npm install)",
       "Bash(npm install:*)",
       "Bash(cat:*)",
-      "Bash(timeout 8 docker-compose logs:*)"
+      "Bash(timeout 8 docker-compose logs:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

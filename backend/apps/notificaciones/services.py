@@ -7,6 +7,7 @@ from django.utils import timezone
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 import logging
+import pytz
 
 from .models import Notificacion
 
@@ -195,11 +196,18 @@ class WhatsAppService:
             sucursal=turno.sucursal
         )
 
+    def _convertir_a_hora_local(self, fecha_utc):
+        """Convertir fecha UTC a hora local de Argentina"""
+        # Convertir a timezone local (configurado en settings.TIME_ZONE)
+        return timezone.localtime(fecha_utc)
+
     # Templates de mensajes
     def _generar_mensaje_confirmacion(self, turno):
         """Template para confirmación de turno"""
-        fecha_formato = turno.fecha_hora_inicio.strftime('%d/%m/%Y')
-        hora_formato = turno.fecha_hora_inicio.strftime('%H:%M')
+        # Convertir a hora local de Argentina
+        fecha_hora_local = self._convertir_a_hora_local(turno.fecha_hora_inicio)
+        fecha_formato = fecha_hora_local.strftime('%d/%m/%Y')
+        hora_formato = fecha_hora_local.strftime('%H:%M')
 
         mensaje = f"""¡Hola {turno.cliente.nombre}!
 
@@ -218,8 +226,10 @@ Te enviaremos recordatorios antes de tu turno.
 
     def _generar_mensaje_recordatorio_24h(self, turno):
         """Template para recordatorio 24 horas antes"""
-        fecha_formato = turno.fecha_hora_inicio.strftime('%d/%m/%Y')
-        hora_formato = turno.fecha_hora_inicio.strftime('%H:%M')
+        # Convertir a hora local de Argentina
+        fecha_hora_local = self._convertir_a_hora_local(turno.fecha_hora_inicio)
+        fecha_formato = fecha_hora_local.strftime('%d/%m/%Y')
+        hora_formato = fecha_hora_local.strftime('%H:%M')
 
         mensaje = f"""Hola {turno.cliente.nombre} 👋
 
@@ -236,7 +246,9 @@ Si necesitas cancelar o reprogramar, contactanos.
 
     def _generar_mensaje_recordatorio_2h(self, turno):
         """Template para recordatorio 2 horas antes"""
-        hora_formato = turno.fecha_hora_inicio.strftime('%H:%M')
+        # Convertir a hora local de Argentina
+        fecha_hora_local = self._convertir_a_hora_local(turno.fecha_hora_inicio)
+        hora_formato = fecha_hora_local.strftime('%H:%M')
 
         mensaje = f"""¡Tu turno es en 2 horas! ⏰
 
@@ -248,8 +260,10 @@ Si necesitas cancelar o reprogramar, contactanos.
 
     def _generar_mensaje_cancelacion(self, turno):
         """Template para cancelación de turno"""
-        fecha_formato = turno.fecha_hora_inicio.strftime('%d/%m/%Y')
-        hora_formato = turno.fecha_hora_inicio.strftime('%H:%M')
+        # Convertir a hora local de Argentina
+        fecha_hora_local = self._convertir_a_hora_local(turno.fecha_hora_inicio)
+        fecha_formato = fecha_hora_local.strftime('%d/%m/%Y')
+        hora_formato = fecha_hora_local.strftime('%H:%M')
 
         mensaje = f"""Hola {turno.cliente.nombre},
 

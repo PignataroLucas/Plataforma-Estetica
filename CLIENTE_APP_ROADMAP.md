@@ -690,6 +690,87 @@ services:
 
 ---
 
+## Apéndice: Comparación de Gateways de Pago (MODO vs MercadoPago)
+
+### Contexto
+Este análisis surge del debate sobre reducción de comisiones para el modelo SaaS. La conclusión es usar el **modelo Tienda Nube**: cada centro conecta su propia cuenta de pago (OAuth), los pagos van directo a ellos, y la plataforma solo cobra suscripción mensual.
+
+### Comisiones Comparadas
+
+| Gateway | Débito | Crédito | QR/Transferencia |
+|---------|--------|---------|------------------|
+| **MercadoPago** | 3.19% - 3.39% | 1.49% - 6.49% | 0.8% |
+| **MODO (Payway)** | 0.8% ⭐ | 1.8% ⭐ | 0.8% |
+
+**Ahorro con MODO**: 60-75% menos en comisiones de débito/crédito
+
+**Ejemplo:** Centro vende $500,000/mes
+- MP: $17,500 comisiones
+- MODO: $7,500 comisiones
+- **Ahorro: $10,000/mes** ($120,000/año)
+
+### Facilidad de Integración
+
+| Aspecto | MercadoPago | MODO (Payway) |
+|---------|-------------|---------------|
+| SDK Python oficial | ✅ Sí | ❌ No (requiere wrapper custom) |
+| Documentación | ⭐⭐⭐⭐⭐ Excelente | ⭐⭐⭐ Menos pública |
+| OAuth para SaaS | ✅ Bien documentado | ⚠️ Requiere contacto directo |
+| Sandbox | ✅ Completo | ⚠️ Limitado |
+| Comunidad/Soporte | ✅ Grande | ⚠️ Más pequeña |
+| Tiempo desarrollo | 2-3 días | 5-7 días |
+
+### Estrategia Recomendada (Cuando se implemente e-commerce)
+
+**Fase 1: MercadoPago primero**
+- Implementación rápida (2-3 días)
+- SDK confiable y bien mantenido
+- OAuth para modelo SaaS ya probado
+- Validación rápida del producto
+
+**Fase 2: Agregar MODO como opción**
+- Desarrollo de wrapper custom (1 semana)
+- Dar alternativa de menor comisión
+- Ideal para centros con alto volumen
+
+**Fase 3: Métodos sin comisión**
+- Transferencia bancaria manual (0%)
+- Efectivo al retirar (0%)
+- CBU/Alias directo del centro
+
+### Arquitectura Multi-Gateway
+
+```python
+class CentroEstetica(models.Model):
+    # MercadoPago
+    mercadopago_conectado = models.BooleanField(default=False)
+    mercadopago_access_token = models.CharField(...)
+
+    # Modo/Payway
+    modo_conectado = models.BooleanField(default=False)
+    modo_api_key = models.CharField(...)
+
+    # Preferencia
+    gateway_preferido = models.CharField(
+        choices=[
+            ('MERCADOPAGO', 'MercadoPago'),
+            ('MODO', 'Modo'),
+            ('TRANSFERENCIA', 'Transferencia'),
+            ('EFECTIVO', 'Efectivo')
+        ]
+    )
+```
+
+### Conclusión
+El modelo ideal es ofrecer **múltiples opciones de pago** para que cada centro elija según sus necesidades:
+- **MercadoPago**: Facilidad y rapidez
+- **MODO**: Ahorro en comisiones (volumen alto)
+- **Transferencia/Efectivo**: Sin comisiones
+
+**Importante**: En el modelo SaaS, la plataforma NO maneja el dinero. Cada centro conecta su propia cuenta y recibe los pagos directamente. La plataforma solo cobra suscripción mensual fija ($30-50 USD/mes).
+
+---
+
 **Fecha de creación**: 16 de Noviembre 2025
-**Última actualización**: 16 de Noviembre 2025
+**Última actualización**: 17 de Noviembre 2025
 **Estado**: Planificación
