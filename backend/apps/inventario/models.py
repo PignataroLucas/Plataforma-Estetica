@@ -141,6 +141,19 @@ class Producto(models.Model):
         help_text="Precio de venta al público"
     )
 
+    # Ofertas y descuentos
+    en_oferta = models.BooleanField(
+        default=False,
+        help_text="¿Este producto está en oferta?"
+    )
+    precio_oferta = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Precio de venta durante la oferta (opcional)"
+    )
+
     # Configuración
     activo = models.BooleanField(default=True)
     foto = models.ImageField(upload_to='productos/', null=True, blank=True)
@@ -161,10 +174,39 @@ class Producto(models.Model):
         return f"{self.nombre} ({self.stock_actual} {self.unidad_medida})"
 
     @property
+    def precio_venta_final(self):
+        """
+        Returns final sale price considering offers
+        If product is on offer and has offer price, use it; otherwise use regular price
+        """
+        if self.en_oferta and self.precio_oferta:
+            return self.precio_oferta
+        return self.precio_venta
+
+    @property
+    def porcentaje_descuento(self):
+        """
+        Calculates discount percentage if product is on offer
+        """
+        if self.en_oferta and self.precio_oferta and self.precio_oferta < self.precio_venta:
+            descuento = ((self.precio_venta - self.precio_oferta) / self.precio_venta) * 100
+            return round(descuento, 2)
+        return 0
+
+    @property
     def margen_ganancia(self):
         """Calcula el margen de ganancia porcentual"""
         if self.precio_costo > 0:
             return ((self.precio_venta - self.precio_costo) / self.precio_costo) * 100
+        return 0
+
+    @property
+    def margen_ganancia_real(self):
+        """
+        Calculates real profit margin using final sale price (with offers)
+        """
+        if self.precio_costo > 0:
+            return ((self.precio_venta_final - self.precio_costo) / self.precio_costo) * 100
         return 0
 
     @property
@@ -204,7 +246,15 @@ class MovimientoInventario(models.Model):
         max_digits=10,
         decimal_places=2,
         null=True,
-        blank=True
+        blank=True,
+        help_text="Costo unitario (para ENTRADA/compras)"
+    )
+    precio_unitario = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Precio de venta unitario (para SALIDA/ventas). Si es null, usa precio_venta_final del producto"
     )
 
     # Usuario que realizó el movimiento
@@ -225,3 +275,18 @@ class MovimientoInventario(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.producto.nombre} ({self.cantidad})"
+
+    @property
+    def monto_total(self):
+        """
+        Calculates total amount of the movement
+        For ENTRADA: quantity × cost per unit
+        For SALIDA: quantity × sale price per unit
+        """
+        if self.tipo == 'ENTRADA' and self.costo_unitario:
+            return self.cantidad * self.costo_unitario
+        elif self.tipo == 'SALIDA':
+            # Use custom price if provided, otherwise use product's final price
+            precio = self.precio_unitario if self.precio_unitario else self.producto.precio_venta_final
+            return self.cantidad * precio
+        return 0

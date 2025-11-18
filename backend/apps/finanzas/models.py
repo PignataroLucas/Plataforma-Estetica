@@ -1,225 +1,356 @@
 from django.db import models
+from django.utils import timezone
 from apps.empleados.models import Sucursal, Usuario
 from apps.clientes.models import Cliente
 
 
-class CategoriaTransaccion(models.Model):
+class TransactionCategory(models.Model):
     """
-    Categorías para organizar transacciones financieras
+    Hierarchical category system for organizing financial transactions.
+    Supports 2 levels: Main Category → Subcategory
+    Example: Rent → Office Rent, Equipment Rent
     """
-    class TipoCategoria(models.TextChoices):
-        INGRESO = 'INGRESO', 'Ingreso'
-        GASTO = 'GASTO', 'Gasto'
+    class CategoryType(models.TextChoices):
+        INCOME = 'INCOME', 'Ingreso'
+        EXPENSE = 'EXPENSE', 'Gasto'
 
-    sucursal = models.ForeignKey(
+    # Relationships
+    branch = models.ForeignKey(
         Sucursal,
         on_delete=models.CASCADE,
-        related_name='categorias_transaccion'
+        related_name='transaction_categories'
     )
-    nombre = models.CharField(max_length=100)
-    tipo = models.CharField(
+    parent_category = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='subcategories',
+        help_text="Categoría padre para estructura jerárquica"
+    )
+
+    # Type
+    type = models.CharField(
         max_length=10,
-        choices=TipoCategoria.choices
+        choices=CategoryType.choices
     )
-    descripcion = models.TextField(blank=True)
-    activa = models.BooleanField(default=True)
+
+    # Information
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    color = models.CharField(
+        max_length=7,
+        default="#3B82F6",
+        help_text="Código de color hexadecimal para mostrar en UI"
+    )
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Identificador de ícono para UI"
+    )
+
+    # Configuration
+    is_active = models.BooleanField(default=True)
+    is_system_category = models.BooleanField(
+        default=False,
+        help_text="Las categorías del sistema no pueden eliminarse, solo desactivarse"
+    )
+    order = models.IntegerField(
+        default=0,
+        help_text="Orden de visualización en UI"
+    )
+
+    # Audit
+    created_by = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='categories_created'
+    )
 
     # Timestamps
-    creado_en = models.DateTimeField(auto_now_add=True)
-    actualizado_en = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Categoría de Transacción'
         verbose_name_plural = 'Categorías de Transacciones'
-        ordering = ['tipo', 'nombre']
-        unique_together = [['sucursal', 'nombre', 'tipo']]
+        ordering = ['type', 'order', 'name']
+        unique_together = [['branch', 'name', 'type', 'parent_category']]
+        indexes = [
+            models.Index(fields=['branch', 'type', 'is_active']),
+            models.Index(fields=['parent_category']),
+        ]
 
     def __str__(self):
-        return f"{self.get_tipo_display()} - {self.nombre}"
+        if self.parent_category:
+            return f"{self.parent_category.name} > {self.name}"
+        return self.name
+
+    @property
+    def is_subcategory(self):
+        """Check if this is a subcategory"""
+        return self.parent_category is not None
+
+    @property
+    def full_path(self):
+        """Returns full path: Category > Subcategory"""
+        if self.parent_category:
+            return f"{self.parent_category.name} > {self.name}"
+        return self.name
+
+    @property
+    def transaction_count(self):
+        """Count of transactions using this category"""
+        return self.transactions.count()
 
 
-class Transaccion(models.Model):
+class Transaction(models.Model):
     """
-    Registro de todas las transacciones financieras (ingresos y gastos)
+    Record of all financial transactions (income and expenses).
+    Integrates with inventory for automatic expense generation from purchases.
     """
-    class TipoTransaccion(models.TextChoices):
-        INGRESO_SERVICIO = 'INGRESO_SERVICIO', 'Ingreso por Servicio'
-        INGRESO_PRODUCTO = 'INGRESO_PRODUCTO', 'Ingreso por Venta de Producto'
-        INGRESO_OTRO = 'INGRESO_OTRO', 'Otro Ingreso'
-        GASTO_SUELDO = 'GASTO_SUELDO', 'Gasto - Sueldo'
-        GASTO_ALQUILER = 'GASTO_ALQUILER', 'Gasto - Alquiler'
-        GASTO_INSUMO = 'GASTO_INSUMO', 'Gasto - Insumos'
-        GASTO_SERVICIO = 'GASTO_SERVICIO', 'Gasto - Servicios (luz, agua, etc.)'
-        GASTO_MARKETING = 'GASTO_MARKETING', 'Gasto - Marketing'
-        GASTO_OTRO = 'GASTO_OTRO', 'Otro Gasto'
+    class TransactionType(models.TextChoices):
+        # INCOME
+        INCOME_SERVICE = 'INCOME_SERVICE', 'Ingreso por Servicio'
+        INCOME_PRODUCT = 'INCOME_PRODUCT', 'Ingreso por Venta de Producto'
+        INCOME_OTHER = 'INCOME_OTHER', 'Otro Ingreso'
 
-    class MetodoPago(models.TextChoices):
-        EFECTIVO = 'EFECTIVO', 'Efectivo'
-        TRANSFERENCIA = 'TRANSFERENCIA', 'Transferencia'
-        TARJETA_DEBITO = 'TARJETA_DEBITO', 'Tarjeta de Débito'
-        TARJETA_CREDITO = 'TARJETA_CREDITO', 'Tarjeta de Crédito'
+        # EXPENSES (using category system instead of specific types)
+        EXPENSE = 'EXPENSE', 'Gasto'
+
+    class PaymentMethod(models.TextChoices):
+        CASH = 'CASH', 'Efectivo'
+        TRANSFER = 'TRANSFER', 'Transferencia'
+        DEBIT_CARD = 'DEBIT_CARD', 'Tarjeta de Débito'
+        CREDIT_CARD = 'CREDIT_CARD', 'Tarjeta de Crédito'
         MERCADOPAGO = 'MERCADOPAGO', 'MercadoPago'
-        OTRO = 'OTRO', 'Otro'
+        OTHER = 'OTHER', 'Otro'
 
-    # Relaciones
-    sucursal = models.ForeignKey(
+    # Relationships
+    branch = models.ForeignKey(
         Sucursal,
         on_delete=models.CASCADE,
-        related_name='transacciones'
+        related_name='transactions'
     )
-    categoria = models.ForeignKey(
-        CategoriaTransaccion,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='transacciones'
+
+    category = models.ForeignKey(
+        TransactionCategory,
+        on_delete=models.PROTECT,  # Cannot delete category with transactions
+        related_name='transactions',
+        help_text="Categoría o subcategoría de la transacción"
     )
-    cliente = models.ForeignKey(
+
+    client = models.ForeignKey(
         Cliente,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='transacciones',
-        help_text="Cliente asociado (solo para ingresos)"
+        related_name='transactions',
+        help_text="Cliente asociado (principalmente para ingresos)"
     )
 
-    # Relación con turno o producto
-    turno = models.ForeignKey(
+    # Related entities
+    appointment = models.ForeignKey(
         'turnos.Turno',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='transacciones'
+        related_name='transactions'
     )
-    producto = models.ForeignKey(
+    product = models.ForeignKey(
         'inventario.Producto',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='transacciones'
+        related_name='transactions'
     )
 
-    # Información de la transacción
-    tipo = models.CharField(
+    # NEW: Relationship with inventory movement (for traceability)
+    inventory_movement = models.OneToOneField(
+        'inventario.MovimientoInventario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='financial_transaction',
+        help_text="Movimiento de inventario vinculado si fue auto-generado"
+    )
+
+    # Transaction information
+    type = models.CharField(
         max_length=20,
-        choices=TipoTransaccion.choices,
+        choices=TransactionType.choices,
         db_index=True
     )
-    monto = models.DecimalField(
+    amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Monto de la transacción"
+        help_text="Monto de la transacción (siempre positivo)"
     )
-    metodo_pago = models.CharField(
+    payment_method = models.CharField(
         max_length=20,
-        choices=MetodoPago.choices,
-        default=MetodoPago.EFECTIVO
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.CASH
     )
-    fecha = models.DateField(db_index=True)
-    descripcion = models.CharField(max_length=300)
-    notas = models.TextField(blank=True)
+    date = models.DateField(db_index=True)
+    description = models.CharField(max_length=300)
+    notes = models.TextField(blank=True)
 
-    # Comprobante
-    numero_comprobante = models.CharField(max_length=50, blank=True)
-    archivo_comprobante = models.FileField(
-        upload_to='comprobantes/',
+    # Receipt/Invoice
+    receipt_number = models.CharField(max_length=50, blank=True)
+    receipt_file = models.FileField(
+        upload_to='receipts/%Y/%m/',
         null=True,
-        blank=True
+        blank=True,
+        help_text="Archivo PDF, JPG o PNG"
     )
 
-    # Usuario que registró la transacción
-    registrado_por = models.ForeignKey(
+    # NEW: Auto-generation flag
+    auto_generated = models.BooleanField(
+        default=False,
+        help_text="Si fue creado automáticamente (ej: desde inventario)"
+    )
+
+    # Audit
+    registered_by = models.ForeignKey(
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='transacciones_registradas'
+        related_name='transactions_registered'
+    )
+    edited_by = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions_edited'
     )
 
     # Timestamps
-    creado_en = models.DateTimeField(auto_now_add=True)
-    actualizado_en = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Transacción'
         verbose_name_plural = 'Transacciones'
-        ordering = ['-fecha', '-creado_en']
+        ordering = ['-date', '-created_at']
         indexes = [
-            models.Index(fields=['sucursal', 'fecha']),
-            models.Index(fields=['sucursal', 'tipo', 'fecha']),
+            models.Index(fields=['branch', 'date']),
+            models.Index(fields=['branch', 'type', 'date']),
+            models.Index(fields=['branch', 'category', 'date']),
         ]
 
     def __str__(self):
-        return f"{self.get_tipo_display()} - ${self.monto} - {self.fecha.strftime('%d/%m/%Y')}"
+        return f"{self.get_type_display()} - ${self.amount} - {self.date.strftime('%d/%m/%Y')}"
 
     @property
-    def es_ingreso(self):
-        """Verifica si la transacción es un ingreso"""
-        return self.tipo.startswith('INGRESO_')
+    def is_income(self):
+        """Check if transaction is income"""
+        return self.type.startswith('INCOME_')
 
     @property
-    def es_gasto(self):
-        """Verifica si la transacción es un gasto"""
-        return self.tipo.startswith('GASTO_')
+    def is_expense(self):
+        """Check if transaction is expense"""
+        return self.type == 'EXPENSE'
+
+    @property
+    def signed_amount(self):
+        """Returns amount with sign for balance calculations"""
+        return self.amount if self.is_income else -self.amount
+
+    @property
+    def can_be_edited(self):
+        """Check if transaction can be edited (< 30 days old)"""
+        age_in_days = (timezone.now().date() - self.date).days
+        return age_in_days <= 30
+
+    @property
+    def can_be_deleted(self):
+        """Auto-generated transactions cannot be deleted directly"""
+        return not self.auto_generated
 
 
-class CuentaPorCobrar(models.Model):
+class AccountReceivable(models.Model):
     """
-    Tracking de deudas de clientes
+    Tracking of client debts and pending payments
     """
-    cliente = models.ForeignKey(
+    # Relationships
+    client = models.ForeignKey(
         Cliente,
         on_delete=models.CASCADE,
-        related_name='cuentas_por_cobrar'
+        related_name='accounts_receivable'
     )
-    sucursal = models.ForeignKey(
+    branch = models.ForeignKey(
         Sucursal,
         on_delete=models.CASCADE,
-        related_name='cuentas_por_cobrar'
+        related_name='accounts_receivable'
     )
-    turno = models.ForeignKey(
+    appointment = models.ForeignKey(
         'turnos.Turno',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='cuentas_por_cobrar'
+        related_name='accounts_receivable'
     )
 
-    # Información de la deuda
-    monto_total = models.DecimalField(max_digits=10, decimal_places=2)
-    monto_pagado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    monto_pendiente = models.DecimalField(max_digits=10, decimal_places=2)
+    # Debt information
+    total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Monto total adeudado"
+    )
+    paid_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Monto ya pagado"
+    )
+    pending_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Monto restante por pagar"
+    )
 
-    fecha_emision = models.DateField()
-    fecha_vencimiento = models.DateField(null=True, blank=True)
-    fecha_pago_completo = models.DateField(null=True, blank=True)
+    # Dates
+    issue_date = models.DateField()
+    due_date = models.DateField(null=True, blank=True)
+    full_payment_date = models.DateField(null=True, blank=True)
 
-    descripcion = models.CharField(max_length=300)
-    notas = models.TextField(blank=True)
+    # Details
+    description = models.CharField(max_length=300)
+    notes = models.TextField(blank=True)
 
-    # Estado
-    pagada = models.BooleanField(default=False)
+    # Status
+    is_paid = models.BooleanField(default=False)
 
     # Timestamps
-    creado_en = models.DateTimeField(auto_now_add=True)
-    actualizado_en = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Cuenta por Cobrar'
         verbose_name_plural = 'Cuentas por Cobrar'
-        ordering = ['-fecha_emision']
+        ordering = ['-issue_date']
 
     def __str__(self):
-        return f"{self.cliente.nombre_completo} - ${self.monto_pendiente} pendiente"
+        return f"{self.client.full_name} - ${self.pending_amount} pending"
+
+    @property
+    def is_overdue(self):
+        """Check if payment is overdue"""
+        if self.due_date and not self.is_paid:
+            return timezone.now().date() > self.due_date
+        return False
 
     def save(self, *args, **kwargs):
-        # Calcular monto pendiente
-        self.monto_pendiente = self.monto_total - self.monto_pagado
+        # Calculate pending amount
+        self.pending_amount = self.total_amount - self.paid_amount
 
-        # Actualizar estado de pago
-        if self.monto_pendiente <= 0:
-            self.pagada = True
-            if not self.fecha_pago_completo:
-                from django.utils import timezone
-                self.fecha_pago_completo = timezone.now().date()
+        # Update payment status
+        if self.pending_amount <= 0:
+            self.is_paid = True
+            if not self.full_payment_date:
+                self.full_payment_date = timezone.now().date()
 
         super().save(*args, **kwargs)
