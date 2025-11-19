@@ -95,7 +95,7 @@ class Producto(models.Model):
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
     marca = models.CharField(max_length=100, blank=True)
-    codigo_barras = models.CharField(max_length=50, blank=True, unique=True)
+    codigo_barras = models.CharField(max_length=50, blank=True, null=True, unique=True)
     sku = models.CharField(max_length=50, blank=True)
     tipo = models.CharField(
         max_length=15,

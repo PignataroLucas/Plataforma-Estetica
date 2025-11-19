@@ -4,7 +4,35 @@ when inventory movements occur (e.g., purchases).
 """
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
-from .models import MovimientoInventario
+from .models import MovimientoInventario, Producto
+
+
+@receiver(post_save, sender=Producto)
+def create_initial_stock_movement(sender, instance, created, **kwargs):
+    """
+    When a product is created with initial stock, automatically create
+    a MovimientoInventario (ENTRADA) which will trigger the expense creation.
+
+    This ensures the initial stock purchase is recorded in finances.
+    """
+    if not created:
+        return
+
+    # Only if product has initial stock and cost
+    if instance.stock_actual > 0 and instance.precio_costo > 0:
+        # Create initial stock entry movement
+        MovimientoInventario.objects.create(
+            producto=instance,
+            tipo='ENTRADA',
+            cantidad=instance.stock_actual,
+            stock_anterior=0,
+            stock_nuevo=instance.stock_actual,
+            costo_unitario=instance.precio_costo,
+            motivo='Stock inicial al crear producto',
+            notas=f'Carga automática de stock inicial: {instance.stock_actual} {instance.unidad_medida}',
+            usuario=None,  # System generated
+        )
+        print(f"✅ Initial stock movement created for {instance.nombre}: {instance.stock_actual} units")
 
 
 @receiver(post_save, sender=MovimientoInventario)
