@@ -62,6 +62,7 @@ export interface Usuario {
   rol: Rol
   fecha_ingreso?: string
   especialidades: string
+  sueldo_mensual?: number
   activo: boolean
   creado_en: string
   actualizado_en: string
@@ -330,6 +331,7 @@ export interface TransactionCategoryList {
   color: string
   icon: string
   is_active: boolean
+  is_system_category: boolean
   parent_category: number | null
   subcategory_count: number
   full_path: string

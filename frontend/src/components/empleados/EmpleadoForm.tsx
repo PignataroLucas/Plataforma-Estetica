@@ -40,6 +40,7 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
     rol: 'EMPLEADO' as Rol,
     fecha_ingreso: '',
     especialidades: '',
+    sueldo_mensual: '',
     activo: true,
     ...initialData,
   })
@@ -230,6 +231,24 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
           value={formData.fecha_ingreso}
           onChange={handleChange}
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Sueldo Mensual"
+          type="number"
+          name="sueldo_mensual"
+          value={formData.sueldo_mensual}
+          onChange={handleChange}
+          placeholder="0.00"
+          min="0"
+          step="0.01"
+        />
+        <div className="flex items-end">
+          <p className="text-sm text-gray-500 pb-2">
+            Este sueldo se usará para generar gastos mensuales en Finanzas
+          </p>
+        </div>
       </div>
 
       <div>

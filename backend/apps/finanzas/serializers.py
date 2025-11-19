@@ -3,6 +3,7 @@ from django.utils import timezone
 from decimal import Decimal
 from .models import TransactionCategory, Transaction, AccountReceivable
 from apps.clientes.models import Cliente
+from apps.empleados.models import Sucursal
 
 
 class TransactionCategoryListSerializer(serializers.ModelSerializer):
@@ -25,6 +26,7 @@ class TransactionCategoryListSerializer(serializers.ModelSerializer):
             'color',
             'icon',
             'is_active',
+            'is_system_category',
             'parent_category',
             'subcategory_count',
             'full_path'
@@ -36,6 +38,13 @@ class TransactionCategorySerializer(serializers.ModelSerializer):
     """
     Full serializer for transaction categories with nested subcategories
     """
+    # Make branch not required - will be set by perform_create
+    branch = serializers.PrimaryKeyRelatedField(
+        queryset=Sucursal.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None
+    )
     type_display = serializers.CharField(source='get_type_display', read_only=True)
     parent_category_name = serializers.CharField(
         source='parent_category.name',
@@ -75,6 +84,9 @@ class TransactionCategorySerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at'
         ]
+        extra_kwargs = {
+            'parent_category': {'required': False, 'allow_null': True, 'default': None},  # Optional for main categories
+        }
 
     def validate(self, data):
         """Validate category data"""

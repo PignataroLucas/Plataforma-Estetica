@@ -111,6 +111,13 @@ class Usuario(AbstractUser):
     # Información laboral
     fecha_ingreso = models.DateField(null=True, blank=True)
     especialidades = models.TextField(blank=True, help_text="Especialidades del empleado")
+    sueldo_mensual = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Sueldo mensual del empleado"
+    )
     activo = models.BooleanField(default=True)
 
     # Timestamps

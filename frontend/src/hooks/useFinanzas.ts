@@ -272,11 +272,12 @@ export const useFinanzas = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get<PaginatedResponse<TransactionCategoryList>>('/finanzas/categories/', {
+      // Categories endpoint returns unpaginated list
+      const response = await api.get<TransactionCategoryList[]>('/finanzas/categories/', {
         params: filters
       })
-      setCategories(response.data.results)
-      return response.data.results
+      setCategories(response.data)
+      return response.data
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Error al cargar categorías'
       setError(errorMsg)
@@ -557,6 +558,58 @@ export const useFinanzas = () => {
     }
   }, [])
 
+  // ==================== SALARY PROCESSING ====================
+
+  /**
+   * Process monthly salaries for all employees
+   * Creates EXPENSE transactions for each employee with sueldo_mensual > 0
+   */
+  const processSalaries = useCallback(async (data: {
+    month: number
+    year: number
+  }) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await api.post<{
+        message: string
+        processed_count: number
+        total_amount: number
+        month: number
+        year: number
+        transactions: Array<{
+          id: number
+          employee: string
+          amount: number
+        }>
+      }>('/finanzas/transactions/process_salaries/', data)
+
+      if (response.data.processed_count > 0) {
+        toast.success(response.data.message)
+      } else {
+        toast.error('No hay empleados con sueldo configurado')
+      }
+
+      // Refresh transactions list
+      await fetchTransactions()
+      return response.data
+    } catch (err: any) {
+      let errorMsg = 'Error al procesar sueldos'
+      if (err.response?.data) {
+        if (err.response.data.error) {
+          errorMsg = err.response.data.error
+        } else if (err.response.data.detail) {
+          errorMsg = err.response.data.detail
+        }
+      }
+      setError(errorMsg)
+      toast.error(errorMsg)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [fetchTransactions])
+
   // ==================== RETURN ====================
 
   return {
@@ -593,5 +646,8 @@ export const useFinanzas = () => {
     createAccountReceivable,
     updateAccountReceivable,
     deleteAccountReceivable,
+
+    // Salary processing
+    processSalaries,
   }
 }

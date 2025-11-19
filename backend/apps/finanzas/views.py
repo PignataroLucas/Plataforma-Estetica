@@ -10,6 +10,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from .models import TransactionCategory, Transaction, AccountReceivable
+from apps.empleados.models import Usuario
 from .serializers import (
     TransactionCategorySerializer,
     TransactionCategoryListSerializer,
@@ -50,6 +51,7 @@ class TransactionCategoryViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'order', 'created_at']
     ordering = ['type', 'order', 'name']
     search_fields = ['name', 'description']
+    pagination_class = None  # Return all categories without pagination
 
     def get_serializer_class(self):
         """Use lightweight serializer for list view"""
@@ -70,6 +72,17 @@ class TransactionCategoryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(branch=self.request.user.sucursal)
 
         return queryset
+
+    def perform_create(self, serializer):
+        """Automatically set branch from user's sucursal"""
+        user = self.request.user
+        if hasattr(user, 'sucursal') and user.sucursal:
+            serializer.save(branch=user.sucursal)
+        else:
+            # For superusers, use first available branch
+            from apps.empleados.models import Sucursal
+            branch = Sucursal.objects.first()
+            serializer.save(branch=branch)
 
     @action(detail=False, methods=['get'])
     def tree(self, request):
@@ -271,6 +284,105 @@ class TransactionViewSet(viewsets.ModelViewSet):
             context={'request': request}
         )
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def process_salaries(self, request):
+        """
+        Process monthly salaries for all employees with sueldo_mensual > 0
+        Creates EXPENSE transactions for each employee
+
+        Query params:
+        - month: Month number (1-12), default: current month
+        - year: Year (e.g., 2024), default: current year
+        """
+        # Get month and year from request
+        today = timezone.now().date()
+        month = int(request.data.get('month', today.month))
+        year = int(request.data.get('year', today.year))
+
+        # Get user's branch
+        branch = None
+        if hasattr(request.user, 'sucursal') and request.user.sucursal:
+            branch = request.user.sucursal
+        else:
+            # For superusers, use first branch
+            from apps.empleados.models import Sucursal
+            branch = Sucursal.objects.first()
+
+        if not branch:
+            return Response(
+                {'error': 'No se encontró una sucursal válida'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get or create "Sueldos" category
+        salary_category, created = TransactionCategory.objects.get_or_create(
+            branch=branch,
+            name='Sueldos',
+            type='EXPENSE',
+            defaults={
+                'description': 'Sueldos de empleados',
+                'color': '#FF6B6B',
+                'is_system_category': True
+            }
+        )
+
+        # Get all active employees with salary in the same centro_estetica
+        employees = Usuario.objects.filter(
+            centro_estetica=branch.centro_estetica,
+            activo=True,
+            sueldo_mensual__gt=0
+        )
+
+        # Check if salaries were already processed for this month
+        month_start = timezone.datetime(year, month, 1).date()
+        existing_transactions = Transaction.objects.filter(
+            branch=branch,
+            category=salary_category,
+            date__year=year,
+            date__month=month,
+            description__contains='Sueldo de'
+        )
+
+        if existing_transactions.exists():
+            return Response({
+                'error': f'Los sueldos del mes {month}/{year} ya fueron procesados',
+                'processed_count': 0,
+                'total_amount': 0,
+                'transactions': []
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create transactions for each employee
+        created_transactions = []
+        total_amount = Decimal('0')
+
+        for employee in employees:
+            transaction = Transaction.objects.create(
+                branch=branch,
+                category=salary_category,
+                type='EXPENSE',
+                amount=employee.sueldo_mensual,
+                payment_method='BANK_TRANSFER',
+                date=month_start,
+                description=f'Sueldo de {employee.get_full_name()} - {month}/{year}',
+                notes=f'Procesado automáticamente el {today}',
+                registered_by=request.user
+            )
+            created_transactions.append({
+                'id': transaction.id,
+                'employee': employee.get_full_name(),
+                'amount': float(employee.sueldo_mensual)
+            })
+            total_amount += employee.sueldo_mensual
+
+        return Response({
+            'message': f'Se procesaron {len(created_transactions)} sueldos correctamente',
+            'processed_count': len(created_transactions),
+            'total_amount': float(total_amount),
+            'month': month,
+            'year': year,
+            'transactions': created_transactions
+        })
 
 
 class AccountReceivableViewSet(viewsets.ModelViewSet):
