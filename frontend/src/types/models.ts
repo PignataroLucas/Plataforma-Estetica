@@ -264,32 +264,231 @@ export interface MovimientoInventario {
   motivo: string
   notas: string
   costo_unitario?: number
+  precio_unitario?: number
   usuario?: number
   usuario_nombre?: string
+  monto_total: number
   creado_en: string
 }
 
+// ==================== FINANCIAL SYSTEM TYPES ====================
+// Updated to match new English-code backend models
+
+export enum CategoryType {
+  INCOME = 'INCOME',
+  EXPENSE = 'EXPENSE',
+}
+
+export enum TransactionType {
+  INCOME_SERVICE = 'INCOME_SERVICE',
+  INCOME_PRODUCT = 'INCOME_PRODUCT',
+  INCOME_OTHER = 'INCOME_OTHER',
+  EXPENSE = 'EXPENSE',
+}
+
+export enum PaymentMethod {
+  CASH = 'CASH',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  DEBIT_CARD = 'DEBIT_CARD',
+  CREDIT_CARD = 'CREDIT_CARD',
+  MERCADOPAGO = 'MERCADOPAGO',
+  OTHER = 'OTHER',
+}
+
+/**
+ * Transaction Category - Hierarchical structure (2 levels max)
+ */
+export interface TransactionCategory {
+  id: number
+  branch: number
+  name: string
+  type: CategoryType
+  type_display: string
+  description: string
+  color: string
+  icon: string
+  parent_category: number | null
+  parent_category_name: string | null
+  is_active: boolean
+  is_system_category: boolean
+  order: number
+  subcategories?: TransactionCategoryList[]
+  transaction_count?: number
+  full_path: string
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Lightweight version for dropdowns and selects
+ */
+export interface TransactionCategoryList {
+  id: number
+  name: string
+  type: CategoryType
+  type_display: string
+  color: string
+  icon: string
+  is_active: boolean
+  parent_category: number | null
+  subcategory_count: number
+  full_path: string
+}
+
+/**
+ * Financial Transaction
+ */
+export interface Transaction {
+  id: number
+  branch: number
+  category: number
+  category_name: string
+  category_color: string
+  client: number | null
+  client_name: string | null
+  appointment: number | null
+  product: number | null
+  inventory_movement: number | null
+  type: TransactionType
+  type_display: string
+  amount: number
+  signed_amount: number
+  payment_method: PaymentMethod
+  payment_method_display: string
+  date: string
+  description: string
+  notes: string
+  receipt_number: string
+  receipt_file: string | null
+  auto_generated: boolean
+  registered_by: number | null
+  registered_by_name: string | null
+  edited_by: number | null
+  is_income: boolean
+  is_expense: boolean
+  can_be_edited: boolean
+  can_be_deleted: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Lightweight version for list views
+ */
+export interface TransactionList {
+  id: number
+  type: TransactionType
+  type_display: string
+  category_name: string
+  amount: number
+  signed_amount: number
+  payment_method_display: string
+  date: string
+  description: string
+  client_name: string | null
+  auto_generated: boolean
+  created_at: string
+}
+
+/**
+ * Account Receivable (Cuentas por Cobrar)
+ */
+export interface AccountReceivable {
+  id: number
+  client: number
+  client_name: string
+  branch: number
+  branch_name: string
+  appointment: number | null
+  total_amount: number
+  paid_amount: number
+  pending_amount: number
+  issue_date: string
+  due_date: string
+  full_payment_date: string | null
+  description: string
+  notes: string
+  is_paid: boolean
+  is_overdue: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Financial Summary Response
+ */
+export interface FinancialSummary {
+  income: {
+    total: number
+    count: number
+  }
+  expense: {
+    total: number
+    count: number
+  }
+  balance: number
+  profit_margin: number
+}
+
+/**
+ * Transaction by Category Response
+ */
+export interface TransactionByCategory {
+  category__id: number
+  category__name: string
+  category__color: string
+  type: TransactionType
+  total_amount: number
+  transaction_count: number
+}
+
+/**
+ * Transaction by Payment Method Response
+ */
+export interface TransactionByPaymentMethod {
+  payment_method: PaymentMethod
+  payment_method_display: string
+  total_amount: number
+  transaction_count: number
+}
+
+/**
+ * Accounts Receivable Summary Response
+ */
+export interface AccountsReceivableSummary {
+  total_owed: number
+  total_paid: number
+  total_pending: number
+  overdue_count: number
+  paid_count: number
+  pending_count: number
+}
+
+// ==================== LEGACY TYPES (for backwards compatibility) ====================
+// TODO: Remove these after migrating all components to new types
+
 export enum TipoTransaccion {
-  INGRESO_SERVICIO = 'INGRESO_SERVICIO',
-  INGRESO_PRODUCTO = 'INGRESO_PRODUCTO',
-  INGRESO_OTRO = 'INGRESO_OTRO',
-  GASTO_SUELDO = 'GASTO_SUELDO',
-  GASTO_ALQUILER = 'GASTO_ALQUILER',
-  GASTO_INSUMO = 'GASTO_INSUMO',
-  GASTO_SERVICIO = 'GASTO_SERVICIO',
-  GASTO_MARKETING = 'GASTO_MARKETING',
-  GASTO_OTRO = 'GASTO_OTRO',
+  INGRESO_SERVICIO = 'INCOME_SERVICE',
+  INGRESO_PRODUCTO = 'INCOME_PRODUCT',
+  INGRESO_OTRO = 'INCOME_OTHER',
+  GASTO_SUELDO = 'EXPENSE',
+  GASTO_ALQUILER = 'EXPENSE',
+  GASTO_INSUMO = 'EXPENSE',
+  GASTO_SERVICIO = 'EXPENSE',
+  GASTO_MARKETING = 'EXPENSE',
+  GASTO_OTRO = 'EXPENSE',
 }
 
 export enum MetodoPago {
-  EFECTIVO = 'EFECTIVO',
-  TRANSFERENCIA = 'TRANSFERENCIA',
-  TARJETA_DEBITO = 'TARJETA_DEBITO',
-  TARJETA_CREDITO = 'TARJETA_CREDITO',
+  EFECTIVO = 'CASH',
+  TRANSFERENCIA = 'BANK_TRANSFER',
+  TARJETA_DEBITO = 'DEBIT_CARD',
+  TARJETA_CREDITO = 'CREDIT_CARD',
   MERCADOPAGO = 'MERCADOPAGO',
-  OTRO = 'OTRO',
+  OTRO = 'OTHER',
 }
 
+/** @deprecated Use Transaction instead */
 export interface Transaccion {
   id: number
   sucursal: number
