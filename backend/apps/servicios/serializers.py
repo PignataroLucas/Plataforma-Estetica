@@ -1,5 +1,25 @@
 from rest_framework import serializers
-from .models import Servicio, CategoriaServicio
+from .models import Servicio, CategoriaServicio, MaquinaAlquilada
+
+
+class MaquinaAlquiladaSerializer(serializers.ModelSerializer):
+    """
+    Serializer para MaquinaAlquilada
+    """
+    class Meta:
+        model = MaquinaAlquilada
+        fields = [
+            'id',
+            'sucursal',
+            'nombre',
+            'descripcion',
+            'costo_diario',
+            'proveedor',
+            'activa',
+            'creado_en',
+            'actualizado_en',
+        ]
+        read_only_fields = ['id', 'sucursal', 'creado_en', 'actualizado_en']
 
 
 class ServicioSerializer(serializers.ModelSerializer):
@@ -11,6 +31,10 @@ class ServicioSerializer(serializers.ModelSerializer):
     - DIP: Depende de abstracciones (ModelSerializer)
     """
     color_display = serializers.ReadOnlyField()
+    costo_maquina_diario = serializers.ReadOnlyField()
+    ganancia_por_servicio = serializers.ReadOnlyField()
+    profit_porcentaje = serializers.ReadOnlyField()
+    maquina_nombre = serializers.CharField(source='maquina_alquilada.nombre', read_only=True, allow_null=True)
 
     class Meta:
         model = Servicio
@@ -18,11 +42,16 @@ class ServicioSerializer(serializers.ModelSerializer):
             'id',
             'sucursal',
             'categoria',
+            'maquina_alquilada',
+            'maquina_nombre',
             'nombre',
             'descripcion',
             'codigo',
             'duracion_minutos',
             'precio',
+            'costo_maquina_diario',
+            'ganancia_por_servicio',
+            'profit_porcentaje',
             'comision_porcentaje',
             'requiere_profesional',
             'requiere_equipamiento',
@@ -32,7 +61,17 @@ class ServicioSerializer(serializers.ModelSerializer):
             'creado_en',
             'actualizado_en',
         ]
-        read_only_fields = ['id', 'sucursal', 'creado_en', 'actualizado_en', 'color_display']
+        read_only_fields = [
+            'id',
+            'sucursal',
+            'creado_en',
+            'actualizado_en',
+            'color_display',
+            'costo_maquina_diario',
+            'ganancia_por_servicio',
+            'profit_porcentaje',
+            'maquina_nombre'
+        ]
 
 
 class CategoriaServicioSerializer(serializers.ModelSerializer):

@@ -1,6 +1,7 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react'
-import { Servicio } from '@/types/models'
+import { Servicio, MaquinaAlquilada, PaginatedResponse } from '@/types/models'
 import { Button, Input } from '@/components/ui'
+import api from '@/services/api'
 
 /**
  * ServicioForm - Formulario de Servicio (Create/Edit)
@@ -31,9 +32,32 @@ export default function ServicioForm({
     nombre: '',
     duracion_minutos: 0,
     precio: 0,
+    maquina_alquilada: undefined,
   })
 
   const [errors, setErrors] = useState<Partial<Record<keyof Servicio, string>>>({})
+  const [maquinas, setMaquinas] = useState<MaquinaAlquilada[]>([])
+  const [loadingMaquinas, setLoadingMaquinas] = useState(false)
+
+  // Cargar máquinas al montar
+  useEffect(() => {
+    const fetchMaquinas = async () => {
+      setLoadingMaquinas(true)
+      try {
+        const response = await api.get<PaginatedResponse<MaquinaAlquilada>>('/servicios/maquinas/')
+        // Handle paginated response
+        const maquinasList = response.data && 'results' in response.data
+          ? response.data.results
+          : response.data as any
+        setMaquinas(maquinasList.filter((m: MaquinaAlquilada) => m.activa))
+      } catch (error) {
+        console.error('Error loading machines:', error)
+      } finally {
+        setLoadingMaquinas(false)
+      }
+    }
+    fetchMaquinas()
+  }, [])
 
   // Cargar datos del servicio si estamos editando
   useEffect(() => {
@@ -42,6 +66,7 @@ export default function ServicioForm({
         nombre: servicio.nombre,
         duracion_minutos: servicio.duracion_minutos,
         precio: servicio.precio,
+        maquina_alquilada: servicio.maquina_alquilada,
       })
     }
   }, [servicio])
@@ -84,7 +109,7 @@ export default function ServicioForm({
   /**
    * Handler de cambios en inputs (SRP)
    */
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
 
     setFormData(prev => ({
@@ -99,6 +124,17 @@ export default function ServicioForm({
         [name]: undefined,
       }))
     }
+  }
+
+  /**
+   * Handler para cambio de máquina
+   */
+  const handleMachineChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value
+    setFormData(prev => ({
+      ...prev,
+      maquina_alquilada: value ? parseInt(value) : undefined,
+    }))
   }
 
   return (
@@ -146,6 +182,46 @@ export default function ServicioForm({
             min="0"
             step="0.01"
           />
+
+          {/* Selector de Máquina */}
+          <div>
+            <label htmlFor="maquina_alquilada" className="block text-sm font-medium text-gray-700 mb-1">
+              Máquina Alquilada (Opcional)
+            </label>
+            <select
+              id="maquina_alquilada"
+              name="maquina_alquilada"
+              value={formData.maquina_alquilada || ''}
+              onChange={handleMachineChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loadingMaquinas}
+            >
+              <option value="">Sin máquina</option>
+              {maquinas.map(maquina => (
+                <option key={maquina.id} value={maquina.id}>
+                  {maquina.nombre} - ${maquina.costo_diario.toLocaleString()}/día
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Selecciona si este servicio requiere una máquina alquilada. El costo se cobrará una vez por día.
+            </p>
+          </div>
+
+          {/* Aviso sobre análisis de profit */}
+          {formData.maquina_alquilada && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <svg className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-sm text-amber-800">
+                  <p className="font-medium">Máquina alquilada por día</p>
+                  <p className="mt-1">El análisis de rentabilidad se verá en <strong>Finanzas</strong> considerando todos los turnos del día.</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

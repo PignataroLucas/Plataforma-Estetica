@@ -1,8 +1,8 @@
 from rest_framework import viewsets, filters
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Servicio, CategoriaServicio
-from .serializers import ServicioSerializer, CategoriaServicioSerializer
+from .models import Servicio, CategoriaServicio, MaquinaAlquilada
+from .serializers import ServicioSerializer, CategoriaServicioSerializer, MaquinaAlquiladaSerializer
 
 
 class ServicioViewSet(viewsets.ModelViewSet):
@@ -44,11 +44,21 @@ class ServicioViewSet(viewsets.ModelViewSet):
         """
         Filtrar servicios por sucursal del usuario (Multi-tenancy)
         IMPORTANTE: Garantiza aislamiento de datos entre sucursales
+
+        Por defecto solo muestra servicios activos.
+        Use ?activo=false para ver servicios inactivos
         """
         user = self.request.user
+        queryset = Servicio.objects.none()
+
         if hasattr(user, 'sucursal') and user.sucursal:
-            return Servicio.objects.filter(sucursal=user.sucursal)
-        return Servicio.objects.none()
+            queryset = Servicio.objects.filter(sucursal=user.sucursal)
+
+        # Por defecto solo mostrar activos, a menos que se especifique activo=false
+        if self.request.query_params.get('activo') != 'false':
+            queryset = queryset.filter(activo=True)
+
+        return queryset
 
     def perform_create(self, serializer):
         """
@@ -58,6 +68,14 @@ class ServicioViewSet(viewsets.ModelViewSet):
             serializer.save(sucursal=self.request.user.sucursal)
         else:
             serializer.save()
+
+    def perform_destroy(self, instance):
+        """
+        Soft delete: Mark service as inactive instead of deleting.
+        This prevents errors when services have associated appointments.
+        """
+        instance.activo = False
+        instance.save()
 
 
 class CategoriaServicioViewSet(viewsets.ModelViewSet):
@@ -80,6 +98,39 @@ class CategoriaServicioViewSet(viewsets.ModelViewSet):
         if hasattr(user, 'sucursal') and user.sucursal:
             return CategoriaServicio.objects.filter(sucursal=user.sucursal)
         return CategoriaServicio.objects.none()
+
+    def perform_create(self, serializer):
+        """
+        Asignar automáticamente la sucursal del usuario actual
+        """
+        if hasattr(self.request.user, 'sucursal'):
+            serializer.save(sucursal=self.request.user.sucursal)
+        else:
+            serializer.save()
+
+
+class MaquinaAlquiladaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para MaquinaAlquilada - Gestión de máquinas/equipos alquilados
+
+    Las máquinas tienen un costo diario y se asocian a servicios para calcular profit.
+    """
+    serializer_class = MaquinaAlquiladaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['nombre', 'descripcion', 'proveedor']
+    filterset_fields = ['activa']
+    ordering_fields = ['nombre', 'costo_diario', 'creado_en']
+    ordering = ['nombre']
+
+    def get_queryset(self):
+        """
+        Filtrar máquinas por sucursal del usuario (Multi-tenancy)
+        """
+        user = self.request.user
+        if hasattr(user, 'sucursal') and user.sucursal:
+            return MaquinaAlquilada.objects.filter(sucursal=user.sucursal)
+        return MaquinaAlquilada.objects.none()
 
     def perform_create(self, serializer):
         """

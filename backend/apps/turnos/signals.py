@@ -87,6 +87,15 @@ def create_transaction_from_appointment(sender, instance, created, **kwargs):
             # Use update() to avoid triggering signals again
             Turno.objects.filter(pk=instance.pk).update(estado_pago=Turno.EstadoPago.PAGADO)
 
+        # ==================== Machine Rental Expense ====================
+        # If service uses a rented machine, create expense for daily rental
+        if instance.servicio.maquina_alquilada:
+            _create_machine_rental_expense(
+                instance=instance,
+                Transaction=Transaction,
+                TransactionCategory=TransactionCategory
+            )
+
 
 def _create_service_income(instance, amount, description, Transaction, TransactionCategory, is_deposit=False):
     """
@@ -140,3 +149,71 @@ def _create_service_income(instance, amount, description, Transaction, Transacti
     )
 
     print(f"✅ Service income auto-created: {transaction} (${amount})")
+
+
+def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
+    """
+    Helper function to create an EXPENSE transaction for rented machine.
+
+    IMPORTANT: Creates expense ONLY ONCE PER DAY per machine.
+    The machine is rented for the full day, not per appointment.
+
+    Args:
+        instance: The Turno instance
+        Transaction: Transaction model class
+        TransactionCategory: TransactionCategory model class
+    """
+    machine = instance.servicio.maquina_alquilada
+    appointment_date = instance.fecha_hora_inicio.date()
+
+    # Get or create "Alquileres de Equipos" expense category
+    machine_expense_category = TransactionCategory.objects.filter(
+        branch=instance.sucursal,
+        name='Alquileres de Equipos',
+        type='EXPENSE',
+        parent_category__isnull=True
+    ).first()
+
+    if not machine_expense_category:
+        # Create category if it doesn't exist
+        machine_expense_category = TransactionCategory.objects.create(
+            branch=instance.sucursal,
+            name='Alquileres de Equipos',
+            type='EXPENSE',
+            is_system_category=True,
+            color='#F59E0B',  # Amber
+            order=5
+        )
+
+    # Check if expense for this machine already exists for this day
+    existing_expense = Transaction.objects.filter(
+        branch=instance.sucursal,
+        category=machine_expense_category,
+        type='EXPENSE',
+        date=appointment_date,
+        description__contains=f"Alquiler de {machine.nombre}",
+        auto_generated=True
+    ).first()
+
+    if existing_expense:
+        # Update notes to include this appointment
+        existing_expense.notes += f"\n+ Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})"
+        existing_expense.save()
+        print(f"✅ Machine rental expense updated (already exists for this day): {existing_expense}")
+        return
+
+    # Create the expense transaction (ONCE PER DAY)
+    transaction = Transaction.objects.create(
+        branch=instance.sucursal,
+        category=machine_expense_category,
+        type='EXPENSE',
+        amount=machine.costo_diario,
+        date=appointment_date,
+        description=f"Alquiler de {machine.nombre} - {appointment_date.strftime('%d/%m/%Y')}",
+        notes=f"Costo diario: ${machine.costo_diario}\nTurnos realizados:\n- Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})",
+        payment_method='BANK_TRANSFER',  # Default for equipment rentals
+        auto_generated=True,
+        registered_by=instance.creado_por,
+    )
+
+    print(f"✅ Machine rental expense auto-created (ONCE PER DAY): {transaction} (${machine.costo_diario})")

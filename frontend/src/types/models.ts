@@ -107,15 +107,32 @@ export interface CategoriaServicio {
   actualizado_en: string
 }
 
+export interface MaquinaAlquilada {
+  id: number
+  sucursal: number
+  nombre: string
+  descripcion: string
+  costo_diario: number
+  proveedor: string
+  activa: boolean
+  creado_en: string
+  actualizado_en: string
+}
+
 export interface Servicio {
   id: number
   sucursal: number
   categoria?: number
+  maquina_alquilada?: number
+  maquina_nombre?: string
   nombre: string
   descripcion: string
   codigo: string
   duracion_minutos: number
   precio: number
+  costo_maquina_diario: number
+  ganancia_por_servicio: number
+  profit_porcentaje: number
   comision_porcentaje: number
   requiere_profesional: boolean
   requiere_equipamiento: string

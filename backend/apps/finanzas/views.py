@@ -188,6 +188,17 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def perform_create(self, serializer):
+        """Automatically set branch from user's sucursal"""
+        user = self.request.user
+        if hasattr(user, 'sucursal') and user.sucursal:
+            serializer.save(branch=user.sucursal)
+        else:
+            # For superusers, use first available branch
+            from apps.empleados.models import Sucursal
+            branch = Sucursal.objects.first()
+            serializer.save(branch=branch)
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """

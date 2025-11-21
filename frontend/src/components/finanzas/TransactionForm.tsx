@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useFinanzas } from '@/hooks/useFinanzas'
+import { useEmpleados } from '@/hooks/useEmpleados'
 import {
   Transaction,
   TransactionCategory,
   TransactionType,
   PaymentMethod,
   CategoryType,
+  Usuario,
 } from '@/types/models'
 import { Button, Input, Select } from '@/components/ui'
 
@@ -19,6 +21,7 @@ interface TransactionFormData {
   description: string
   notes: string
   receipt_number: string
+  employee_id?: number
 }
 
 interface TransactionFormProps {
@@ -48,11 +51,13 @@ export default function TransactionForm({
   showButtons = true,
 }: TransactionFormProps) {
   const { getCategoriesByType } = useFinanzas()
+  const { empleados, fetchEmpleados } = useEmpleados()
   const [categoriesByType, setCategoriesByType] = useState<{
     income: TransactionCategory[]
     expense: TransactionCategory[]
   }>({ income: [], expense: [] })
   const [loadingCategories, setLoadingCategories] = useState(true)
+  const [isSalaryCategory, setIsSalaryCategory] = useState(false)
 
   // Form setup
   const {
@@ -74,8 +79,55 @@ export default function TransactionForm({
     },
   })
 
-  // Watch type to filter categories
+  // Watch type and category to filter categories and detect salary
   const selectedType = watch('type')
+  const selectedCategory = watch('category')
+
+  /**
+   * Check if selected category is "Sueldos" and load employees
+   */
+  useEffect(() => {
+    if (selectedCategory && selectedCategory > 0) {
+      // Find the category name
+      const allCategories = [...categoriesByType.income, ...categoriesByType.expense]
+      const category = allCategories.find(c => c.id === Number(selectedCategory))
+
+      // Also check subcategories
+      let foundCategory = category
+      if (!foundCategory) {
+        for (const cat of allCategories) {
+          const subcat = cat.subcategories?.find(s => s.id === Number(selectedCategory))
+          if (subcat) {
+            foundCategory = subcat as any
+            break
+          }
+        }
+      }
+
+      const isSueldo = foundCategory?.name?.toLowerCase() === 'sueldos'
+      setIsSalaryCategory(isSueldo)
+
+      if (isSueldo && empleados.length === 0) {
+        fetchEmpleados({ activo: true })
+      }
+    } else {
+      setIsSalaryCategory(false)
+    }
+  }, [selectedCategory, categoriesByType, empleados.length, fetchEmpleados])
+
+  /**
+   * Handle employee selection - auto-fill amount
+   */
+  const handleEmployeeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const employeeId = Number(e.target.value)
+    if (employeeId > 0) {
+      const employee = empleados.find(emp => emp.id === employeeId)
+      if (employee && employee.sueldo_mensual) {
+        setValue('amount', employee.sueldo_mensual)
+        setValue('description', `Sueldo de ${employee.first_name} ${employee.last_name}`)
+      }
+    }
+  }
 
   /**
    * Load categories grouped by type
@@ -224,6 +276,33 @@ export default function TransactionForm({
           <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>
         )}
       </div>
+
+      {/* Employee Selector (only for Sueldos category) */}
+      {isSalaryCategory && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Empleado *
+          </label>
+          <select
+            onChange={handleEmployeeChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value={0}>Seleccionar empleado...</option>
+            {empleados
+              .filter(emp => emp.sueldo_mensual && emp.sueldo_mensual > 0)
+              .map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.first_name} {emp.last_name} - ${emp.sueldo_mensual?.toLocaleString()}
+                </option>
+              ))}
+          </select>
+          {empleados.filter(emp => emp.sueldo_mensual && emp.sueldo_mensual > 0).length === 0 && (
+            <p className="mt-1 text-sm text-amber-600">
+              No hay empleados con sueldo configurado. Configura el sueldo en la sección de Empleados.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Amount and Date Row */}
       <div className="grid grid-cols-2 gap-4">

@@ -116,6 +116,13 @@ class TransactionSerializer(serializers.ModelSerializer):
     """
     Full serializer for transactions
     """
+    # Make branch optional - will be set by perform_create
+    branch = serializers.PrimaryKeyRelatedField(
+        queryset=Sucursal.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
     # Read-only display fields
     type_display = serializers.CharField(source='get_type_display', read_only=True)
     payment_method_display = serializers.CharField(
