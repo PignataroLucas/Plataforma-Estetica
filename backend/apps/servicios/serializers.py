@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Servicio, CategoriaServicio, MaquinaAlquilada
+from .models import Servicio, CategoriaServicio, MaquinaAlquilada, AlquilerMaquina
+from django.utils import timezone
 
 
 class MaquinaAlquiladaSerializer(serializers.ModelSerializer):
@@ -91,3 +92,67 @@ class CategoriaServicioSerializer(serializers.ModelSerializer):
             'actualizado_en',
         ]
         read_only_fields = ['id', 'sucursal', 'creado_en', 'actualizado_en']
+
+
+class AlquilerMaquinaSerializer(serializers.ModelSerializer):
+    """
+    Serializer para AlquilerMaquina - Programación de alquileres
+    """
+    maquina_nombre = serializers.CharField(source='maquina.nombre', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    tiene_turnos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AlquilerMaquina
+        fields = [
+            'id',
+            'sucursal',
+            'maquina',
+            'maquina_nombre',
+            'fecha',
+            'estado',
+            'estado_display',
+            'costo',
+            'notas',
+            'transaccion_gasto',
+            'tiene_turnos',
+            'creado_por',
+            'creado_en',
+            'actualizado_en',
+        ]
+        read_only_fields = [
+            'id',
+            'sucursal',
+            'transaccion_gasto',
+            'creado_por',
+            'creado_en',
+            'actualizado_en',
+            'maquina_nombre',
+            'estado_display',
+            'tiene_turnos'
+        ]
+
+    def get_tiene_turnos(self, obj):
+        """Check if there are appointments with this machine on this date"""
+        from apps.turnos.models import Turno
+        return Turno.objects.filter(
+            servicio__maquina_alquilada=obj.maquina,
+            fecha_hora_inicio__date=obj.fecha,
+            sucursal=obj.sucursal
+        ).exists()
+
+    def validate(self, data):
+        """Validation"""
+        # Auto-set cost from machine if not provided
+        if 'costo' not in data and 'maquina' in data:
+            data['costo'] = data['maquina'].costo_diario
+
+        # Prevent scheduling in the past
+        if data.get('fecha') and data['fecha'] < timezone.now().date():
+            # Allow if editing existing rental
+            if not self.instance:
+                raise serializers.ValidationError({
+                    'fecha': 'No puedes programar alquileres en fechas pasadas.'
+                })
+
+        return data

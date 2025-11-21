@@ -45,6 +45,83 @@ class MaquinaAlquilada(models.Model):
         return f"{self.nombre} - ${self.costo_diario}/día"
 
 
+class AlquilerMaquina(models.Model):
+    """
+    Registro de alquileres de máquinas programados.
+    Permite control sobre cuándo se alquila realmente la máquina.
+
+    Estados:
+    - PROGRAMADO: Alquiler planeado pero no confirmado
+    - CONFIRMADO: Alquiler confirmado, se cobrará al completar turnos
+    - CANCELADO: Alquiler cancelado, no se cobrará
+    - COBRADO: Ya se generó el gasto en finanzas
+    """
+
+    class Estado(models.TextChoices):
+        PROGRAMADO = 'PROGRAMADO', 'Programado'
+        CONFIRMADO = 'CONFIRMADO', 'Confirmado'
+        CANCELADO = 'CANCELADO', 'Cancelado'
+        COBRADO = 'COBRADO', 'Cobrado'
+
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='alquileres_maquinas'
+    )
+    maquina = models.ForeignKey(
+        MaquinaAlquilada,
+        on_delete=models.PROTECT,
+        related_name='alquileres'
+    )
+    fecha = models.DateField(
+        help_text="Fecha del alquiler"
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.PROGRAMADO
+    )
+    costo = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Costo del alquiler (se copia del costo_diario de la máquina)"
+    )
+    notas = models.TextField(blank=True)
+
+    # Referencias
+    transaccion_gasto = models.ForeignKey(
+        'finanzas.Transaction',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='alquiler_maquina',
+        help_text="Transacción de gasto generada"
+    )
+
+    # Auditoría
+    creado_por = models.ForeignKey(
+        'empleados.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='alquileres_creados'
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Alquiler de Máquina'
+        verbose_name_plural = 'Alquileres de Máquinas'
+        ordering = ['-fecha']
+        unique_together = [['maquina', 'fecha', 'sucursal']]
+        indexes = [
+            models.Index(fields=['sucursal', 'fecha', 'estado']),
+            models.Index(fields=['maquina', 'fecha']),
+        ]
+
+    def __str__(self):
+        return f"{self.maquina.nombre} - {self.fecha.strftime('%d/%m/%Y')} ({self.get_estado_display()})"
+
+
 class CategoriaServicio(models.Model):
     """
     Categorías para organizar los servicios

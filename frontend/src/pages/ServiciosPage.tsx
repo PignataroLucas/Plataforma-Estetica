@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useServicios } from '@/hooks/useServicios'
-import { Servicio, MaquinaAlquilada } from '@/types/models'
+import { Servicio, MaquinaAlquilada, AlquilerMaquina } from '@/types/models'
 import {
   Button,
   Input,
@@ -15,6 +15,9 @@ import ServiciosList from '@/components/servicios/ServiciosList'
 import ServicioForm from '@/components/servicios/ServicioForm'
 import MaquinasList from '@/components/servicios/MaquinasList'
 import MaquinaForm from '@/components/servicios/MaquinaForm'
+import AlquileresList from '@/components/servicios/AlquileresList'
+import AlquilerForm from '@/components/servicios/AlquilerForm'
+import AlquilerPendientes from '@/components/servicios/AlquileresPendientes'
 import api from '@/services/api'
 import toast from 'react-hot-toast'
 
@@ -37,7 +40,7 @@ export default function ServiciosPage() {
   } = useServicios()
 
   // Estado de pestañas
-  const [activeTab, setActiveTab] = useState<'servicios' | 'maquinas'>('servicios')
+  const [activeTab, setActiveTab] = useState<'servicios' | 'maquinas' | 'alquileres'>('servicios')
 
   // Estado del modal de servicios
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -56,6 +59,11 @@ export default function ServiciosPage() {
   const [maquinaModalMode, setMaquinaModalMode] = useState<'create' | 'edit'>('create')
   const [selectedMaquina, setSelectedMaquina] = useState<MaquinaAlquilada | null>(null)
   const [maquinasRefreshKey, setMaquinasRefreshKey] = useState(0)
+
+  // Estado para alquileres
+  const [isAlquilerFormOpen, setIsAlquilerFormOpen] = useState(false)
+  const [selectedMaquinaForRental, setSelectedMaquinaForRental] = useState<number | undefined>()
+  const [alquileresRefreshKey, setAlquileresRefreshKey] = useState(0)
 
   // Cargar servicios al montar el componente
   useEffect(() => {
@@ -176,6 +184,25 @@ export default function ServiciosPage() {
     }
   }
 
+  /**
+   * Handlers de alquileres
+   */
+  const handleProgramarAlquiler = (maquinaId: number) => {
+    setSelectedMaquinaForRental(maquinaId)
+    setIsAlquilerFormOpen(true)
+  }
+
+  const handleCloseAlquilerForm = () => {
+    setIsAlquilerFormOpen(false)
+    setSelectedMaquinaForRental(undefined)
+  }
+
+  const handleAlquilerFormSubmit = (alquiler: AlquilerMaquina) => {
+    handleCloseAlquilerForm()
+    setAlquileresRefreshKey(prev => prev + 1)
+    toast.success('Alquiler programado exitosamente')
+  }
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -210,6 +237,16 @@ export default function ServiciosPage() {
             }`}
           >
             🔧 Máquinas Alquiladas
+          </button>
+          <button
+            onClick={() => setActiveTab('alquileres')}
+            className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'alquileres'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            📅 Alquileres Programados
           </button>
         </nav>
       </div>
@@ -294,9 +331,25 @@ export default function ServiciosPage() {
         <Card>
           <MaquinasList
             onEdit={handleOpenEditMaquinaModal}
+            onProgramarAlquiler={handleProgramarAlquiler}
             refreshKey={maquinasRefreshKey}
           />
         </Card>
+      )}
+
+      {/* Lista de Alquileres */}
+      {activeTab === 'alquileres' && (
+        <div className="space-y-6">
+          {/* Alerta de alquileres pendientes */}
+          <AlquilerPendientes
+            onAlquilerCreated={() => setAlquileresRefreshKey(prev => prev + 1)}
+          />
+
+          {/* Lista de alquileres programados */}
+          <Card>
+            <AlquileresList key={alquileresRefreshKey} />
+          </Card>
+        </div>
       )}
 
       {/* Modal Create/Edit */}
@@ -413,6 +466,15 @@ export default function ServiciosPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Modal/Form de Alquiler */}
+      {isAlquilerFormOpen && (
+        <AlquilerForm
+          maquinaId={selectedMaquinaForRental}
+          onSubmit={handleAlquilerFormSubmit}
+          onCancel={handleCloseAlquilerForm}
+        />
+      )}
     </div>
   )
 }

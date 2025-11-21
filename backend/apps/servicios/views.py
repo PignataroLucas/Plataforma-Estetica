@@ -1,8 +1,10 @@
-from rest_framework import viewsets, filters
+from rest_framework import viewsets, filters, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Servicio, CategoriaServicio, MaquinaAlquilada
-from .serializers import ServicioSerializer, CategoriaServicioSerializer, MaquinaAlquiladaSerializer
+from .models import Servicio, CategoriaServicio, MaquinaAlquilada, AlquilerMaquina
+from .serializers import ServicioSerializer, CategoriaServicioSerializer, MaquinaAlquiladaSerializer, AlquilerMaquinaSerializer
 
 
 class ServicioViewSet(viewsets.ModelViewSet):
@@ -140,3 +142,131 @@ class MaquinaAlquiladaViewSet(viewsets.ModelViewSet):
             serializer.save(sucursal=self.request.user.sucursal)
         else:
             serializer.save()
+
+
+class AlquilerMaquinaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para AlquilerMaquina - Programación de alquileres
+
+    Permite registrar alquileres antes del día para tener control sobre
+    cuándo realmente se alquila la máquina.
+    """
+    serializer_class = AlquilerMaquinaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['maquina', 'fecha', 'estado']
+    ordering_fields = ['fecha', 'creado_en']
+    ordering = ['-fecha']
+
+    def get_queryset(self):
+        """
+        Filtrar alquileres por sucursal del usuario
+        """
+        user = self.request.user
+        if hasattr(user, 'sucursal') and user.sucursal:
+            return AlquilerMaquina.objects.filter(sucursal=user.sucursal).select_related(
+                'maquina', 'transaccion_gasto', 'creado_por'
+            )
+        return AlquilerMaquina.objects.none()
+
+    def perform_create(self, serializer):
+        """
+        Asignar automáticamente la sucursal y usuario actual
+        """
+        if hasattr(self.request.user, 'sucursal'):
+            serializer.save(
+                sucursal=self.request.user.sucursal,
+                creado_por=self.request.user
+            )
+        else:
+            serializer.save(creado_por=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def pendientes(self, request):
+        """
+        Get rentals that need confirmation (have appointments but not confirmed)
+        """
+        from apps.turnos.models import Turno
+        from django.utils import timezone
+        from django.db.models import Q, Count
+
+        queryset = self.get_queryset()
+        
+        # Get dates with appointments using machines
+        fechas_con_turnos = Turno.objects.filter(
+            servicio__maquina_alquilada__isnull=False,
+            sucursal=request.user.sucursal,
+            fecha_hora_inicio__date__gte=timezone.now().date()
+        ).values(
+            'servicio__maquina_alquilada',
+            'fecha_hora_inicio__date'
+        ).annotate(
+            cantidad_turnos=Count('id')
+        )
+
+        pendientes = []
+        for item in fechas_con_turnos:
+            maquina_id = item['servicio__maquina_alquilada']
+            fecha = item['fecha_hora_inicio__date']
+            
+            # Check if rental exists and is confirmed
+            alquiler = queryset.filter(
+                maquina_id=maquina_id,
+                fecha=fecha
+            ).first()
+
+            if not alquiler or alquiler.estado == AlquilerMaquina.Estado.PROGRAMADO:
+                maquina = MaquinaAlquilada.objects.get(pk=maquina_id)
+                pendientes.append({
+                    'maquina_id': maquina_id,
+                    'maquina_nombre': maquina.nombre,
+                    'fecha': fecha,
+                    'cantidad_turnos': item['cantidad_turnos'],
+                    'costo_diario': maquina.costo_diario,
+                    'alquiler_id': alquiler.id if alquiler else None,
+                    'estado': alquiler.estado if alquiler else None
+                })
+
+        return Response(pendientes)
+
+    @action(detail=True, methods=['post'])
+    def confirmar(self, request, pk=None):
+        """
+        Confirm a rental
+        """
+        alquiler = self.get_object()
+        
+        if alquiler.estado == AlquilerMaquina.Estado.COBRADO:
+            return Response(
+                {'error': 'Este alquiler ya fue cobrado y no se puede modificar'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        alquiler.estado = AlquilerMaquina.Estado.CONFIRMADO
+        alquiler.save()
+
+        return Response({
+            'message': 'Alquiler confirmado',
+            'alquiler': AlquilerMaquinaSerializer(alquiler).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        """
+        Cancel a rental
+        """
+        alquiler = self.get_object()
+        
+        if alquiler.estado == AlquilerMaquina.Estado.COBRADO:
+            return Response(
+                {'error': 'Este alquiler ya fue cobrado. Elimina la transacción de gasto manualmente en Finanzas.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        alquiler.estado = AlquilerMaquina.Estado.CANCELADO
+        alquiler.save()
+
+        return Response({
+            'message': 'Alquiler cancelado',
+            'alquiler': AlquilerMaquinaSerializer(alquiler).data
+        })

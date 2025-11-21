@@ -5,10 +5,11 @@ import toast from 'react-hot-toast'
 
 interface MaquinasListProps {
   onEdit: (maquina: MaquinaAlquilada) => void
+  onProgramarAlquiler?: (maquinaId: number) => void
   refreshKey?: number
 }
 
-export default function MaquinasList({ onEdit, refreshKey = 0 }: MaquinasListProps) {
+export default function MaquinasList({ onEdit, onProgramarAlquiler, refreshKey = 0 }: MaquinasListProps) {
   const [maquinas, setMaquinas] = useState<MaquinaAlquilada[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -116,6 +117,15 @@ export default function MaquinasList({ onEdit, refreshKey = 0 }: MaquinasListPro
                   </div>
                 </div>
                 <div className="ml-4 flex gap-2">
+                  {onProgramarAlquiler && (
+                    <button
+                      onClick={() => onProgramarAlquiler(maquina.id)}
+                      className="inline-flex items-center px-3 py-2 border border-green-300 shadow-sm text-sm leading-4 font-medium rounded-md text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      title="Programar alquiler para esta máquina"
+                    >
+                      📅 Programar
+                    </button>
+                  )}
                   <button
                     onClick={() => onEdit(maquina)}
                     className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

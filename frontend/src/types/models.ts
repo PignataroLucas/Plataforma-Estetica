@@ -119,6 +119,40 @@ export interface MaquinaAlquilada {
   actualizado_en: string
 }
 
+export enum EstadoAlquiler {
+  PROGRAMADO = 'PROGRAMADO',
+  CONFIRMADO = 'CONFIRMADO',
+  CANCELADO = 'CANCELADO',
+  COBRADO = 'COBRADO',
+}
+
+export interface AlquilerMaquina {
+  id: number
+  sucursal: number
+  maquina: number
+  maquina_nombre: string
+  fecha: string
+  estado: EstadoAlquiler
+  estado_display: string
+  costo: number
+  notas: string
+  transaccion_gasto: number | null
+  tiene_turnos: boolean
+  creado_por: number | null
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface AlquilerPendiente {
+  maquina_id: number
+  maquina_nombre: string
+  fecha: string
+  cantidad_turnos: number
+  costo_diario: number
+  alquiler_id: number | null
+  estado: EstadoAlquiler | null
+}
+
 export interface Servicio {
   id: number
   sucursal: number

@@ -9,6 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Business Model**: Multi-tenant SaaS platform where each aesthetic center operates independently with logically separated data
 - **License**: MIT
 - **Version**: 1.0 (November 2025)
+- **Current Status**: Phase 2+ completed with advanced financial system, rented equipment management, automatic transaction generation, and sales/offers system
+
+### Key Differentiators
+- **Automatic Financial Tracking**: Transactions auto-generated from appointments, product sales, and equipment rentals
+- **Rented Equipment Management**: Complete workflow for managing daily equipment rentals with smart expense generation
+- **Hierarchical Category System**: 2-level category structure with protected system categories
+- **Reconciliation System**: Automatic detection and alerts for appointments without confirmed rentals
+- **Salary Processing**: Bulk salary payment system with automatic expense creation
+- **Real-time Profit Analysis**: Consider all costs including equipment rentals across daily appointments
 
 ## Core Value Proposition
 
@@ -58,12 +67,26 @@ Centralizes all operations for aesthetic centers that currently use disconnected
 - **Sucursal**: Multiple locations per center (FK → CentroEstetica)
 - **Usuario**: Authentication, roles, permissions (FK → Sucursal)
 - **Cliente**: Customer data, contact info, preferences (FK → CentroEstetica)
-- **Servicio**: Service catalog (name, duration, price) (FK → Sucursal)
+- **Servicio**: Service catalog (name, duration, price, optional rented machine) (FK → Sucursal, MaquinaAlquilada)
+- **MaquinaAlquilada**: Rented equipment/machines with daily costs (FK → Sucursal)
+- **AlquilerMaquina**: Rental scheduling and tracking (FK → Sucursal, MaquinaAlquilada, Transaction)
+  - States: PROGRAMADO (scheduled but not confirmed), CONFIRMADO (confirmed, will generate expense), COBRADO (expense already created), CANCELADO (cancelled)
+  - Links to Transaction when expense is auto-generated
 - **Turno**: Appointments (FKs → Cliente, Servicio, Usuario[professional], Sucursal)
   - States: Confirmado, Pendiente, Completado, Cancelado, No-Show
   - Payment states: Pagado, Con Seña, Pendiente
+  - Automatically creates income transactions when completed
+  - Automatically creates machine rental expense if service uses rented equipment (only once per day per machine)
 - **Producto**: Inventory (stock, prices, categories) (FK → Sucursal)
-- **Transaccion**: Financial records (income/expenses, categories) (FK → Sucursal)
+- **TransactionCategory**: Hierarchical categories for financial transactions (2 levels max) (FK → Sucursal, parent_category)
+  - Types: INCOME, EXPENSE
+  - System categories (protected): Servicios, Productos, Salarios, Alquileres de Equipos
+- **Transaction**: Financial records with automatic generation from appointments and sales (FK → Sucursal, TransactionCategory, Cliente)
+  - Types: INCOME_SERVICE, INCOME_PRODUCT, INCOME_OTHER, EXPENSE
+  - Auto-generated transactions are marked and linked to source (Turno, AlquilerMaquina)
+  - Supports multiple payment methods (CASH, BANK_TRANSFER, DEBIT_CARD, CREDIT_CARD, MERCADOPAGO, OTHER)
+- **Oferta**: Sales offers with discount percentages and validity periods (FK → Sucursal)
+- **VentaOferta**: Sales with applied offers tracking (FK → Oferta, Cliente, Transaction)
 - **Comision**: Commission tracking (FK → Usuario, Turno/Producto)
 - **HistorialCliente**: Service history log (FK → Cliente, Servicio)
 - **Notificacion**: WhatsApp message log (status, timestamps)
@@ -95,13 +118,22 @@ Centralizes all operations for aesthetic centers that currently use disconnected
 - Rotation reports
 
 ### 4. Financial System (Admin-only access)
-- Income tracking (services, product sales, other)
-- Expense categorization (salaries, rent, supplies, services, marketing)
-- Cash flow in real-time (income - expenses)
-- Monthly profit calculations
-- Projections based on historical trends
-- Period comparisons (month-to-month, year-to-year)
-- PDF and Excel export
+- **Hierarchical Category System**: 2-level category structure (parent → subcategories) for INCOME and EXPENSE
+- **System-Protected Categories**: Servicios, Productos, Salarios, Alquileres de Equipos (auto-created, cannot be deleted)
+- **Automatic Transaction Generation**:
+  - Income from completed appointments (full payment or remaining balance after deposit)
+  - Deposit tracking when appointment payment state changes to "Con Seña"
+  - Machine rental expenses when appointments with rented equipment are completed
+  - Product sales with automatic inventory updates
+- **Manual Transaction Entry**: For expenses like salaries, rent, marketing, supplies, services
+- **Real-time Cash Flow**: Live income - expenses calculation with balance tracking
+- **Multiple Payment Methods**: Cash, bank transfer, debit/credit cards, MercadoPago, other
+- **Transaction Linking**: Auto-generated transactions link to source (appointment, product sale, rental)
+- **Monthly Salary Processing**: Bulk salary payment registration for all employees
+- **Financial Dashboard**: Summary metrics, charts by category, payment method breakdown
+- **Period Comparisons**: Month-to-month, year-to-year analysis
+- **Profit Margin Calculations**: Automatic profit percentage tracking
+- **PDF and Excel Export**: Download financial reports in multiple formats
 
 ### 5. Analytics & Reports
 - Service and product sales analysis
@@ -123,16 +155,44 @@ Centralizes all operations for aesthetic centers that currently use disconnected
 - Communication history log
 - Opt-out system
 
-### 7. Employee & Commission Management
-- Employee profiles (info, role, schedules, specialties)
-- Flexible commission system (% per service, fixed amount, tiered)
-- Real-time commission calculation per service/product sold
-- Commission reports by employee, period, service type
-- Historical commission records
-- Monthly targets and performance dashboards
-- Work schedule tracking
+### 7. Rented Equipment Management
+- **Machine/Equipment Catalog**: Track rented equipment (lasers, machines, specialized tools)
+- **Daily Cost Tracking**: Record cost per day for each rented machine
+- **Service Association**: Link services to rented equipment for automatic cost calculation
+- **Rental Scheduling System**:
+  - Schedule rentals in advance (state: PROGRAMADO)
+  - Confirm rentals to enable automatic expense generation (state: CONFIRMADO)
+  - Track when expense is created (state: COBRADO)
+  - Cancel rentals if not needed (state: CANCELADO)
+- **Reconciliation View**: Automatic detection of appointments using rented equipment without confirmed rentals
+- **Smart Expense Generation**:
+  - Only creates ONE expense per day per machine (not per appointment)
+  - Requires confirmed rental before generating expense
+  - Automatically links expense to rental record
+  - Updates expense notes with all appointments using the machine that day
+- **Profit Analysis**: Calculate real profit considering machine rental costs across all daily appointments
+- **Provider Tracking**: Record supplier/provider information for each machine
 
-### 8. Multi-branch Support
+### 8. Sales & Offers System
+- **Offer Creation**: Define offers with discount percentages and validity periods
+- **Active Offer Management**: Track offer status (active/inactive) and expiration
+- **Sales with Offers**: Apply offers to product/service sales with automatic discount calculation
+- **Sales Tracking**: Record all sales with linked offers, clients, and financial transactions
+- **Offer Analytics**: Track offer performance, usage, and revenue impact
+
+### 9. Employee & Commission Management
+- **Employee Profiles**: Complete info including role, schedules, specialties, and monthly salary
+- **Salary Management**:
+  - Record monthly salary for each employee
+  - Bulk salary processing for all employees at once
+  - Automatic expense transactions when salaries are paid
+- **Flexible Commission System**: Percentage per service, fixed amount, tiered structures
+- **Real-time Commission Calculation**: Automatic calculation per service/product sold
+- **Commission Reports**: By employee, period, service type with historical records
+- **Performance Dashboards**: Monthly targets, revenue generated, services completed
+- **Work Schedule Tracking**: Availability and schedule management
+
+### 10. Multi-branch Support
 - Multiple locations per center
 - Independent inventory per branch
 - Branch-specific calendars and employees
@@ -304,37 +364,107 @@ docker-compose exec backend python manage.py migrate
 - Initial Render setup: comfortably handles 100+ centers (1000+ active users)
 - For 500+ centers: migrate to AWS with multiple instances and additional optimizations
 
-## Project Structure (To Be Created)
+## Recently Implemented Features (November 2025)
+
+### Financial System Enhancements
+- **Hierarchical Transaction Categories**: 2-level category structure with parent-child relationships
+- **System-Protected Categories**: Auto-created categories that cannot be deleted (Servicios, Productos, Salarios, Alquileres)
+- **Category CRUD UI**: Full create, edit, delete interface with subcategory management
+- **Automatic Transaction Generation**: From appointments (deposits and full payments), machine rentals, and product sales
+- **Monthly Salary Processing**: Bulk salary payment system with automatic expense creation
+
+### Rented Equipment System (Complete Implementation)
+- **Machine Catalog Management**: CRUD for rented equipment with daily cost tracking
+- **Service-Machine Association**: Link services to rented equipment for cost analysis
+- **Rental Scheduling**: 4-state workflow (PROGRAMADO → CONFIRMADO → COBRADO or CANCELADO)
+- **Smart Expense Generation**: One expense per day per machine, only if rental is confirmed
+- **Reconciliation Dashboard**: Alerts for appointments using equipment without confirmed rentals
+- **Rental History**: Track all rentals with linked transactions and appointment details
+
+### Sales & Offers System
+- **Offer Management**: Create offers with discount percentages and validity periods
+- **Sales with Offers**: Apply offers to sales with automatic discount calculation
+- **Sales Tracking**: Complete history of sales with offer details and financial links
+
+### Appointment System Improvements
+- **Automatic Income Generation**: Creates transactions when appointments are completed
+- **Deposit Tracking**: Automatic transaction when payment state changes to "Con Seña"
+- **Machine Rental Integration**: Checks for confirmed rentals before creating expenses
+- **Payment State Automation**: Automatically updates to PAGADO when appointment is completed
+
+### Data Integrity Enhancements
+- **Soft Delete for Services**: Prevents deletion of services with appointments, marks as inactive instead
+- **Transaction Source Linking**: All auto-generated transactions link back to their source entity
+- **Audit Trail**: `auto_generated` flag on transactions for transparency
+- **Protected Categories**: System categories cannot be deleted or modified
+
+### UI/UX Improvements
+- **Rental Management Interface**: Three tabs (Services, Machines, Scheduled Rentals)
+- **Reconciliation Alerts**: Visual warnings for pending rental confirmations
+- **State Indicators**: Color-coded badges for rental states
+- **Quick Actions**: Confirm/cancel buttons directly in rental list
+- **Contextual Help**: Explanatory messages for each rental state
+
+## Project Structure (Current Implementation)
 
 ```
 backend/
-  ├── config/           # Django project settings
+  ├── config/                    # Django project settings, CORS, JWT config
   ├── apps/
-  │   ├── clientes/     # Customer management
-  │   ├── turnos/       # Appointment system
-  │   ├── servicios/    # Service catalog
-  │   ├── inventario/   # Product inventory
-  │   ├── finanzas/     # Financial system
-  │   ├── empleados/    # Employee & commission management
-  │   ├── notificaciones/ # WhatsApp integration
-  │   └── analytics/    # Reports and analytics
+  │   ├── clientes/              # Customer management (Cliente model)
+  │   ├── turnos/                # Appointment system (Turno model)
+  │   │   └── signals.py         # Auto-generate transactions from appointments
+  │   ├── servicios/             # Service catalog with rented equipment
+  │   │   ├── models.py          # Servicio, MaquinaAlquilada, AlquilerMaquina
+  │   │   ├── views.py           # Service CRUD, rental scheduling, reconciliation
+  │   │   └── serializers.py     # API serializers with profit calculations
+  │   ├── inventario/            # Product inventory (Producto, MovimientoInventario)
+  │   ├── finanzas/              # Financial system (Transaction, TransactionCategory, Oferta, VentaOferta)
+  │   │   ├── models.py          # Hierarchical categories, auto-generated transactions
+  │   │   ├── views.py           # Financial CRUD, salary processing, analytics
+  │   │   └── serializers.py     # Transaction serializers with category relationships
+  │   ├── empleados/             # Employee & commission management (Usuario, Comision)
+  │   │   ├── models.py          # Employee with salary field
+  │   │   └── views.py           # Salary processing endpoint
+  │   └── notificaciones/        # WhatsApp integration (Notificacion model)
   ├── manage.py
   └── requirements.txt
 
 frontend/
   ├── src/
-  │   ├── components/   # Reusable React components
-  │   ├── pages/        # Main application pages
-  │   ├── services/     # API communication layer
-  │   ├── hooks/        # Custom React hooks
-  │   ├── utils/        # Utility functions
-  │   └── App.js
+  │   ├── components/
+  │   │   ├── clientes/          # Client management components
+  │   │   ├── empleados/         # Employee forms and lists
+  │   │   ├── finanzas/          # Financial transactions, categories, salary processing
+  │   │   ├── servicios/         # Services, machines, rental scheduling
+  │   │   │   ├── ServicioForm.tsx
+  │   │   │   ├── MaquinaForm.tsx
+  │   │   │   ├── MaquinasList.tsx
+  │   │   │   ├── AlquilerForm.tsx
+  │   │   │   ├── AlquileresList.tsx
+  │   │   │   └── AlquilerPendientes.tsx  # Reconciliation alerts
+  │   │   ├── turnos/            # Appointment calendar and forms
+  │   │   ├── productos/         # Product inventory
+  │   │   └── ui/                # Reusable UI components (Button, Input, Select, Modal, etc.)
+  │   ├── pages/                 # Main application pages
+  │   │   ├── ServiciosPage.tsx  # Services with machines and rentals tabs
+  │   │   ├── FinanzasPage.tsx   # Financial dashboard
+  │   │   └── ...
+  │   ├── services/
+  │   │   └── api.ts             # Axios instance with JWT auth
+  │   ├── hooks/                 # Custom React hooks
+  │   ├── types/
+  │   │   └── models.ts          # TypeScript interfaces matching Django models
+  │   ├── utils/                 # Utility functions
+  │   └── App.tsx
   ├── public/
   └── package.json
 
-docker-compose.yml
+docker-compose.yml               # PostgreSQL, Redis, Backend, Frontend
 .env.example
 README.md
+CLAUDE.md                        # This file
+SISTEMA_FINANCIERO_SPEC.md       # Financial system technical spec
 ```
 
 ## Important Notes
@@ -346,3 +476,8 @@ README.md
 - **Image storage**: Use cloud storage (S3/Cloudinary) from the start, not local filesystem
 - **Time zones**: Handle properly for multi-region deployments (use UTC in DB, convert in frontend)
 - **Commission calculations**: Must be transactional and auditable - no manual adjustments without logs
+- **Machine rental expenses**: CRITICAL - Only create ONE expense per day per machine, regardless of number of appointments. Check for confirmed rental (AlquilerMaquina.estado = CONFIRMADO or COBRADO) before generating expense.
+- **Automatic transactions**: All auto-generated transactions must be marked with `auto_generated=True` and linked to source entity (Turno, AlquilerMaquina, VentaOferta) for audit trail
+- **Soft delete for services**: Services with associated appointments cannot be hard-deleted. Use `activo=False` to preserve historical data integrity
+- **Category protection**: System categories (Servicios, Productos, Salarios, Alquileres de Equipos) cannot be deleted or have their type changed
+- **Rental reconciliation**: Always show alerts for appointments using rented equipment without confirmed rentals to prevent missing expenses

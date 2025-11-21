@@ -158,13 +158,32 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
     IMPORTANT: Creates expense ONLY ONCE PER DAY per machine.
     The machine is rented for the full day, not per appointment.
 
+    NEW: Verifies if there's a confirmed rental for this date.
+    If no rental is confirmed, does NOT create expense automatically.
+
     Args:
         instance: The Turno instance
         Transaction: Transaction model class
         TransactionCategory: TransactionCategory model class
     """
+    from apps.servicios.models import AlquilerMaquina
+
     machine = instance.servicio.maquina_alquilada
     appointment_date = instance.fecha_hora_inicio.date()
+
+    # ==================== VERIFICACIÓN DE ALQUILER CONFIRMADO ====================
+    # Check if there's a confirmed rental for this machine on this date
+    alquiler = AlquilerMaquina.objects.filter(
+        maquina=machine,
+        fecha=appointment_date,
+        sucursal=instance.sucursal,
+        estado__in=[AlquilerMaquina.Estado.CONFIRMADO, AlquilerMaquina.Estado.COBRADO]
+    ).first()
+
+    if not alquiler:
+        print(f"⚠️ No confirmed rental for {machine.nombre} on {appointment_date}. Skipping expense creation.")
+        print(f"   → Create rental in: Servicios > Máquinas > {machine.nombre} > Programar Alquiler")
+        return
 
     # Get or create "Alquileres de Equipos" expense category
     machine_expense_category = TransactionCategory.objects.filter(
@@ -185,21 +204,13 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
             order=5
         )
 
-    # Check if expense for this machine already exists for this day
-    existing_expense = Transaction.objects.filter(
-        branch=instance.sucursal,
-        category=machine_expense_category,
-        type='EXPENSE',
-        date=appointment_date,
-        description__contains=f"Alquiler de {machine.nombre}",
-        auto_generated=True
-    ).first()
-
-    if existing_expense:
-        # Update notes to include this appointment
+    # Check if expense already exists (linked to the alquiler)
+    if alquiler.transaccion_gasto:
+        # Expense already exists, just update notes
+        existing_expense = alquiler.transaccion_gasto
         existing_expense.notes += f"\n+ Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})"
         existing_expense.save()
-        print(f"✅ Machine rental expense updated (already exists for this day): {existing_expense}")
+        print(f"✅ Machine rental expense updated: {existing_expense}")
         return
 
     # Create the expense transaction (ONCE PER DAY)
@@ -207,13 +218,19 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
         branch=instance.sucursal,
         category=machine_expense_category,
         type='EXPENSE',
-        amount=machine.costo_diario,
+        amount=alquiler.costo,  # Use cost from rental record
         date=appointment_date,
         description=f"Alquiler de {machine.nombre} - {appointment_date.strftime('%d/%m/%Y')}",
-        notes=f"Costo diario: ${machine.costo_diario}\nTurnos realizados:\n- Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})",
+        notes=f"Alquiler confirmado ID: {alquiler.pk}\nCosto: ${alquiler.costo}\nTurnos realizados:\n- Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})",
         payment_method='BANK_TRANSFER',  # Default for equipment rentals
         auto_generated=True,
         registered_by=instance.creado_por,
     )
 
-    print(f"✅ Machine rental expense auto-created (ONCE PER DAY): {transaction} (${machine.costo_diario})")
+    # Link transaction to rental and mark as charged
+    alquiler.transaccion_gasto = transaction
+    alquiler.estado = AlquilerMaquina.Estado.COBRADO
+    alquiler.save()
+
+    print(f"✅ Machine rental expense auto-created: {transaction} (${alquiler.costo})")
+    print(f"   → Rental {alquiler.pk} marked as COBRADO")
