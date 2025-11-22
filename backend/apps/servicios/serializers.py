@@ -155,4 +155,26 @@ class AlquilerMaquinaSerializer(serializers.ModelSerializer):
                     'fecha': 'No puedes programar alquileres en fechas pasadas.'
                 })
 
+        # Check for duplicate rentals (same machine, same date, same branch)
+        if 'maquina' in data and 'fecha' in data:
+            # Get sucursal from context (set in viewset)
+            sucursal = self.context.get('sucursal')
+
+            # Build query to check for duplicates
+            duplicate_query = AlquilerMaquina.objects.filter(
+                maquina=data['maquina'],
+                fecha=data['fecha'],
+                sucursal=sucursal
+            )
+
+            # Exclude current instance when editing
+            if self.instance:
+                duplicate_query = duplicate_query.exclude(pk=self.instance.pk)
+
+            if duplicate_query.exists():
+                existing = duplicate_query.first()
+                raise serializers.ValidationError({
+                    'fecha': f'Ya existe un alquiler programado para {data["maquina"].nombre} en esta fecha (Estado: {existing.get_estado_display()}).'
+                })
+
         return data

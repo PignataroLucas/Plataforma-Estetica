@@ -169,6 +169,15 @@ class AlquilerMaquinaViewSet(viewsets.ModelViewSet):
             )
         return AlquilerMaquina.objects.none()
 
+    def get_serializer_context(self):
+        """
+        Pass sucursal to serializer context for validation
+        """
+        context = super().get_serializer_context()
+        if hasattr(self.request.user, 'sucursal'):
+            context['sucursal'] = self.request.user.sucursal
+        return context
+
     def perform_create(self, serializer):
         """
         Asignar automáticamente la sucursal y usuario actual
