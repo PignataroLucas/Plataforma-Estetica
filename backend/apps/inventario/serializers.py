@@ -34,7 +34,9 @@ class ProductoListSerializer(serializers.ModelSerializer):
             'proveedor', 'proveedor_nombre', 'nombre', 'descripcion',
             'marca', 'codigo_barras', 'sku', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
-            'precio_costo', 'precio_venta', 'margen_ganancia', 'stock_bajo',
+            'precio_costo', 'precio_venta',
+            'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
+            'margen_ganancia', 'stock_bajo',
             'activo', 'foto', 'creado_en', 'actualizado_en'
         ]
         read_only_fields = ['id', 'sucursal', 'margen_ganancia', 'stock_bajo', 'creado_en', 'actualizado_en']
@@ -54,7 +56,9 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
             'proveedor', 'proveedor_data', 'nombre', 'descripcion',
             'marca', 'codigo_barras', 'sku', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
-            'precio_costo', 'precio_venta', 'margen_ganancia', 'stock_bajo',
+            'precio_costo', 'precio_venta',
+            'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
+            'margen_ganancia', 'stock_bajo',
             'activo', 'foto', 'creado_en', 'actualizado_en'
         ]
         read_only_fields = ['id', 'sucursal', 'margen_ganancia', 'stock_bajo', 'creado_en', 'actualizado_en']
@@ -68,19 +72,41 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             'id', 'categoria', 'proveedor', 'nombre', 'descripcion',
             'marca', 'codigo_barras', 'sku', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
-            'precio_costo', 'precio_venta', 'activo', 'foto'
+            'precio_costo', 'precio_venta',
+            'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
+            'activo', 'foto'
         ]
         read_only_fields = ['id']
 
     def validate(self, data):
-        """Validar que el precio de venta sea mayor que el costo"""
+        """Validar precios por método de pago"""
         precio_costo = data.get('precio_costo')
         precio_venta = data.get('precio_venta')
+        precio_efectivo = data.get('precio_efectivo')
+        precio_transferencia = data.get('precio_transferencia')
+        precio_debito = data.get('precio_debito')
+        precio_credito = data.get('precio_credito')
 
+        errors = {}
+
+        # Validate precio_venta is greater than cost
         if precio_costo and precio_venta and precio_venta < precio_costo:
-            raise serializers.ValidationError({
-                'precio_venta': "El precio de venta debe ser mayor o igual al precio de costo"
-            })
+            errors['precio_venta'] = "El precio de venta debe ser mayor o igual al precio de costo"
+
+        # Validate each payment method price is greater than cost (if specified)
+        if precio_costo:
+            if precio_efectivo and precio_efectivo < precio_costo:
+                errors['precio_efectivo'] = "El precio en efectivo debe ser mayor o igual al precio de costo"
+            if precio_transferencia and precio_transferencia < precio_costo:
+                errors['precio_transferencia'] = "El precio de transferencia debe ser mayor o igual al precio de costo"
+            if precio_debito and precio_debito < precio_costo:
+                errors['precio_debito'] = "El precio de débito debe ser mayor o igual al precio de costo"
+            if precio_credito and precio_credito < precio_costo:
+                errors['precio_credito'] = "El precio de crédito debe ser mayor o igual al precio de costo"
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
         return data
 
     def validate_stock_minimo(self, value):

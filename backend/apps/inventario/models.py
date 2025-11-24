@@ -138,7 +138,37 @@ class Producto(models.Model):
     precio_venta = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Precio de venta al público"
+        help_text="Precio de venta al público (mantiene compatibilidad, usar precios específicos por método de pago)"
+    )
+
+    # Precios por método de pago (opcionales - si no se especifican, se usa precio_venta)
+    precio_efectivo = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Precio de venta en efectivo (generalmente el más bajo)"
+    )
+    precio_transferencia = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Precio de venta con transferencia bancaria"
+    )
+    precio_debito = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Precio de venta con tarjeta de débito"
+    )
+    precio_credito = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Precio de venta con tarjeta de crédito - TODO: Implementar precios por cantidad de cuotas"
     )
 
     # Ofertas y descuentos
@@ -173,14 +203,45 @@ class Producto(models.Model):
     def __str__(self):
         return f"{self.nombre} ({self.stock_actual} {self.unidad_medida})"
 
+    def get_precio_por_metodo_pago(self, metodo_pago):
+        """
+        Returns price based on payment method
+        Falls back to precio_venta if specific method price is not set
+        metodo_pago: 'CASH', 'BANK_TRANSFER', 'DEBIT_CARD', 'CREDIT_CARD'
+        """
+        precio_map = {
+            'CASH': self.precio_efectivo,
+            'BANK_TRANSFER': self.precio_transferencia,
+            'DEBIT_CARD': self.precio_debito,
+            'CREDIT_CARD': self.precio_credito,
+        }
+
+        precio = precio_map.get(metodo_pago)
+
+        # If specific price is not set, use precio_venta as fallback
+        if precio is None or precio <= 0:
+            precio = self.precio_venta
+
+        # Apply offer price if product is on offer
+        if self.en_oferta and self.precio_oferta and self.precio_oferta < precio:
+            return self.precio_oferta
+
+        return precio
+
     @property
     def precio_venta_final(self):
         """
         Returns final sale price considering offers
         If product is on offer and has offer price, use it; otherwise use regular price
+        For products with payment method prices, this returns the cash price or precio_venta
         """
         if self.en_oferta and self.precio_oferta:
             return self.precio_oferta
+
+        # Use precio_efectivo as primary price if set, otherwise precio_venta
+        if self.precio_efectivo and self.precio_efectivo > 0:
+            return self.precio_efectivo
+
         return self.precio_venta
 
     @property
@@ -195,9 +256,13 @@ class Producto(models.Model):
 
     @property
     def margen_ganancia(self):
-        """Calcula el margen de ganancia porcentual"""
+        """
+        Calcula el margen de ganancia porcentual basado en precio de efectivo (principal)
+        Si no hay precio de efectivo, usa precio_venta
+        """
         if self.precio_costo > 0:
-            return ((self.precio_venta - self.precio_costo) / self.precio_costo) * 100
+            precio_base = self.precio_efectivo if self.precio_efectivo and self.precio_efectivo > 0 else self.precio_venta
+            return ((precio_base - self.precio_costo) / self.precio_costo) * 100
         return 0
 
     @property

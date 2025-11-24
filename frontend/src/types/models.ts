@@ -275,6 +275,10 @@ export interface Producto {
   unidad_medida: string
   precio_costo: number
   precio_venta: number
+  precio_efectivo?: number
+  precio_transferencia?: number
+  precio_debito?: number
+  precio_credito?: number
   activo: boolean
   foto?: string
   creado_en: string

@@ -104,19 +104,44 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof Producto, string>> = {}
 
+    // Convert to numbers for comparison (handle both number and string inputs)
+    const costo = Number(formData.precio_costo)
+    const venta = Number(formData.precio_venta)
+    const efectivo = formData.precio_efectivo ? Number(formData.precio_efectivo) : null
+    const transferencia = formData.precio_transferencia ? Number(formData.precio_transferencia) : null
+    const debito = formData.precio_debito ? Number(formData.precio_debito) : null
+    const credito = formData.precio_credito ? Number(formData.precio_credito) : null
+
     if (!formData.nombre?.trim()) {
       newErrors.nombre = 'El nombre es requerido'
     }
-    if (!formData.precio_costo || formData.precio_costo <= 0) {
+    if (!formData.precio_costo || costo <= 0) {
       newErrors.precio_costo = 'El precio de costo debe ser mayor a 0'
     }
-    if (!formData.precio_venta || formData.precio_venta <= 0) {
+    if (!formData.precio_venta || venta <= 0) {
       newErrors.precio_venta = 'El precio de venta debe ser mayor a 0'
     }
-    if (formData.precio_venta && formData.precio_costo && formData.precio_venta < formData.precio_costo) {
+    if (formData.precio_venta && formData.precio_costo && venta < costo) {
       newErrors.precio_venta = 'El precio de venta debe ser mayor al costo'
     }
-    if (formData.stock_minimo && formData.stock_minimo < 0) {
+
+    // Validate payment method prices (if specified)
+    if (costo > 0) {
+      if (efectivo !== null && efectivo < costo) {
+        newErrors.precio_efectivo = 'El precio en efectivo debe ser mayor al costo'
+      }
+      if (transferencia !== null && transferencia < costo) {
+        newErrors.precio_transferencia = 'El precio de transferencia debe ser mayor al costo'
+      }
+      if (debito !== null && debito < costo) {
+        newErrors.precio_debito = 'El precio de débito debe ser mayor al costo'
+      }
+      if (credito !== null && credito < costo) {
+        newErrors.precio_credito = 'El precio de crédito debe ser mayor al costo'
+      }
+    }
+
+    if (formData.stock_minimo && Number(formData.stock_minimo) < 0) {
       newErrors.stock_minimo = 'El stock mínimo no puede ser negativo'
     }
 
@@ -147,9 +172,10 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
     })),
   ]
 
-  // Calcular margen automáticamente
-  const margen = formData.precio_costo && formData.precio_venta
-    ? ((formData.precio_venta - formData.precio_costo) / formData.precio_costo) * 100
+  // Calcular margen automáticamente basado en precio de efectivo (principal)
+  const precioBase = formData.precio_efectivo || formData.precio_venta
+  const margen = formData.precio_costo && precioBase
+    ? ((precioBase - formData.precio_costo) / formData.precio_costo) * 100
     : 0
 
   if (loadingData) {
@@ -272,7 +298,8 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
 
       <div className="p-4 bg-green-50 border border-green-200 rounded-md">
         <h4 className="text-sm font-semibold text-green-900 mb-3">Precios</h4>
-        <div className="grid grid-cols-2 gap-4">
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <Input
             label="Precio de Costo"
             name="precio_costo"
@@ -286,7 +313,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           />
 
           <Input
-            label="Precio de Venta"
+            label="Precio de Venta (Base)"
             name="precio_venta"
             type="number"
             step="0.01"
@@ -297,9 +324,63 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
             placeholder="$0.00"
           />
         </div>
+
+        <div className="border-t border-green-300 pt-3 mb-3">
+          <p className="text-xs text-green-800 mb-3 font-medium">Precios por Método de Pago (opcionales)</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="💵 Precio en Efectivo"
+              name="precio_efectivo"
+              type="number"
+              step="0.01"
+              value={formData.precio_efectivo?.toString() || ''}
+              onChange={handleChange}
+              error={errors.precio_efectivo}
+              placeholder="Opcional"
+            />
+
+            <Input
+              label="🏦 Precio Transferencia"
+              name="precio_transferencia"
+              type="number"
+              step="0.01"
+              value={formData.precio_transferencia?.toString() || ''}
+              onChange={handleChange}
+              error={errors.precio_transferencia}
+              placeholder="Opcional"
+            />
+
+            <Input
+              label="💳 Precio Débito"
+              name="precio_debito"
+              type="number"
+              step="0.01"
+              value={formData.precio_debito?.toString() || ''}
+              onChange={handleChange}
+              error={errors.precio_debito}
+              placeholder="Opcional"
+            />
+
+            <Input
+              label="💳 Precio Crédito"
+              name="precio_credito"
+              type="number"
+              step="0.01"
+              value={formData.precio_credito?.toString() || ''}
+              onChange={handleChange}
+              error={errors.precio_credito}
+              placeholder="Opcional"
+            />
+          </div>
+          <p className="text-xs text-green-700 mt-2 italic">
+            💡 El precio en efectivo se usa como precio principal. Si no se especifican precios por método de pago, se usa el precio de venta base.
+          </p>
+          {/* TODO: Implementar precios por cantidad de cuotas para tarjeta de crédito */}
+        </div>
+
         {margen > 0 && (
-          <div className="mt-3 text-sm text-green-700">
-            <strong>Margen de ganancia:</strong> {margen.toFixed(1)}%
+          <div className="mt-3 pt-3 border-t border-green-300 text-sm text-green-700">
+            <strong>Margen de ganancia (basado en efectivo):</strong> {margen.toFixed(1)}%
           </div>
         )}
       </div>

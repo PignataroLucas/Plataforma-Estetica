@@ -89,13 +89,25 @@ export const ProductosList: React.FC<ProductosListProps> = ({
     {
       key: 'precios',
       header: 'Precios',
-      accessor: (producto: ProductoList) => (
-        <div className="flex flex-col text-sm">
-          <span className="text-gray-600">Costo: {formatPrice(producto.precio_costo)}</span>
-          <span className="font-semibold">Venta: {formatPrice(producto.precio_venta)}</span>
-          <span className="text-xs text-green-600">Margen: {producto.margen_ganancia.toFixed(1)}%</span>
-        </div>
-      ),
+      accessor: (producto: ProductoList) => {
+        // Use precio_efectivo as primary price if set, otherwise precio_venta
+        const precioVentaPrincipal = producto.precio_efectivo || producto.precio_venta
+        const tieneMultiplesPrecios = producto.precio_efectivo || producto.precio_transferencia || producto.precio_debito || producto.precio_credito
+
+        return (
+          <div className="flex flex-col text-sm">
+            <span className="text-gray-600 text-xs">Costo: {formatPrice(producto.precio_costo)}</span>
+            <span className="font-semibold">
+              {producto.precio_efectivo ? '💵 ' : ''}
+              {formatPrice(precioVentaPrincipal)}
+            </span>
+            {tieneMultiplesPrecios && (
+              <span className="text-xs text-blue-600">Ver más precios</span>
+            )}
+            <span className="text-xs text-green-600">Margen: {producto.margen_ganancia.toFixed(1)}%</span>
+          </div>
+        )
+      },
     },
     {
       key: 'proveedor',
