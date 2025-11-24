@@ -82,9 +82,18 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
     const { name, value, type } = e.target
     const checked = (e.target as HTMLInputElement).checked
 
+    let processedValue: any = value
+
+    // Convert number inputs to actual numbers
+    if (type === 'number' && value !== '') {
+      processedValue = parseFloat(value)
+    } else if (type === 'checkbox') {
+      processedValue = checked
+    }
+
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: processedValue
     }))
 
     if (errors[name as keyof Producto]) {
