@@ -1,6 +1,6 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react'
 import { Cliente } from '@/types/models'
-import { Button, Input, Select } from '@/components/ui'
+import { Button, Input, Select, DateInput } from '@/components/ui'
 
 /**
  * ClienteForm - Formulario de Cliente (Create/Edit)
@@ -176,13 +176,10 @@ export default function ClienteForm({
             placeholder="correo@ejemplo.com"
           />
 
-          <Input
+          <DateInput
             label="Fecha de Nacimiento"
-            type="date"
-            name="fecha_nacimiento"
-            value={formData.fecha_nacimiento}
-            onChange={handleChange}
-            fullWidth
+            value={formData.fecha_nacimiento || ''}
+            onChange={(value) => setFormData(prev => ({ ...prev, fecha_nacimiento: value }))}
           />
         </div>
       </div>

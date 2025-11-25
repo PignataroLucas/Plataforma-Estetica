@@ -20,9 +20,9 @@ import {
   Badge,
   Spinner,
   Select,
+  DateInput,
 } from '@/components/ui'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { formatDateArgentina, formatDateForInput, getTodayForInput } from '@/utils/dateUtils'
 
 interface TransactionsListProps {
   onEdit?: (transaction: TransactionList) => void
@@ -134,7 +134,7 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
    * Format date
    */
   const formatDate = (dateStr: string) => {
-    return format(new Date(dateStr), 'dd/MM/yyyy', { locale: es })
+    return formatDateArgentina(dateStr)
   }
 
   /**
@@ -173,27 +173,19 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
           <div className="space-y-4">
             {/* First row: Date filters and type */}
             <div className="flex flex-wrap gap-4 items-end">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Desde
-                </label>
-                <input
-                  type="date"
+              <div className="min-w-[160px]">
+                <DateInput
+                  label="Desde"
                   value={filters.date_from}
-                  onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  onChange={(value) => setFilters({ ...filters, date_from: value })}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hasta
-                </label>
-                <input
-                  type="date"
+              <div className="min-w-[160px]">
+                <DateInput
+                  label="Hasta"
                   value={filters.date_to}
-                  onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  onChange={(value) => setFilters({ ...filters, date_to: value })}
                 />
               </div>
 

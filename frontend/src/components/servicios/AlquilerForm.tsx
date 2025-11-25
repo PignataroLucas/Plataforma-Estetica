@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { AlquilerMaquina, EstadoAlquiler, MaquinaAlquilada, PaginatedResponse } from '@/types/models'
 import api from '@/services/api'
-import { Input, Select, Button } from '@/components/ui'
+import { Input, Select, Button, DateInput } from '@/components/ui'
+import { getTodayForInput, formatDateForInput } from '@/utils/dateUtils'
 
 interface AlquilerFormProps {
   alquiler?: AlquilerMaquina
@@ -172,14 +173,12 @@ const AlquilerForm = ({ alquiler, maquinaId, onSubmit, onCancel }: AlquilerFormP
             fullWidth
           />
 
-          <Input
+          <DateInput
             label="Fecha"
-            type="date"
-            name="fecha"
             value={formData.fecha}
-            onChange={handleChange}
+            onChange={(value) => setFormData(prev => ({ ...prev, fecha: value }))}
             required
-            min={new Date().toISOString().split('T')[0]}
+            min={getTodayForInput()}
           />
 
           <Select

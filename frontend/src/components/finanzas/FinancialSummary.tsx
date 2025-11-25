@@ -5,7 +5,7 @@ import {
   TransactionByCategory,
   TransactionByPaymentMethod,
 } from '@/types/models'
-import { Card, CardHeader, CardBody, Spinner } from '@/components/ui'
+import { Card, CardHeader, CardBody, Spinner, DateInput } from '@/components/ui'
 import {
   BarChart,
   Bar,
@@ -221,19 +221,19 @@ export default function FinancialSummary() {
             {/* Custom date range */}
             {period === 'custom' && (
               <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-                />
+                <div className="min-w-[160px]">
+                  <DateInput
+                    value={dateFrom}
+                    onChange={(value) => setDateFrom(value)}
+                  />
+                </div>
                 <span className="text-gray-500">-</span>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-                />
+                <div className="min-w-[160px]">
+                  <DateInput
+                    value={dateTo}
+                    onChange={(value) => setDateTo(value)}
+                  />
+                </div>
               </div>
             )}
           </div>

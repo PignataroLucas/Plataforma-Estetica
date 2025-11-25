@@ -4,6 +4,7 @@
  */
 export * from './Button'
 export * from './Input'
+export * from './DateInput'
 export * from './Card'
 export * from './Spinner'
 export * from './Modal'

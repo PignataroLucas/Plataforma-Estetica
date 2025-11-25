@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Input, Select, Button, Badge } from '../ui'
+import { Input, Select, Button, Badge, DateInput } from '../ui'
 import type { Turno, Cliente, Servicio, Usuario, EstadoTurno, EstadoPago, TurnoList } from '../../types/models'
 import api from '../../services/api'
+import { getTodayForInput, formatDateForInput } from '../../utils/dateUtils'
 
 interface TurnoFormProps {
   initialData?: Partial<Turno>
@@ -76,7 +77,7 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
       // Si hay fecha inicial, parsearla
       if (initialData.fecha_hora_inicio) {
         const date = new Date(initialData.fecha_hora_inicio)
-        setSelectedDate(date.toISOString().split('T')[0])
+        setSelectedDate(formatDateForInput(date))
         setSelectedTime(`${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`)
       }
     }
@@ -307,20 +308,13 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="fecha" className="block text-sm font-medium text-gray-700 mb-1">
-            Fecha <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="date"
-            id="fecha"
-            value={selectedDate}
-            onChange={handleDateChange}
-            min={new Date().toISOString().split('T')[0]}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
+        <DateInput
+          label="Fecha"
+          value={selectedDate}
+          onChange={(value) => handleDateChange({ target: { value } } as React.ChangeEvent<HTMLInputElement>)}
+          min={getTodayForInput()}
+          required
+        />
 
         <div>
           <label htmlFor="hora" className="block text-sm font-medium text-gray-700 mb-1">

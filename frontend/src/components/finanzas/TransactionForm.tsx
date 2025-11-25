@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { useFinanzas } from '@/hooks/useFinanzas'
 import { useEmpleados } from '@/hooks/useEmpleados'
 import {
@@ -10,7 +10,8 @@ import {
   CategoryType,
   Usuario,
 } from '@/types/models'
-import { Button, Input, Select } from '@/components/ui'
+import { Button, Input, Select, DateInput } from '@/components/ui'
+import { getTodayForInput, formatDateForInput } from '@/utils/dateUtils'
 
 interface TransactionFormData {
   type: TransactionType
@@ -65,13 +66,14 @@ export default function TransactionForm({
     handleSubmit,
     watch,
     setValue,
+    control,
     formState: { errors },
   } = useForm<TransactionFormData>({
     defaultValues: {
       type: transaction?.type || TransactionType.EXPENSE,
       category: transaction?.category || 0,
       amount: transaction?.amount || 0,
-      date: transaction?.date || new Date().toISOString().split('T')[0],
+      date: transaction?.date ? formatDateForInput(transaction.date) : getTodayForInput(),
       payment_method: transaction?.payment_method || PaymentMethod.CASH,
       description: transaction?.description || '',
       notes: transaction?.notes || '',
@@ -335,21 +337,20 @@ export default function TransactionForm({
         </div>
 
         {/* Date */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Fecha *
-          </label>
-          <input
-            type="date"
-            {...register('date', { required: 'La fecha es requerida' })}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.date ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {errors.date && (
-            <p className="mt-1 text-sm text-red-600">{errors.date.message}</p>
+        <Controller
+          name="date"
+          control={control}
+          rules={{ required: 'La fecha es requerida' }}
+          render={({ field }) => (
+            <DateInput
+              label="Fecha"
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.date?.message}
+              required
+            />
           )}
-        </div>
+        />
       </div>
 
       {/* Payment Method */}

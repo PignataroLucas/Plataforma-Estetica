@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Input, Select, Button } from '../ui'
+import { Input, Select, Button, DateInput } from '../ui'
 import type { Usuario, Rol } from '../../types/models'
 
 interface EmpleadoFormProps {
@@ -197,12 +197,10 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
           placeholder="+54 11 1234-5678"
         />
 
-        <Input
+        <DateInput
           label="Fecha de Nacimiento"
-          type="date"
-          name="fecha_nacimiento"
-          value={formData.fecha_nacimiento}
-          onChange={handleChange}
+          value={formData.fecha_nacimiento || ''}
+          onChange={(value) => setFormData((prev: any) => ({ ...prev, fecha_nacimiento: value }))}
         />
       </div>
 
@@ -224,12 +222,10 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
           required
         />
 
-        <Input
+        <DateInput
           label="Fecha de Ingreso"
-          type="date"
-          name="fecha_ingreso"
-          value={formData.fecha_ingreso}
-          onChange={handleChange}
+          value={formData.fecha_ingreso || ''}
+          onChange={(value) => setFormData((prev: any) => ({ ...prev, fecha_ingreso: value }))}
         />
       </div>
 
