@@ -71,29 +71,126 @@ export interface Usuario {
 export interface Cliente {
   id: number
   centro_estetica: number
+  // Información personal
   nombre: string
   apellido: string
   email: string
   telefono: string
   telefono_alternativo: string
   fecha_nacimiento?: string
+  // Dirección
   direccion: string
   ciudad: string
   provincia: string
   codigo_postal: string
+  // Documento
   tipo_documento: 'DNI' | 'PASAPORTE' | 'OTRO'
   numero_documento: string
-  alergias: string
-  contraindicaciones: string
-  notas_medicas: string
-  preferencias: string
+  // A) Datos del paciente (tracking)
+  motivo_consulta?: string
+  objetivo_principal?: string
+  // B) Historia / contraindicaciones
+  embarazo_lactancia?: boolean
+  marcapasos_implantes?: boolean
+  cancer_historial?: boolean
+  herpes_historial?: boolean
+  alergias?: string
+  tiene_alergias?: boolean
+  medicacion_actual?: boolean
+  medicacion_detalle?: string
+  tratamientos_previos?: boolean
+  tratamientos_previos_detalle?: string
+  tatuajes_zona_tratamiento?: boolean
+  tatuajes_zonas?: string
+  contraindicaciones?: string
+  notas_medicas?: string
+  detalle_general?: string
+  // C) Evaluación facial
+  tipo_piel?: 'NORMAL' | 'SECA' | 'MIXTA' | 'GRASA' | 'NO_DETERMINADO'
+  poros?: 'FINOS' | 'MEDIOS' | 'DILATADOS' | 'MIXTO'
+  brillo?: 'BAJO' | 'MEDIO' | 'ALTO'
+  textura?: 'UNIFORME' | 'ASPERA' | 'DESCAMACION' | 'MIXTA'
+  estado_piel?: string
+  observaciones_faciales?: string
+  diagnostico_facial?: string
+  // D) Evaluación corporal
+  zonas_tratar?: string
+  celulitis_grado?: 0 | 1 | 2 | 3
+  celulitis_tipo?: 'EDEMATOSA' | 'FIBROSA' | 'BLANDA' | 'MIXTA' | 'NO_APLICA'
+  adiposidad?: 'BAJA' | 'MEDIA' | 'ALTA' | 'NO_APLICA'
+  flacidez?: 'LEVE' | 'MODERADA' | 'MARCADA' | 'NO_APLICA'
+  estrias?: 'NO' | 'BLANCAS' | 'ROJAS' | 'MIXTAS'
+  retencion_liquidos?: boolean
+  observaciones_corporales?: string
+  diagnostico_corporal?: string
+  // Preferencias y marketing
+  preferencias?: string
   foto?: string
   acepta_promociones: boolean
   acepta_whatsapp: boolean
+  // Estado
   activo: boolean
   creado_en: string
   actualizado_en: string
   ultima_visita?: string
+}
+
+export interface PlanTratamiento {
+  id: number
+  cliente: number
+  cliente_nombre?: string
+  tratamiento_sugerido: string
+  frecuencia?: string
+  sesiones_estimadas?: number
+  indicaciones?: string
+  proximo_turno?: string
+  creado_por?: number
+  creado_por_nombre?: string
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface RutinaCuidado {
+  id: number
+  cliente: number
+  cliente_nombre?: string
+  rutina_diurna_pasos?: string
+  rutina_diurna_productos?: string
+  rutina_nocturna_pasos?: string
+  rutina_nocturna_productos?: string
+  activa: boolean
+  creado_por?: number
+  creado_por_nombre?: string
+  creado_en: string
+  actualizado_en: string
+}
+
+export enum TipoNota {
+  GENERAL = 'GENERAL',
+  RECORDATORIO = 'RECORDATORIO',
+  OBSERVACION = 'OBSERVACION',
+  IMPORTANTE = 'IMPORTANTE',
+  SEGUIMIENTO = 'SEGUIMIENTO',
+}
+
+export enum VisibilidadNota {
+  TODOS = 'TODOS',
+  SOLO_ADMIN = 'SOLO_ADMIN',
+  SOLO_AUTOR = 'SOLO_AUTOR',
+}
+
+export interface NotaCliente {
+  id: number
+  cliente: number
+  cliente_nombre?: string
+  tipo_nota: TipoNota
+  contenido: string
+  visible_para: VisibilidadNota
+  destacada: boolean
+  autor?: number
+  autor_nombre?: string
+  creado_en: string
+  actualizado_en: string
 }
 
 export interface CategoriaServicio {

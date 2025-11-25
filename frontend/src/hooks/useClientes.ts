@@ -22,7 +22,7 @@ export const useClientes = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get<PaginatedResponse<Cliente>>('/clientes/clientes/')
+      const response = await api.get<PaginatedResponse<Cliente>>('/clientes/list/')
       setClientes(response.data.results)
       return response.data.results
     } catch (err: any) {
@@ -43,7 +43,7 @@ export const useClientes = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get<Cliente>(`/clientes/clientes/${id}/`)
+      const response = await api.get<Cliente>(`/clientes/list/${id}/`)
       return response.data
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Error al cargar cliente'
@@ -86,7 +86,7 @@ export const useClientes = () => {
     setError(null)
     try {
       const cleanedData = cleanClienteData(data)
-      const response = await api.post<Cliente>('/clientes/clientes/', cleanedData)
+      const response = await api.post<Cliente>('/clientes/list/', cleanedData)
       setClientes(prev => [...prev, response.data])
       toast.success('Cliente creado exitosamente')
       return response.data
@@ -122,7 +122,7 @@ export const useClientes = () => {
     setError(null)
     try {
       const cleanedData = cleanClienteData(data)
-      const response = await api.patch<Cliente>(`/clientes/clientes/${id}/`, cleanedData)
+      const response = await api.patch<Cliente>(`/clientes/list/${id}/`, cleanedData)
       setClientes(prev =>
         prev.map(cliente => cliente.id === id ? response.data : cliente)
       )
@@ -159,7 +159,7 @@ export const useClientes = () => {
     setLoading(true)
     setError(null)
     try {
-      await api.delete(`/clientes/clientes/${id}/`)
+      await api.delete(`/clientes/list/${id}/`)
       setClientes(prev => prev.filter(cliente => cliente.id !== id))
       toast.success('Cliente eliminado exitosamente')
     } catch (err: any) {
@@ -179,7 +179,7 @@ export const useClientes = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get<PaginatedResponse<Cliente>>('/clientes/clientes/', {
+      const response = await api.get<PaginatedResponse<Cliente>>('/clientes/list/', {
         params: { search: query }
       })
       setClientes(response.data.results)

@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/authStore'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import ClientesPage from '@/pages/ClientesPage'
+import ClienteDetailPage from '@/pages/ClienteDetailPage'
 import TurnosPage from '@/pages/TurnosPage'
 import ServiciosPage from '@/pages/ServiciosPage'
 import InventarioPage from '@/pages/InventarioPage'
@@ -21,6 +22,7 @@ function App() {
       <Route element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/clientes" element={<ClientesPage />} />
+        <Route path="/clientes/:id" element={<ClienteDetailPage />} />
         <Route path="/turnos" element={<TurnosPage />} />
         <Route path="/servicios" element={<ServiciosPage />} />
         <Route path="/inventario" element={<InventarioPage />} />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useClientes } from '@/hooks/useClientes'
 import { Cliente } from '@/types/models'
 import {
@@ -28,6 +29,7 @@ import ClienteForm from '@/components/clientes/ClienteForm'
  * 3. Delegar presentación a ClientesList y ClienteForm
  */
 export default function ClientesPage() {
+  const navigate = useNavigate()
   const {
     clientes,
     loading,
@@ -40,7 +42,7 @@ export default function ClientesPage() {
 
   // Estado del modal
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create')
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
 
   // Estado de búsqueda
@@ -71,9 +73,7 @@ export default function ClientesPage() {
   }
 
   const handleOpenViewModal = (cliente: Cliente) => {
-    setModalMode('view')
-    setSelectedCliente(cliente)
-    setIsModalOpen(true)
+    navigate(`/clientes/${cliente.id}`)
   }
 
   const handleCloseModal = () => {
@@ -213,102 +213,26 @@ export default function ClientesPage() {
           <h2 className="text-xl font-bold text-gray-900">
             {modalMode === 'create' && 'Nuevo Cliente'}
             {modalMode === 'edit' && 'Editar Cliente'}
-            {modalMode === 'view' && 'Detalles del Cliente'}
           </h2>
         </ModalHeader>
         <ModalBody>
-          {modalMode === 'view' && selectedCliente ? (
-            // Vista de solo lectura
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Datos Personales</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-gray-700">Nombre:</span>
-                    <p>{selectedCliente.nombre} {selectedCliente.apellido}</p>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Email:</span>
-                    <p>{selectedCliente.email}</p>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Teléfono:</span>
-                    <p>{selectedCliente.telefono}</p>
-                  </div>
-                  {selectedCliente.fecha_nacimiento && (
-                    <div>
-                      <span className="font-medium text-gray-700">Fecha de Nacimiento:</span>
-                      <p>{new Date(selectedCliente.fecha_nacimiento).toLocaleDateString('es-AR')}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Dirección</h3>
-                <p className="text-sm">{selectedCliente.direccion}</p>
-                <p className="text-sm">{selectedCliente.ciudad}, {selectedCliente.provincia} - {selectedCliente.codigo_postal}</p>
-              </div>
-
-              {(selectedCliente.alergias || selectedCliente.contraindicaciones) && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Información Médica</h3>
-                  {selectedCliente.alergias && (
-                    <div className="mb-2">
-                      <span className="font-medium text-gray-700 text-sm">Alergias:</span>
-                      <p className="text-sm">{selectedCliente.alergias}</p>
-                    </div>
-                  )}
-                  {selectedCliente.contraindicaciones && (
-                    <div>
-                      <span className="font-medium text-gray-700 text-sm">Contraindicaciones:</span>
-                      <p className="text-sm">{selectedCliente.contraindicaciones}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            // Formulario de creación/edición
-            <ClienteForm
-              cliente={selectedCliente}
-              onSubmit={handleFormSubmit}
-              onCancel={handleCloseModal}
-              loading={loading}
-              formId="cliente-form"
-              showButtons={false}
-            />
-          )}
+          <ClienteForm
+            cliente={selectedCliente}
+            onSubmit={handleFormSubmit}
+            onCancel={handleCloseModal}
+            loading={loading}
+            formId="cliente-form"
+            showButtons={false}
+          />
         </ModalBody>
-        {modalMode === 'view' ? (
-          <ModalFooter>
-            <Button variant="secondary" onClick={handleCloseModal}>
-              Cerrar
-            </Button>
-            <Button variant="primary" onClick={() => setModalMode('edit')}>
-              Editar
-            </Button>
-          </ModalFooter>
-        ) : (
-          <ModalFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCloseModal}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              form="cliente-form"
-              variant="primary"
-              loading={loading}
-            >
-              {modalMode === 'edit' ? 'Actualizar Cliente' : 'Crear Cliente'}
-            </Button>
-          </ModalFooter>
-        )}
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={handleCloseModal}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="cliente-form" variant="primary" loading={loading}>
+            {modalMode === 'create' ? 'Crear Cliente' : 'Actualizar Cliente'}
+          </Button>
+        </ModalFooter>
       </Modal>
 
       {/* Modal de Confirmación de Eliminación */}
