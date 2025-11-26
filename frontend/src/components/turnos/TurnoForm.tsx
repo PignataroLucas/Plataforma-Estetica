@@ -67,6 +67,12 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
   const [turnosDelDia, setTurnosDelDia] = useState<TurnoList[]>([])
   const [loadingTurnos, setLoadingTurnos] = useState(false)
 
+  // Nuevos estados para horarios dinámicos
+  const [availableSlots, setAvailableSlots] = useState<Array<{ hora: string; hora_fin: string; disponible: boolean }>>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [horarioLaboral, setHorarioLaboral] = useState<{ inicio: string; fin: string } | null>(null)
+  const [diaNoLaboral, setDiaNoLaboral] = useState(false)
+
   useEffect(() => {
     loadFormData()
   }, [])
@@ -87,6 +93,18 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
   useEffect(() => {
     if (selectedDate && formData.profesional) {
       loadTurnosDelDia()
+    }
+  }, [selectedDate, formData.profesional, formData.servicio])
+
+  // Cargar horarios disponibles cuando cambie fecha, profesional o servicio
+  useEffect(() => {
+    if (selectedDate && formData.profesional && formData.servicio) {
+      loadHorariosDisponibles()
+    } else {
+      // Resetear slots si falta algún parámetro
+      setAvailableSlots([])
+      setDiaNoLaboral(false)
+      setHorarioLaboral(null)
     }
   }, [selectedDate, formData.profesional, formData.servicio])
 
@@ -116,6 +134,41 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
       setTurnosDelDia([])
     } finally {
       setLoadingTurnos(false)
+    }
+  }
+
+  const loadHorariosDisponibles = async () => {
+    if (!selectedDate || !formData.profesional || !formData.servicio) return
+
+    setLoadingSlots(true)
+    setDiaNoLaboral(false)
+
+    try {
+      const response = await api.get(`/empleados/usuarios/${formData.profesional}/horarios_disponibles/`, {
+        params: {
+          fecha: selectedDate,
+          servicio_id: formData.servicio,
+        }
+      })
+
+      if (response.data.disponible === false) {
+        // El profesional no trabaja ese día
+        setDiaNoLaboral(true)
+        setAvailableSlots([])
+        setHorarioLaboral(null)
+      } else {
+        setDiaNoLaboral(false)
+        setAvailableSlots(response.data.slots || [])
+        setHorarioLaboral(response.data.horario_laboral || null)
+      }
+    } catch (err) {
+      console.error('Error loading horarios disponibles:', err)
+      setAvailableSlots([])
+      setHorarioLaboral(null)
+      // En caso de error, no marcar como día no laboral
+      setDiaNoLaboral(false)
+    } finally {
+      setLoadingSlots(false)
     }
   }
 
@@ -299,11 +352,32 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
       />
 
       {servicioSeleccionado && (
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-          <p className="text-sm text-blue-800">
-            <strong>Duración:</strong> {servicioSeleccionado.duracion_minutos} minutos |
-            <strong> Precio:</strong> ${servicioSeleccionado.precio}
-          </p>
+        <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⏱️</span>
+                <div>
+                  <p className="text-xs text-gray-600 font-medium">Duración</p>
+                  <p className="text-sm font-bold text-blue-800">{servicioSeleccionado.duracion_minutos} min</p>
+                </div>
+              </div>
+              <div className="h-8 w-px bg-blue-200"></div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">💰</span>
+                <div>
+                  <p className="text-xs text-gray-600 font-medium">Precio</p>
+                  <p className="text-sm font-bold text-blue-800">${servicioSeleccionado.precio}</p>
+                </div>
+              </div>
+            </div>
+            {loadingSlots && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span>Buscando horarios...</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -318,7 +392,7 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
 
         <div>
           <label htmlFor="hora" className="block text-sm font-medium text-gray-700 mb-1">
-            Hora (8am - 7pm) <span className="text-red-500">*</span>
+            Hora {horarioLaboral && `(${horarioLaboral.inicio} - ${horarioLaboral.fin})`} <span className="text-red-500">*</span>
           </label>
           <select
             id="hora"
@@ -326,24 +400,46 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
             onChange={handleTimeChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
+            disabled={loadingSlots || diaNoLaboral || !formData.servicio || !formData.profesional}
           >
-            <option value="">Seleccionar hora</option>
-            {timeSlots.map(slot => (
+            <option value="">
+              {loadingSlots ? 'Cargando horarios...' : 'Seleccionar hora'}
+            </option>
+            {availableSlots.map(slot => (
               <option
-                key={slot.value}
-                value={slot.value}
-                disabled={isTimeSlotOccupied(slot.value)}
+                key={slot.hora}
+                value={slot.hora}
               >
-                {slot.label} {isTimeSlotOccupied(slot.value) ? '(Ocupado)' : ''}
+                {slot.hora} - {slot.hora_fin}
               </option>
             ))}
           </select>
           {errors.fecha_hora_inicio && (
             <p className="mt-1 text-sm text-red-600">{errors.fecha_hora_inicio}</p>
           )}
+          {diaNoLaboral && (
+            <p className="mt-1 text-sm text-amber-600">
+              ⚠️ El profesional no trabaja en este día
+            </p>
+          )}
           {selectedDate && (!formData.servicio || !formData.profesional) && (
             <p className="mt-1 text-sm text-blue-600">
-              💡 Selecciona servicio y profesional para ver disponibilidad
+              💡 Selecciona servicio y profesional para ver horarios disponibles
+            </p>
+          )}
+          {loadingSlots && (
+            <p className="mt-1 text-sm text-gray-500">
+              🔄 Calculando horarios disponibles...
+            </p>
+          )}
+          {!loadingSlots && availableSlots.length === 0 && formData.servicio && formData.profesional && selectedDate && !diaNoLaboral && (
+            <p className="mt-1 text-sm text-amber-600">
+              ⚠️ No hay horarios disponibles para este día
+            </p>
+          )}
+          {!loadingSlots && availableSlots.length > 0 && (
+            <p className="mt-1 text-sm text-green-600">
+              ✓ {availableSlots.length} horarios disponibles
             </p>
           )}
         </div>

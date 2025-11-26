@@ -17,7 +17,9 @@ class UsuarioListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'nombre_completo',
             'sucursal', 'sucursal_nombre', 'telefono', 'rol', 'rol_display',
-            'especialidades', 'sueldo_mensual', 'activo', 'fecha_ingreso', 'creado_en'
+            'especialidades', 'sueldo_mensual', 'activo', 'fecha_ingreso',
+            'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos',
+            'creado_en'
         ]
 
     def get_nombre_completo(self, obj):
@@ -39,6 +41,7 @@ class UsuarioDetailSerializer(serializers.ModelSerializer):
             'centro_estetica', 'sucursal', 'sucursal_data', 'telefono',
             'fecha_nacimiento', 'direccion', 'foto', 'rol', 'rol_display',
             'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo',
+            'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos',
             'creado_en', 'actualizado_en'
         ]
         read_only_fields = ['id', 'centro_estetica', 'creado_en', 'actualizado_en']
@@ -68,7 +71,8 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'password', 'password2',
             'first_name', 'last_name', 'sucursal', 'telefono',
             'fecha_nacimiento', 'direccion', 'foto', 'rol',
-            'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo'
+            'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo',
+            'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos'
         ]
         read_only_fields = ['id']
 
@@ -106,7 +110,8 @@ class UsuarioUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'first_name', 'last_name', 'sucursal', 'telefono',
             'fecha_nacimiento', 'direccion', 'foto', 'rol',
-            'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo'
+            'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo',
+            'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos'
         ]
         read_only_fields = ['id']
 
@@ -123,7 +128,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name', 'nombre_completo',
             'centro_estetica', 'sucursal', 'telefono', 'fecha_nacimiento',
             'direccion', 'foto', 'rol', 'fecha_ingreso', 'especialidades',
-            'sueldo_mensual', 'activo', 'creado_en', 'actualizado_en'
+            'sueldo_mensual', 'activo',
+            'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos',
+            'creado_en', 'actualizado_en'
         ]
         read_only_fields = ['id', 'creado_en', 'actualizado_en']
 

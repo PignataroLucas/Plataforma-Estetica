@@ -42,6 +42,10 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
     especialidades: '',
     sueldo_mensual: '',
     activo: true,
+    horario_inicio: '',
+    horario_fin: '',
+    dias_laborales: [],
+    intervalo_minutos: 30,
     ...initialData,
   })
 
@@ -65,6 +69,16 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
+  }
+
+  const handleDiaLaboralToggle = (dia: string) => {
+    setFormData((prev: any) => {
+      const diasActuales = prev.dias_laborales || []
+      const nuevoDias = diasActuales.includes(dia)
+        ? diasActuales.filter((d: string) => d !== dia)
+        : [...diasActuales, dia]
+      return { ...prev, dias_laborales: nuevoDias }
+    })
   }
 
   const validateForm = (): boolean => {
@@ -260,6 +274,81 @@ export const EmpleadoForm: React.FC<EmpleadoFormProps> = ({
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Ej: Masajes relajantes, Depilación láser, Tratamientos faciales..."
         />
+      </div>
+
+      {/* Sección de Horario Laboral */}
+      <div className="border-t pt-4 mt-4">
+        <h3 className="text-md font-semibold text-gray-800 mb-3">Horario Laboral</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Configure el horario de trabajo y días laborales. Esto se usará para filtrar automáticamente los horarios disponibles en la agenda.
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label htmlFor="horario_inicio" className="block text-sm font-medium text-gray-700 mb-1">
+              Hora de Inicio
+            </label>
+            <input
+              type="time"
+              id="horario_inicio"
+              name="horario_inicio"
+              value={formData.horario_inicio || ''}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="horario_fin" className="block text-sm font-medium text-gray-700 mb-1">
+              Hora de Fin
+            </label>
+            <input
+              type="time"
+              id="horario_fin"
+              name="horario_fin"
+              value={formData.horario_fin || ''}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Días Laborales
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            {['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'].map((dia) => (
+              <label key={dia} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={(formData.dias_laborales || []).includes(dia)}
+                  onChange={() => handleDiaLaboralToggle(dia)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <span className="text-sm text-gray-700 capitalize">{dia}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <Select
+            label="Intervalo de Agenda (minutos)"
+            name="intervalo_minutos"
+            value={formData.intervalo_minutos?.toString() || '30'}
+            onChange={handleChange}
+            options={[
+              { value: '15', label: '15 minutos' },
+              { value: '30', label: '30 minutos' },
+              { value: '45', label: '45 minutos' },
+              { value: '60', label: '60 minutos (1 hora)' },
+            ]}
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Define la granularidad de los slots de tiempo en la agenda
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center">

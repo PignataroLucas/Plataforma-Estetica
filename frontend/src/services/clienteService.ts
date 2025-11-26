@@ -8,27 +8,27 @@ import type { Cliente, PlanTratamiento, RutinaCuidado, NotaCliente, PaginatedRes
 // ==================== CLIENTES ====================
 
 export const getClientes = async (params?: any) => {
-  const response = await api.get<PaginatedResponse<Cliente>>('/clientes/list/', { params })
+  const response = await api.get<PaginatedResponse<Cliente>>('/clientes/clientes/', { params })
   return response.data
 }
 
 export const getCliente = async (id: number) => {
-  const response = await api.get<Cliente>(`/clientes/list/${id}/`)
+  const response = await api.get<Cliente>(`/clientes/clientes/${id}/`)
   return response.data
 }
 
 export const createCliente = async (data: Partial<Cliente>) => {
-  const response = await api.post<Cliente>('/clientes/list/', data)
+  const response = await api.post<Cliente>('/clientes/clientes/', data)
   return response.data
 }
 
 export const updateCliente = async (id: number, data: Partial<Cliente>) => {
-  const response = await api.patch<Cliente>(`/clientes/list/${id}/`, data)
+  const response = await api.patch<Cliente>(`/clientes/clientes/${id}/`, data)
   return response.data
 }
 
 export const deleteCliente = async (id: number) => {
-  await api.delete(`/clientes/list/${id}/`)
+  await api.delete(`/clientes/clientes/${id}/`)
 }
 
 // ==================== PLANES DE TRATAMIENTO ====================

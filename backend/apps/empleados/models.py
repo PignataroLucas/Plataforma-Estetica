@@ -120,6 +120,27 @@ class Usuario(AbstractUser):
     )
     activo = models.BooleanField(default=True)
 
+    # Horario laboral
+    horario_inicio = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Hora de inicio del día laboral (ej: 09:00)"
+    )
+    horario_fin = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Hora de fin del día laboral (ej: 18:00)"
+    )
+    dias_laborales = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de días laborales: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']"
+    )
+    intervalo_minutos = models.PositiveIntegerField(
+        default=30,
+        help_text="Intervalo en minutos para la agenda (granularidad de slots)"
+    )
+
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)

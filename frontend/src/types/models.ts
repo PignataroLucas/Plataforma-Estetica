@@ -64,6 +64,11 @@ export interface Usuario {
   especialidades: string
   sueldo_mensual?: number
   activo: boolean
+  // Horario laboral
+  horario_inicio?: string  // formato "HH:MM"
+  horario_fin?: string     // formato "HH:MM"
+  dias_laborales?: string[] // ['lunes', 'martes', ...]
+  intervalo_minutos?: number
   creado_en: string
   actualizado_en: string
 }

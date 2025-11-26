@@ -9,7 +9,7 @@ from .views import (
 )
 
 router = DefaultRouter()
-router.register(r'list', ClienteViewSet, basename='cliente')
+router.register(r'clientes', ClienteViewSet, basename='cliente')
 router.register(r'historial', HistorialClienteViewSet, basename='historial-cliente')
 router.register(r'planes-tratamiento', PlanTratamientoViewSet, basename='plan-tratamiento')
 router.register(r'rutinas-cuidado', RutinaCuidadoViewSet, basename='rutina-cuidado')
