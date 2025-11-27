@@ -302,6 +302,11 @@ class TransactionListSerializer(serializers.ModelSerializer):
     )
     category_name = serializers.CharField(source='category.full_path', read_only=True)
     client_name = serializers.CharField(source='client.full_name', read_only=True, allow_null=True)
+    registered_by_name = serializers.CharField(
+        source='registered_by.get_full_name',
+        read_only=True,
+        allow_null=True
+    )
     signed_amount = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -321,6 +326,7 @@ class TransactionListSerializer(serializers.ModelSerializer):
             'date',
             'description',
             'client_name',
+            'registered_by_name',
             'auto_generated',
             'created_at'
         ]

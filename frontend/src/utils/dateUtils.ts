@@ -11,7 +11,20 @@
 export const formatDateArgentina = (date: Date | string | null | undefined): string => {
   if (!date) return ''
 
-  const dateObj = typeof date === 'string' ? new Date(date) : date
+  let dateObj: Date
+  if (typeof date === 'string') {
+    // Check if it's a date-only string (YYYY-MM-DD) to avoid timezone issues
+    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // Parse as local date to prevent UTC timezone shifting
+      const [year, month, day] = date.split('-').map(Number)
+      dateObj = new Date(year, month - 1, day)
+    } else {
+      // For datetime strings with timezone info
+      dateObj = new Date(date)
+    }
+  } else {
+    dateObj = date
+  }
 
   const day = dateObj.getDate().toString().padStart(2, '0')
   const month = (dateObj.getMonth() + 1).toString().padStart(2, '0')
@@ -29,7 +42,19 @@ export const formatDateArgentina = (date: Date | string | null | undefined): str
 export const formatDateForInput = (date: Date | string | null | undefined): string => {
   if (!date) return ''
 
-  const dateObj = typeof date === 'string' ? new Date(date) : date
+  let dateObj: Date
+  if (typeof date === 'string') {
+    // Check if it's a date-only string (YYYY-MM-DD) to avoid timezone issues
+    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // Already in correct format, return as-is
+      return date
+    } else {
+      // For datetime strings, parse and extract date
+      dateObj = new Date(date)
+    }
+  } else {
+    dateObj = date
+  }
 
   // Get the date components in local timezone
   const year = dateObj.getFullYear()
@@ -107,9 +132,9 @@ export const formatDateTimeForInput = (datetime: Date | string | null | undefine
 }
 
 /**
- * Parses a DD/MM/YYYY string to Date object
+ * Parses a DD/MM/YYYY string to Date object in local timezone
  * @param dateString - Date string in DD/MM/YYYY format
- * @returns Date object
+ * @returns Date object in local timezone
  */
 export const parseDateArgentina = (dateString: string): Date | null => {
   if (!dateString) return null
@@ -118,7 +143,8 @@ export const parseDateArgentina = (dateString: string): Date | null => {
 
   if (!day || !month || !year) return null
 
-  return new Date(year, month - 1, day)
+  // Create date at noon to avoid timezone edge cases
+  return new Date(year, month - 1, day, 12, 0, 0)
 }
 
 /**
@@ -135,7 +161,19 @@ export const getNowISO = (): string => {
  * @returns True if the date is today
  */
 export const isToday = (date: Date | string): boolean => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date
+  let dateObj: Date
+  if (typeof date === 'string') {
+    // Check if it's a date-only string (YYYY-MM-DD) to avoid timezone issues
+    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = date.split('-').map(Number)
+      dateObj = new Date(year, month - 1, day)
+    } else {
+      dateObj = new Date(date)
+    }
+  } else {
+    dateObj = date
+  }
+
   const today = new Date()
 
   return (
@@ -151,7 +189,19 @@ export const isToday = (date: Date | string): boolean => {
  * @returns Relative date text or formatted date
  */
 export const getRelativeDateText = (date: Date | string): string => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date
+  let dateObj: Date
+  if (typeof date === 'string') {
+    // Check if it's a date-only string (YYYY-MM-DD) to avoid timezone issues
+    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = date.split('-').map(Number)
+      dateObj = new Date(year, month - 1, day)
+    } else {
+      dateObj = new Date(date)
+    }
+  } else {
+    dateObj = date
+  }
+
   const today = new Date()
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)

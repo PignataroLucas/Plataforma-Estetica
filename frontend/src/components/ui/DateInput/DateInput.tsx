@@ -49,10 +49,8 @@ export const DateInput = ({
   useEffect(() => {
     if (value) {
       try {
-        const date = new Date(value)
-        if (!isNaN(date.getTime())) {
-          setDisplayValue(formatDateArgentina(date))
-        }
+        // Use formatDateArgentina which handles YYYY-MM-DD correctly
+        setDisplayValue(formatDateArgentina(value))
       } catch (e) {
         setDisplayValue('')
       }
@@ -87,11 +85,15 @@ export const DateInput = ({
       if (parsed && !isNaN(parsed.getTime())) {
         // Check min/max constraints
         if (min) {
-          const minDate = new Date(min)
+          // Parse min date correctly (YYYY-MM-DD format)
+          const [year, month, day] = min.split('-').map(Number)
+          const minDate = new Date(year, month - 1, day)
           if (parsed < minDate) return
         }
         if (max) {
-          const maxDate = new Date(max)
+          // Parse max date correctly (YYYY-MM-DD format)
+          const [year, month, day] = max.split('-').map(Number)
+          const maxDate = new Date(year, month - 1, day)
           if (parsed > maxDate) return
         }
 

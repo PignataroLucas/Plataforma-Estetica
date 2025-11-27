@@ -539,12 +539,13 @@ export interface TransactionList {
   type: TransactionType
   type_display: string
   category_name: string
-  amount: number
-  signed_amount: number
+  amount: number | string
+  signed_amount: number | string
   payment_method_display: string
   date: string
   description: string
   client_name: string | null
+  registered_by_name: string | null
   auto_generated: boolean
   created_at: string
 }

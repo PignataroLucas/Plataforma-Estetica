@@ -283,6 +283,9 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Método de Pago
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Registrado por
+                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Monto
                     </th>
@@ -325,6 +328,9 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {transaction.payment_method_display}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {transaction.registered_by_name || 'Sistema'}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${
                           isIncome ? 'text-green-600' : 'text-red-600'
