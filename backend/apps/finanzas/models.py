@@ -217,14 +217,27 @@ class Transaction(models.Model):
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='transactions_registered'
+        related_name='transactions_registered',
+        help_text="Usuario que registró esta transacción"
     )
     edited_by = models.ForeignKey(
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='transactions_edited'
+        related_name='transactions_edited',
+        help_text="Último usuario que editó la transacción"
+    )
+
+    # NEW: Additional audit fields for Mi Caja traceability
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="Dirección IP desde donde se creó la transacción"
+    )
+    user_agent = models.TextField(
+        blank=True,
+        help_text="Información del navegador/dispositivo usado"
     )
 
     # Timestamps

@@ -10,6 +10,7 @@ import InventarioPage from '@/pages/InventarioPage'
 import FinanzasPage from '@/pages/FinanzasPage'
 import EmpleadosPage from '@/pages/EmpleadosPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
+import MiCajaPage from '@/pages/MiCajaPage'
 import Layout from '@/components/Layout'
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
         <Route path="/servicios" element={<ServiciosPage />} />
         <Route path="/inventario" element={<InventarioPage />} />
         <Route path="/finanzas" element={<FinanzasPage />} />
+        <Route path="/mi-caja" element={<MiCajaPage />} />
         <Route path="/empleados" element={<EmpleadosPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
       </Route>

@@ -7,6 +7,7 @@ import {
   Briefcase,
   Package,
   DollarSign,
+  Wallet,
   UserCog,
   BarChart3,
   LogOut,
@@ -27,6 +28,7 @@ const navigation: NavigationItem[] = [
   { name: 'Servicios', href: '/servicios', icon: Briefcase }, // Todos
   { name: 'Inventario', href: '/inventario', icon: Package, roles: ['ADMIN', 'MANAGER'] },
   { name: 'Finanzas', href: '/finanzas', icon: DollarSign, roles: ['ADMIN'] },
+  { name: 'Mi Caja', href: '/mi-caja', icon: Wallet }, // Todos
   { name: 'Empleados', href: '/empleados', icon: UserCog, roles: ['ADMIN', 'MANAGER'] },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
 ]

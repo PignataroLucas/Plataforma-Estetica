@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'apps.turnos',
     'apps.inventario',
     'apps.finanzas',
+    'apps.mi_caja',  # Sistema de punto de venta para empleados
     'apps.notificaciones',
     'apps.analytics',
 ]
