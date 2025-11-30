@@ -198,17 +198,21 @@ class AlquilerMaquinaViewSet(viewsets.ModelViewSet):
         from apps.turnos.models import Turno
         from django.utils import timezone
         from django.db.models import Q, Count
+        from django.db.models.functions import TruncDate
 
         queryset = self.get_queryset()
-        
+
         # Get dates with appointments using machines
+        # Use TruncDate to extract date in local timezone
         fechas_con_turnos = Turno.objects.filter(
             servicio__maquina_alquilada__isnull=False,
             sucursal=request.user.sucursal,
             fecha_hora_inicio__date__gte=timezone.now().date()
+        ).annotate(
+            fecha_local=TruncDate('fecha_hora_inicio', tzinfo=timezone.get_current_timezone())
         ).values(
             'servicio__maquina_alquilada',
-            'fecha_hora_inicio__date'
+            'fecha_local'
         ).annotate(
             cantidad_turnos=Count('id')
         )
@@ -216,7 +220,7 @@ class AlquilerMaquinaViewSet(viewsets.ModelViewSet):
         pendientes = []
         for item in fechas_con_turnos:
             maquina_id = item['servicio__maquina_alquilada']
-            fecha = item['fecha_hora_inicio__date']
+            fecha = item['fecha_local']
             
             # Check if rental exists and is confirmed
             alquiler = queryset.filter(

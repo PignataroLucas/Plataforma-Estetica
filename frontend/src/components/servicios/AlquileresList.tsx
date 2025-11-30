@@ -3,6 +3,7 @@ import { AlquilerMaquina, EstadoAlquiler, PaginatedResponse } from '@/types/mode
 import api from '@/services/api'
 import { Button } from '@/components/ui'
 import AlquilerForm from './AlquilerForm'
+import { formatDateArgentina } from '@/utils/dateUtils'
 
 const AlquileresList = () => {
   const [alquileres, setAlquileres] = useState<AlquilerMaquina[]>([])
@@ -11,6 +12,22 @@ const AlquileresList = () => {
   const [showForm, setShowForm] = useState(false)
   const [selectedAlquiler, setSelectedAlquiler] = useState<AlquilerMaquina | undefined>()
   const [actionLoading, setActionLoading] = useState<number | null>(null)
+
+  // Format date string (YYYY-MM-DD) to local Date object without timezone issues
+  const parseLocalDate = (dateString: string): Date => {
+    const [year, month, day] = dateString.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
+  // Format date string (YYYY-MM-DD) to short format
+  const formatDateShort = (dateString: string): string => {
+    const date = parseLocalDate(dateString)
+    return date.toLocaleDateString('es-AR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })
+  }
 
   useEffect(() => {
     fetchAlquileres()
@@ -45,7 +62,7 @@ const AlquileresList = () => {
   }
 
   const handleConfirm = async (alquiler: AlquilerMaquina) => {
-    if (!confirm(`¿Confirmar el alquiler de ${alquiler.maquina_nombre} para el ${new Date(alquiler.fecha).toLocaleDateString('es-AR')}?`)) {
+    if (!confirm(`¿Confirmar el alquiler de ${alquiler.maquina_nombre} para el ${formatDateArgentina(alquiler.fecha)}?`)) {
       return
     }
 
@@ -62,7 +79,7 @@ const AlquileresList = () => {
   }
 
   const handleCancel = async (alquiler: AlquilerMaquina) => {
-    if (!confirm(`¿Cancelar el alquiler de ${alquiler.maquina_nombre} para el ${new Date(alquiler.fecha).toLocaleDateString('es-AR')}?`)) {
+    if (!confirm(`¿Cancelar el alquiler de ${alquiler.maquina_nombre} para el ${formatDateArgentina(alquiler.fecha)}?`)) {
       return
     }
 
@@ -104,7 +121,7 @@ const AlquileresList = () => {
     const groups: { [key: string]: AlquilerMaquina[] } = {}
 
     alquileres.forEach(alquiler => {
-      const date = new Date(alquiler.fecha)
+      const date = parseLocalDate(alquiler.fecha)
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
       if (!groups[key]) {
@@ -115,7 +132,7 @@ const AlquileresList = () => {
 
     // Sort by date descending
     Object.keys(groups).forEach(key => {
-      groups[key].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+      groups[key].sort((a, b) => parseLocalDate(b.fecha).getTime() - parseLocalDate(a.fecha).getTime())
     })
 
     return groups
@@ -206,11 +223,7 @@ const AlquileresList = () => {
                       {groupedAlquileres[monthKey].map(alquiler => (
                         <tr key={alquiler.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(alquiler.fecha).toLocaleDateString('es-AR', {
-                              weekday: 'short',
-                              day: '2-digit',
-                              month: 'short',
-                            })}
+                            {formatDateShort(alquiler.fecha)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">

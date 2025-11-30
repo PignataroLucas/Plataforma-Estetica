@@ -4,6 +4,7 @@ when inventory movements occur (e.g., purchases).
 """
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
+from django.utils import timezone
 from .models import MovimientoInventario, Producto
 
 
@@ -109,7 +110,7 @@ def _create_expense_from_purchase(instance, Transaction, TransactionCategory):
         category=final_category,
         type='EXPENSE',
         amount=total_amount,
-        date=instance.creado_en.date(),
+        date=timezone.localtime(instance.creado_en).date(),
         description=f"Compra de {instance.cantidad} {instance.producto.unidad_medida} de {instance.producto.nombre}",
         notes=instance.notas or '',
         product=instance.producto,
@@ -165,7 +166,7 @@ def _create_income_from_sale(instance, Transaction, TransactionCategory):
         category=product_sales_category,
         type='INCOME_PRODUCT',
         amount=total_amount,
-        date=instance.creado_en.date(),
+        date=timezone.localtime(instance.creado_en).date(),
         description=description,
         notes=instance.notas or '',
         product=instance.producto,

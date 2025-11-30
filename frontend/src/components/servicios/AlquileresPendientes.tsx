@@ -3,6 +3,7 @@ import { AlquilerPendiente } from '@/types/models'
 import api from '@/services/api'
 import { Button } from '@/components/ui'
 import AlquilerForm from './AlquilerForm'
+import { formatDateArgentina } from '@/utils/dateUtils'
 
 interface AlquilerPendientesProps {
   onAlquilerCreated?: () => void
@@ -14,6 +15,19 @@ const AlquilerPendientes = ({ onAlquilerCreated }: AlquilerPendientesProps) => {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [selectedPendiente, setSelectedPendiente] = useState<AlquilerPendiente | undefined>()
+
+  // Format date string (YYYY-MM-DD) to long format without timezone issues
+  const formatDateLong = (dateString: string): string => {
+    const [year, month, day] = dateString.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+
+    return date.toLocaleDateString('es-AR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+  }
 
   useEffect(() => {
     fetchPendientes()
@@ -113,13 +127,7 @@ const AlquilerPendientes = ({ onAlquilerCreated }: AlquilerPendientesProps) => {
                       </div>
                       <div className="text-sm text-gray-600 space-y-1">
                         <p>
-                          📅 <strong>Fecha:</strong>{' '}
-                          {new Date(pendiente.fecha).toLocaleDateString('es-AR', {
-                            weekday: 'long',
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric',
-                          })}
+                          📅 <strong>Fecha:</strong> {formatDateLong(pendiente.fecha)}
                         </p>
                         <p>
                           📋 <strong>Turnos programados:</strong> {pendiente.cantidad_turnos}

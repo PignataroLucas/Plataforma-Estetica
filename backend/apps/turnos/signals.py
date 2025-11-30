@@ -4,6 +4,7 @@ when payment states change (deposits and completed services).
 """
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
+from django.utils import timezone
 from .models import Turno
 
 
@@ -138,7 +139,7 @@ def _create_service_income(instance, amount, description, Transaction, Transacti
         category=service_income_category,
         type='INCOME_SERVICE',
         amount=amount,
-        date=instance.fecha_hora_inicio.date(),
+        date=timezone.localtime(instance.fecha_hora_inicio).date(),
         description=description,
         notes=f"Turno #{instance.pk} - {instance.fecha_hora_inicio.strftime('%d/%m/%Y %H:%M')}",
         client=instance.cliente,
@@ -169,7 +170,7 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
     from apps.servicios.models import AlquilerMaquina
 
     machine = instance.servicio.maquina_alquilada
-    appointment_date = instance.fecha_hora_inicio.date()
+    appointment_date = timezone.localtime(instance.fecha_hora_inicio).date()
 
     # ==================== VERIFICACIÓN DE ALQUILER CONFIRMADO ====================
     # Check if there's a confirmed rental for this machine on this date
