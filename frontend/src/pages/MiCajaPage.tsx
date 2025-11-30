@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import Card, { CardHeader, CardBody } from '@/components/ui/Card/Card'
 import Button from '@/components/ui/Button/Button'
 import { DateInput } from '@/components/ui/DateInput/DateInput'
-import CobrarTurnoModal from '@/components/miCaja/CobrarTurnoModal'
-import VenderProductoModal from '@/components/miCaja/VenderProductoModal'
+import VentaUnificadaModal from '@/components/miCaja/VentaUnificadaModal'
 import CierreCajaModal from '@/components/miCaja/CierreCajaModal'
 import {
   getMisTransacciones,
@@ -24,8 +23,7 @@ export default function MiCajaPage() {
   const [error, setError] = useState<string | null>(null)
 
   // Modal states
-  const [showCobrarTurnoModal, setShowCobrarTurnoModal] = useState(false)
-  const [showVenderProductoModal, setShowVenderProductoModal] = useState(false)
+  const [showVentaUnificadaModal, setShowVentaUnificadaModal] = useState(false)
   const [showCierreCajaModal, setShowCierreCajaModal] = useState(false)
 
   // Data states
@@ -90,15 +88,10 @@ export default function MiCajaPage() {
         <div className="flex gap-2">
           <Button
             variant="primary"
-            onClick={() => setShowCobrarTurnoModal(true)}
+            onClick={() => setShowVentaUnificadaModal(true)}
+            className="text-lg px-6"
           >
-            + Cobrar Turno
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => setShowVenderProductoModal(true)}
-          >
-            + Vender Producto
+            + Nueva Venta
           </Button>
           <Button
             variant="secondary"
@@ -269,15 +262,9 @@ export default function MiCajaPage() {
       </Card>
 
       {/* Modals */}
-      <CobrarTurnoModal
-        isOpen={showCobrarTurnoModal}
-        onClose={() => setShowCobrarTurnoModal(false)}
-        onSuccess={handleModalSuccess}
-      />
-
-      <VenderProductoModal
-        isOpen={showVenderProductoModal}
-        onClose={() => setShowVenderProductoModal(false)}
+      <VentaUnificadaModal
+        isOpen={showVentaUnificadaModal}
+        onClose={() => setShowVentaUnificadaModal(false)}
         onSuccess={handleModalSuccess}
       />
 

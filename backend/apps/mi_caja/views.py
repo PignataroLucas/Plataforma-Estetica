@@ -17,7 +17,8 @@ from .serializers import (
     CobrarTurnoSerializer,
     VenderProductoSerializer,
     CierreCajaSerializer,
-    CierreCajaCreateSerializer
+    CierreCajaCreateSerializer,
+    VentaUnificadaSerializer
 )
 from .permissions import CanAccessMiCaja, CanViewTransaction, CanCobrarTurno
 
@@ -362,6 +363,151 @@ class MiCajaViewSet(viewsets.ViewSet):
             'count': len(turnos_pendientes),
             'turnos': turnos_pendientes
         })
+
+    @action(detail=False, methods=['post'], url_path='venta-unificada')
+    def venta_unificada(self, request):
+        """
+        Register a unified sale with multiple items (products and/or services)
+        """
+        serializer = VentaUnificadaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        items = serializer.validated_data['items']
+        cliente_id = serializer.validated_data['cliente_id']
+        payment_method = serializer.validated_data['payment_method']
+        notas = serializer.validated_data.get('notas', '')
+
+        try:
+            cliente = Cliente.objects.get(id=cliente_id)
+        except Cliente.DoesNotExist:
+            return Response(
+                {'error': 'Cliente no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        transacciones_creadas = []
+        productos_actualizados = []
+
+        # Process all items in a single atomic transaction
+        with transaction.atomic():
+            for item_data in items:
+                tipo = item_data['tipo']
+
+                if tipo == 'producto':
+                    # Process product sale
+                    producto_id = item_data['producto_id']
+                    cantidad = item_data['cantidad']
+                    descuento_porcentaje = item_data.get('descuento_porcentaje', Decimal('0.00'))
+
+                    producto = Producto.objects.select_related('sucursal').get(id=producto_id)
+
+                    # Calculate amounts
+                    subtotal = producto.precio_venta * cantidad
+                    descuento_monto = (subtotal * descuento_porcentaje) / 100
+                    total = subtotal - descuento_monto
+
+                    # Get product income category
+                    categoria_productos = TransactionCategory.objects.get(
+                        branch=producto.sucursal,
+                        name='Productos',
+                        type='INCOME',
+                        is_system_category=True
+                    )
+
+                    # Save previous stock
+                    stock_anterior = producto.stock_actual
+
+                    # Reduce stock
+                    producto.stock_actual -= cantidad
+                    stock_nuevo = producto.stock_actual
+                    producto.save(update_fields=['stock_actual'])
+
+                    # Create inventory movement
+                    movimiento = MovimientoInventario.objects.create(
+                        producto=producto,
+                        tipo='SALIDA',
+                        cantidad=cantidad,
+                        stock_anterior=stock_anterior,
+                        stock_nuevo=stock_nuevo,
+                        precio_unitario=producto.precio_venta,
+                        usuario=request.user,
+                        notas=f"Venta a {cliente.nombre} {cliente.apellido} - {notas}" if notas else f"Venta a {cliente.nombre} {cliente.apellido}"
+                    )
+
+                    # Refresh to get auto-created transaction
+                    movimiento.refresh_from_db()
+
+                    # Update auto-created transaction
+                    transaccion = movimiento.financial_transaction
+                    transaccion.client = cliente
+                    transaccion.payment_method = payment_method
+                    transaccion.category = categoria_productos
+                    transaccion.amount = total
+                    transaccion.description = f"Venta: {cantidad}x {producto.nombre}"
+                    if descuento_porcentaje > 0:
+                        transaccion.notes = f"Subtotal: ${subtotal}, Descuento: {descuento_porcentaje}% (${descuento_monto})"
+                    transaccion.ip_address = self.get_client_ip(request)
+                    transaccion.user_agent = self.get_user_agent(request)
+                    transaccion.save()
+
+                    transacciones_creadas.append(transaccion)
+                    productos_actualizados.append({
+                        'id': producto.id,
+                        'nombre': producto.nombre,
+                        'stock_restante': producto.stock_actual
+                    })
+
+                elif tipo == 'servicio':
+                    # Process service payment
+                    turno_id = item_data['turno_id']
+
+                    turno = Turno.objects.select_related(
+                        'servicio', 'cliente', 'profesional', 'sucursal'
+                    ).get(id=turno_id)
+
+                    # Get service income category
+                    categoria_servicios = TransactionCategory.objects.get(
+                        branch=turno.sucursal,
+                        name='Servicios',
+                        type='INCOME',
+                        is_system_category=True
+                    )
+
+                    # Create income transaction
+                    transaccion = Transaction.objects.create(
+                        branch=turno.sucursal,
+                        category=categoria_servicios,
+                        client=cliente,  # Use the unified sale client
+                        appointment=turno,
+                        type='INCOME_SERVICE',
+                        amount=turno.servicio.precio,
+                        payment_method=payment_method,
+                        date=timezone.now().date(),
+                        description=f"Servicio: {turno.servicio.nombre}",
+                        notes=notas,
+                        auto_generated=False,
+                        registered_by=request.user,
+                        ip_address=self.get_client_ip(request),
+                        user_agent=self.get_user_agent(request)
+                    )
+
+                    # Update appointment payment status
+                    turno.estado_pago = 'PAGADO'
+                    turno.save(update_fields=['estado_pago'])
+
+                    transacciones_creadas.append(transaccion)
+
+        # Serialize response
+        transacciones_serializer = TransaccionMiCajaSerializer(transacciones_creadas, many=True)
+
+        return Response({
+            'success': True,
+            'message': f'Venta registrada exitosamente: {len(transacciones_creadas)} item(s)',
+            'transactions': transacciones_serializer.data,
+            'productos_actualizados': productos_actualizados,
+            'total_items': len(items),
+            'total_monto': float(sum(t.amount for t in transacciones_creadas))
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'], url_path='resumen-dia')
     def resumen_dia(self, request):

@@ -136,6 +136,100 @@ class CierreCajaSerializer(serializers.ModelSerializer):
         return obj.empleado.get_full_name()
 
 
+class VentaUnificadaItemSerializer(serializers.Serializer):
+    """
+    Serializer for individual item in unified sale (product or service)
+    """
+    tipo = serializers.ChoiceField(choices=['producto', 'servicio'])
+    producto_id = serializers.IntegerField(required=False, allow_null=True)
+    turno_id = serializers.IntegerField(required=False, allow_null=True)
+    cantidad = serializers.IntegerField(min_value=1, default=1)
+    descuento_porcentaje = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        min_value=Decimal('0.00'),
+        max_value=Decimal('100.00')
+    )
+
+    def validate(self, data):
+        tipo = data.get('tipo')
+
+        # Validar que tenga el ID correcto según el tipo
+        if tipo == 'producto':
+            if not data.get('producto_id'):
+                raise serializers.ValidationError({
+                    'producto_id': 'Requerido para items de tipo producto'
+                })
+            # Validar que el producto exista
+            try:
+                producto = Producto.objects.get(id=data['producto_id'])
+                if not producto.activo:
+                    raise serializers.ValidationError({
+                        'producto_id': 'Producto no activo'
+                    })
+                # Validar stock
+                cantidad = data.get('cantidad', 1)
+                if producto.stock_actual < cantidad:
+                    raise serializers.ValidationError({
+                        'cantidad': f'Stock insuficiente para {producto.nombre}. Disponible: {producto.stock_actual}'
+                    })
+            except Producto.DoesNotExist:
+                raise serializers.ValidationError({
+                    'producto_id': 'Producto no encontrado'
+                })
+
+        elif tipo == 'servicio':
+            if not data.get('turno_id'):
+                raise serializers.ValidationError({
+                    'turno_id': 'Requerido para items de tipo servicio'
+                })
+            # Los servicios NO pueden tener descuento
+            if data.get('descuento_porcentaje', Decimal('0.00')) > Decimal('0.00'):
+                raise serializers.ValidationError({
+                    'descuento_porcentaje': 'Los servicios no pueden tener descuento'
+                })
+            # Validar que el turno exista y esté completado
+            try:
+                turno = Turno.objects.get(id=data['turno_id'])
+                if turno.estado != 'COMPLETADO':
+                    raise serializers.ValidationError({
+                        'turno_id': 'Solo se pueden cobrar turnos completados'
+                    })
+                if turno.transactions.filter(type='INCOME_SERVICE').exists():
+                    raise serializers.ValidationError({
+                        'turno_id': 'Este turno ya tiene un pago registrado'
+                    })
+            except Turno.DoesNotExist:
+                raise serializers.ValidationError({
+                    'turno_id': 'Turno no encontrado'
+                })
+
+        return data
+
+
+class VentaUnificadaSerializer(serializers.Serializer):
+    """
+    Serializer for unified sale (multiple products and/or services)
+    """
+    items = VentaUnificadaItemSerializer(many=True)
+    cliente_id = serializers.IntegerField()
+    payment_method = serializers.ChoiceField(choices=Transaction.PaymentMethod.choices)
+    notas = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_items(self, value):
+        if not value or len(value) == 0:
+            raise serializers.ValidationError('Debe agregar al menos un item')
+        return value
+
+    def validate_cliente_id(self, value):
+        try:
+            Cliente.objects.get(id=value)
+        except Cliente.DoesNotExist:
+            raise serializers.ValidationError("Cliente no encontrado")
+        return value
+
+
 class CierreCajaCreateSerializer(serializers.Serializer):
     """
     Serializer para crear un cierre de caja

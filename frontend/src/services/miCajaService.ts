@@ -4,6 +4,8 @@ import type {
   CobrarTurnoResponse,
   VenderProductoRequest,
   VenderProductoResponse,
+  VentaUnificadaRequest,
+  VentaUnificadaResponse,
   TurnosPendientesResponse,
   ResumenDiario,
   MisTransaccionesResponse,
@@ -31,6 +33,14 @@ export const cobrarTurno = async (data: CobrarTurnoRequest) => {
  */
 export const venderProducto = async (data: VenderProductoRequest) => {
   const response = await api.post<VenderProductoResponse>('/mi-caja/vender-producto/', data)
+  return response.data
+}
+
+/**
+ * Register unified sale with multiple items (products and/or services)
+ */
+export const registrarVentaUnificada = async (data: VentaUnificadaRequest) => {
+  const response = await api.post<VentaUnificadaResponse>('/mi-caja/venta-unificada/', data)
   return response.data
 }
 

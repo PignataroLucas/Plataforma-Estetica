@@ -70,6 +70,43 @@ export interface VenderProductoResponse {
 }
 
 /**
+ * Item for unified sale (product or service)
+ */
+export interface VentaUnificadaItem {
+  tipo: 'producto' | 'servicio'
+  producto_id?: number
+  turno_id?: number
+  cantidad: number
+  descuento_porcentaje: number
+}
+
+/**
+ * Request for unified sale (multiple items)
+ */
+export interface VentaUnificadaRequest {
+  items: VentaUnificadaItem[]
+  cliente_id: number
+  payment_method: PaymentMethod
+  notas?: string
+}
+
+/**
+ * Response from venta-unificada endpoint
+ */
+export interface VentaUnificadaResponse {
+  success: boolean
+  message: string
+  transactions: TransaccionMiCaja[]
+  productos_actualizados: Array<{
+    id: number
+    nombre: string
+    stock_restante: number
+  }>
+  total_items: number
+  total_monto: number
+}
+
+/**
  * Unpaid appointment (pending payment)
  */
 export interface TurnoPendienteCobro {
