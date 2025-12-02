@@ -2,6 +2,54 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+### Essential Commands
+```bash
+# Start development environment
+docker-compose up
+
+# Run database migrations
+docker-compose exec backend python manage.py makemigrations
+docker-compose exec backend python manage.py migrate
+
+# Access Django shell
+docker-compose exec backend python manage.py shell
+
+# Run tests
+docker-compose exec backend pytest
+
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+```
+
+### Project Access
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000/api
+- Django Admin: http://localhost:8000/admin
+- API Docs (Swagger): http://localhost:8000/api/docs/
+- API Docs (ReDoc): http://localhost:8000/api/redoc/
+
+### Key File Locations
+- **Backend Entry**: `backend/manage.py`
+- **Backend Settings**: `backend/config/settings.py`
+- **API Routes**: `backend/config/urls.py`
+- **Frontend Entry**: `frontend/src/App.tsx`
+- **API Client**: `frontend/src/services/api.ts`
+- **Type Definitions**: `frontend/src/types/models.ts`
+
+### Django Apps (Backend Modules)
+- `apps/empleados/` - Users, auth, centers, branches, employees, roles
+- `apps/clientes/` - Customer/client management (CRM)
+- `apps/servicios/` - Services catalog, rented equipment, rental scheduling
+- `apps/turnos/` - Appointment system and calendar
+- `apps/inventario/` - Product inventory and stock management
+- `apps/finanzas/` - Financial system (transactions, categories, offers)
+- `apps/mi_caja/` - Point of sale system for employees
+- `apps/notificaciones/` - WhatsApp notifications
+- `apps/analytics/` - Reports and analytics
+
 ## Project Overview
 
 **Plataforma de Gestión para Centros de Estética** - A comprehensive SaaS platform for managing aesthetic centers and spas in Argentina and Latin America.
@@ -53,11 +101,97 @@ Centralizes all operations for aesthetic centers that currently use disconnected
 ## Architecture
 
 **Three-tier architecture** with clear separation:
-1. **Frontend (Client)**: React SPA
+1. **Frontend (Client)**: React SPA with TypeScript
 2. **Backend (Server)**: Django REST API
 3. **Database**: PostgreSQL + Redis cache
 
 **Multi-tenancy**: All entities include `tenant_id` (centro_estetica_id) for data isolation between clients.
+
+### Backend Architecture Patterns
+
+**Django App Structure:**
+Each Django app follows this pattern:
+```
+apps/<app_name>/
+├── models.py           # Database models (Django ORM)
+├── serializers.py      # DRF serializers for API request/response
+├── views.py            # ViewSets and APIViews for endpoints
+├── urls.py             # URL routing for the app
+├── admin.py            # Django admin configuration
+├── signals.py          # Django signals (e.g., auto-generate transactions)
+├── tasks.py            # Celery async tasks (if needed)
+├── tests/              # Pytest test files
+│   ├── test_models.py
+│   ├── test_views.py
+│   └── test_serializers.py
+└── migrations/         # Database migration files
+```
+
+**Key Backend Patterns:**
+- **ViewSets over APIViews**: Use `ModelViewSet` for standard CRUD, custom actions with `@action` decorator
+- **Serializer Composition**: Nested serializers for related data (e.g., `TurnoSerializer` includes `ClienteSerializer`)
+- **Signal-based Automation**: `apps/turnos/signals.py` auto-generates transactions when appointments complete
+- **Permission Classes**: Custom permission classes for role-based access (Admin, Manager, Empleado)
+- **Querysets Filtering**: Always filter by `sucursal_id` or `centro_estetica_id` for multi-tenancy
+- **Atomic Transactions**: Use `@transaction.atomic` for operations that modify multiple records (prevent double-booking)
+
+**API Endpoints Pattern:**
+```
+/api/<resource>/          # List & Create (GET, POST)
+/api/<resource>/<id>/     # Retrieve, Update, Delete (GET, PUT, PATCH, DELETE)
+/api/<resource>/<id>/<action>/  # Custom actions (POST)
+```
+
+**Authentication Flow:**
+1. Login: `POST /api/auth/login/` → Returns `access` and `refresh` tokens
+2. Include `Authorization: Bearer <access_token>` in all requests
+3. Refresh: `POST /api/auth/refresh/` with `refresh` token when access expires
+
+### Frontend Architecture Patterns
+
+**Component Organization (SOLID principles):**
+- **UI Components** (`components/ui/`): Reusable, generic components (Button, Input, Modal, Card)
+- **Feature Components** (`components/<feature>/`): Domain-specific components (ClienteForm, TurnoCalendar)
+- **Pages** (`pages/`): Route-level components that compose features
+- **Custom Hooks** (`hooks/`): Reusable logic abstraction (useClientes, useTurnos, useAuth)
+- **Services** (`services/api.ts`): Centralized API communication with Axios
+- **Stores** (`stores/`): Zustand state management for global state (auth, user, selected branch)
+- **Types** (`types/models.ts`): TypeScript interfaces matching Django models
+
+**Key Frontend Patterns:**
+- **Container/Presenter Pattern**: Separate data fetching (container) from UI rendering (presenter)
+- **Composition over Inheritance**: Build complex UIs by composing simple components
+- **Custom Hooks for Data**: All API calls abstracted into hooks (e.g., `useClientes()`)
+- **React Query (TanStack Query)**: For server state management, caching, and automatic refetching
+- **Form Handling**: React Hook Form for complex forms with validation
+- **Toast Notifications**: React Hot Toast for user feedback
+- **Date Handling**: date-fns for date manipulation (appointments, reports)
+
+**State Management Strategy:**
+- **Server State**: React Query (API data, caching)
+- **Global State**: Zustand (auth, user, selected branch)
+- **Local State**: React useState (component-specific UI state)
+- **Form State**: React Hook Form (form inputs and validation)
+
+**API Integration Pattern:**
+```typescript
+// services/api.ts - Axios instance with JWT
+export const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Interceptor adds JWT token to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+```
 
 ## Database Schema
 
@@ -265,69 +399,145 @@ Centralizes all operations for aesthetic centers that currently use disconnected
 
 ## Common Development Commands
 
-### Backend (Django)
-```bash
-# Setup virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+### Docker (Primary Development Method)
 
-# Install dependencies
+The project is designed to run with Docker Compose. All services (PostgreSQL, Redis, Backend, Frontend, Celery) are orchestrated together.
+
+```bash
+# Build and start all services (first time or after dependency changes)
+docker-compose up --build
+
+# Start services (subsequent runs)
+docker-compose up
+
+# Start in background (detached mode)
+docker-compose up -d
+
+# Stop all services (preserves data)
+docker-compose down
+
+# Stop and remove volumes (CAUTION: deletes database data)
+docker-compose down -v
+
+# View logs for all services
+docker-compose logs -f
+
+# View logs for specific service
+docker-compose logs -f backend
+docker-compose logs -f frontend
+docker-compose logs -f celery
+
+# Restart a specific service
+docker-compose restart backend
+docker-compose restart frontend
+
+# Execute commands in backend container
+docker-compose exec backend python manage.py <command>
+
+# Access Django shell
+docker-compose exec backend python manage.py shell
+
+# Run tests in backend
+docker-compose exec backend pytest
+
+# Check service status
+docker-compose ps
+```
+
+### Backend Django Commands (via Docker)
+
+```bash
+# Database operations
+docker-compose exec backend python manage.py makemigrations
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py showmigrations
+
+# User management
+docker-compose exec backend python manage.py createsuperuser
+
+# Data management
+docker-compose exec backend python manage.py loaddata <fixture>
+docker-compose exec backend python manage.py dumpdata <app> > fixture.json
+
+# Testing
+docker-compose exec backend pytest
+docker-compose exec backend pytest --cov=apps
+docker-compose exec backend pytest apps/turnos/tests/test_models.py::TestTurno
+
+# Code quality (if configured)
+docker-compose exec backend black .
+docker-compose exec backend flake8 .
+docker-compose exec backend isort .
+
+# Database shell
+docker-compose exec backend python manage.py dbshell
+```
+
+### Frontend React Commands (via Docker)
+
+```bash
+# Build TypeScript and check for errors
+docker-compose exec frontend npm run build
+
+# Lint code
+docker-compose exec frontend npm run lint
+
+# Run tests (if configured)
+docker-compose exec frontend npm test
+```
+
+### Local Development (Without Docker)
+
+If you need to run without Docker (not recommended for consistency):
+
+**Backend:**
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Database migrations
-python manage.py makemigrations
+# Set environment variables in .env or export them
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/plataforma_estetica
+# REDIS_URL=redis://localhost:6379/0
+
 python manage.py migrate
-
-# Create superuser
 python manage.py createsuperuser
-
-# Run development server
 python manage.py runserver
 
-# Run tests
-pytest
-
-# Start Celery worker
+# In separate terminals:
 celery -A config worker -l info
-
-# Start Celery beat (for scheduled tasks)
 celery -A config beat -l info
 ```
 
-### Frontend (React)
+**Frontend:**
 ```bash
-# Install dependencies
+cd frontend
 npm install
-
-# Run development server
-npm start
-
-# Run tests
-npm test
-
-# Build for production
-npm run build
-
-# Lint code
-npm run lint
+npm run dev  # NOT 'npm start' - this project uses Vite
 ```
 
-### Docker
+### Useful Docker Debugging Commands
+
 ```bash
-# Build and start all services
-docker-compose up --build
+# View container resource usage
+docker stats
 
-# Start services in background
-docker-compose up -d
+# Inspect a container
+docker inspect plataforma_backend
 
-# Stop all services
-docker-compose down
+# View container logs since specific time
+docker-compose logs --since 30m backend
 
-# View logs
-docker-compose logs -f
+# Execute bash in container
+docker-compose exec backend bash
+docker-compose exec frontend sh
 
-# Run migrations in container
-docker-compose exec backend python manage.py migrate
+# Remove dangling images and free space
+docker system prune
+
+# Rebuild a single service
+docker-compose up --build backend
 ```
 
 ## Security Considerations
@@ -466,6 +676,96 @@ README.md
 CLAUDE.md                        # This file
 SISTEMA_FINANCIERO_SPEC.md       # Financial system technical spec
 ```
+
+## Critical Business Logic & Workflows
+
+### Appointment Creation Workflow
+1. **Validation**: Check professional availability for the requested time slot
+2. **Double-booking Prevention**: Use `@transaction.atomic` and query with `select_for_update()` to lock overlapping appointments
+3. **Resource Assignment**: Assign professional (Usuario) and optionally rented equipment (MaquinaAlquilada)
+4. **State Management**: Create appointment with initial state (Confirmado/Pendiente)
+5. **Notifications**: Trigger WhatsApp confirmation (async via Celery)
+
+**Location**: `apps/turnos/views.py` - `TurnoViewSet.create()`
+
+### Appointment Completion & Payment Workflow (UPDATED Dec 2025)
+
+**IMPORTANT CHANGE**: Automatic transaction generation on appointment completion is **DISABLED**.
+
+**New Two-Step Process:**
+
+#### Step 1: Mark Service as Completed (Turnos view - Green button)
+- Changes `estado` to "COMPLETADO"
+- **Does NOT create transaction**
+- **Does NOT change payment status**
+- Only registers that the service was performed
+- Turno appears in Mi Caja for payment collection
+
+#### Step 2: Register Payment (Mi Caja - Required)
+- Employee navigates to **Mi Caja → Nueva Venta → Servicio**
+- Selects the completed appointment from the list
+- **Chooses correct payment method** (Cash, Card, Transfer, MercadoPago, etc.)
+- Registers the payment amount
+- **System automatically**:
+  - Creates financial transaction (`Transaction`)
+  - Marks appointment as COMPLETADO (if not already)
+  - Marks payment status as PAGADO
+  - Links transaction to appointment
+
+**Why this workflow?**
+- ✅ Full control over payment method selection
+- ✅ Prevents incorrect default payment methods (old: always CASH)
+- ✅ Conscious payment registration by employee
+- ✅ Clear separation between service delivery and payment collection
+
+**What STILL generates transactions automatically:**
+- ✅ **Deposits (Señas)**: When `estado_pago` changes to "CON_SENA" → Auto-creates deposit transaction
+- ❌ **Service completion**: NO longer auto-creates transaction
+
+**Code Location**: `apps/turnos/signals.py` - SCENARIO 2 is disabled (commented out)
+
+### Machine Rental Expense Generation
+**States Flow**: PROGRAMADO → CONFIRMADO → COBRADO (or CANCELADO)
+
+- **PROGRAMADO**: Rental scheduled but NOT confirmed (no expense generated)
+- **CONFIRMADO**: Rental confirmed, ready for expense generation when appointment completes
+- **COBRADO**: Expense already created (prevents duplicate expenses)
+- **CANCELADO**: Rental cancelled, no expense
+
+**Logic Location**: `apps/servicios/views.py` - `confirmar_alquiler()` action
+
+### Financial Transaction Rules
+1. **Auto-generated transactions** (from signals):
+   - Appointment income: Type = INCOME_SERVICE, Category = "Servicios"
+   - Product sale: Type = INCOME_PRODUCT, Category = "Productos"
+   - Machine rental: Type = EXPENSE, Category = "Alquileres de Equipos"
+   - Salary payment: Type = EXPENSE, Category = "Salarios"
+2. **Manual transactions** (user-created):
+   - Can use any category
+   - Must have description, amount, date, payment method
+3. **Protected Categories**: System categories cannot be deleted or modified
+4. **Audit Trail**: All auto-generated transactions link to source entity for traceability
+
+### Multi-tenancy Data Isolation
+**EVERY database query MUST filter by tenant:**
+```python
+# Always filter by sucursal or centro_estetica
+queryset = Turno.objects.filter(sucursal=request.user.sucursal)
+# OR
+queryset = Cliente.objects.filter(centro_estetica=request.user.centro_estetica)
+```
+
+**Serializer Context**: Pass user's branch/center in serializer context to enforce filtering in nested relationships.
+
+### Permission & Access Control
+**Role Hierarchy:**
+1. **Empleado Básico**: Read-only for own appointments, clients
+2. **Manager**: Full access to branch data, cannot access finances
+3. **Administrador/Dueño**: Full access including financial module
+
+**Implementation**: Custom permission classes in `apps/<module>/permissions.py`
+
+**Financial Module Access**: ONLY Admin/Owner roles. Middleware blocks access for other roles.
 
 ## Important Notes
 

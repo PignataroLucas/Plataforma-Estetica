@@ -154,10 +154,12 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           return
         }
 
-        const monto = typeof turno.monto === 'string' ? parseFloat(turno.monto) : Number(turno.monto)
+        const montoPendiente = typeof turno.monto === 'string' ? parseFloat(turno.monto) : Number(turno.monto)
+        const montoSena = typeof turno.monto_sena === 'string' ? parseFloat(turno.monto_sena) : Number(turno.monto_sena)
+        const esConSena = montoSena > 0
 
-        if (!monto || monto <= 0) {
-          setError('El turno no tiene un monto válido')
+        if (!montoPendiente || montoPendiente <= 0) {
+          setError('El turno no tiene un monto pendiente válido')
           return
         }
 
@@ -165,12 +167,14 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           id: `servicio-${Date.now()}-${Math.random()}`,
           tipo: 'servicio',
           turno_id: turno.id,
-          nombre: `${turno.servicio} - ${turno.cliente}`,
+          nombre: esConSena
+            ? `${turno.servicio} - ${turno.cliente} (SALDO - Seña: $${montoSena.toFixed(2)})`
+            : `${turno.servicio} - ${turno.cliente}`,
           cantidad: 1,
-          precio_unitario: monto,
+          precio_unitario: montoPendiente,
           descuento_porcentaje: 0,
-          subtotal: monto,
-          total: monto
+          subtotal: montoPendiente,
+          total: montoPendiente
         }
 
         setCart([...cart, newItem])
@@ -228,7 +232,24 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
       onClose()
     } catch (err: any) {
       console.error('Error registering sale:', err)
-      setError(err.response?.data?.error || 'Error al registrar la venta')
+      console.error('Error response:', err.response?.data)
+
+      // Extraer mensaje de error más detallado
+      let errorMessage = 'Error al registrar la venta'
+      if (err.response?.data) {
+        if (err.response.data.error) {
+          errorMessage = err.response.data.error
+        } else if (err.response.data.items) {
+          // Error de validación en items
+          errorMessage = JSON.stringify(err.response.data.items)
+        } else if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data
+        } else {
+          errorMessage = JSON.stringify(err.response.data)
+        }
+      }
+
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -267,10 +288,18 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
     label: `${producto.nombre} - Stock: ${producto.stock_actual} - $${producto.precio_venta}`
   }))
 
-  const turnoOptions = turnos.map(turno => ({
-    value: turno.id.toString(),
-    label: `${turno.servicio} - ${turno.cliente} - ${turno.fecha} ${turno.hora} - $${turno.monto}`
-  }))
+  const turnoOptions = turnos.map(turno => {
+    const montoSena = typeof turno.monto_sena === 'string' ? parseFloat(turno.monto_sena) : turno.monto_sena
+    const montoPendiente = typeof turno.monto === 'string' ? parseFloat(turno.monto) : turno.monto
+    const esConSena = montoSena > 0
+
+    return {
+      value: turno.id.toString(),
+      label: esConSena
+        ? `${turno.servicio} - ${turno.cliente} - Prof: ${turno.profesional} - ${turno.fecha} ${turno.hora} - SALDO PENDIENTE: $${montoPendiente.toFixed(2)} (Seña: $${montoSena.toFixed(2)})`
+        : `${turno.servicio} - ${turno.cliente} - Prof: ${turno.profesional} - ${turno.fecha} ${turno.hora} - $${montoPendiente.toFixed(2)}`
+    }
+  })
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="xl">

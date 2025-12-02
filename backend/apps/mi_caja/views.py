@@ -87,6 +87,12 @@ class MiCajaViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+        # Determinar descripción según si tiene seña o no
+        if turno.estado_pago == 'CON_SENA' and turno.monto_sena:
+            descripcion = f"Saldo de servicio: {turno.servicio.nombre} - {turno.cliente.nombre} {turno.cliente.apellido} (Seña ya pagada: ${turno.monto_sena})"
+        else:
+            descripcion = f"Servicio: {turno.servicio.nombre} - {turno.cliente.nombre} {turno.cliente.apellido}"
+
         # Crear transacción con atomic para prevenir race conditions
         with transaction.atomic():
             # Crear transacción de ingreso
@@ -99,7 +105,7 @@ class MiCajaViewSet(viewsets.ViewSet):
                 amount=amount,
                 payment_method=payment_method,
                 date=timezone.now().date(),
-                description=f"Servicio: {turno.servicio.nombre} - {turno.cliente.nombre} {turno.cliente.apellido}",
+                description=descripcion,
                 notes=notas,
                 auto_generated=False,
                 registered_by=request.user,
@@ -107,9 +113,12 @@ class MiCajaViewSet(viewsets.ViewSet):
                 user_agent=self.get_user_agent(request)
             )
 
-            # Actualizar estado de pago del turno
+            # Actualizar estado del turno y pago
+            # Marcar como completado si aún no lo está (servicio fue realizado)
+            if turno.estado != 'COMPLETADO':
+                turno.estado = 'COMPLETADO'
             turno.estado_pago = 'PAGADO'
-            turno.save(update_fields=['estado_pago'])
+            turno.save(update_fields=['estado', 'estado_pago'])
 
         # Serializar respuesta
         serializer = TransaccionMiCajaSerializer(transaccion)
@@ -336,24 +345,60 @@ class MiCajaViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'], url_path='turnos-pendientes-cobro')
     def turnos_pendientes_cobro(self, request):
         """
-        Get completed appointments without payment registered
+        Get appointments ready to be charged:
+        - COMPLETADO appointments with pending payment
+        - CONFIRMADO appointments whose date has passed (service was provided)
         """
-        # Obtener turnos completados del usuario sin pago
-        turnos = Turno.objects.filter(
-            profesional=request.user,
-            estado='COMPLETADO',
-            estado_pago__in=['PENDIENTE', 'CON_SENA']
-        ).select_related('cliente', 'servicio').order_by('fecha_hora_inicio')
+        from django.db.models import Q
 
-        # Filtrar los que no tienen transacción de pago
+        # Obtener fecha/hora actual
+        now = timezone.now()
+
+        # Filtrar turnos que están listos para cobrar:
+        # 1. COMPLETADOS con pago pendiente/con seña
+        # 2. CONFIRMADOS cuya fecha ya pasó (servicio ya se realizó) con pago pendiente
+        turnos = Turno.objects.filter(
+            sucursal=request.user.sucursal,
+            estado_pago__in=['PENDIENTE', 'CON_SENA']
+        ).filter(
+            Q(estado='COMPLETADO') |  # Ya marcado como completado
+            Q(estado='CONFIRMADO', fecha_hora_fin__lt=now)  # Confirmado pero fecha ya pasó
+        ).select_related('cliente', 'servicio', 'profesional').order_by('fecha_hora_inicio')
+
+        # DEBUG: Log para diagnóstico
+        print(f"\n=== DEBUG TURNOS PENDIENTES COBRO ===")
+        print(f"Usuario: {request.user.get_full_name()} (Sucursal: {request.user.sucursal.nombre})")
+        print(f"Fecha/hora actual: {now.strftime('%d/%m/%Y %H:%M')}")
+        print(f"Total turnos listos para cobrar: {turnos.count()}")
+        for t in turnos:
+            print(f"  - Turno #{t.id}: {t.cliente.nombre_completo} - {t.servicio.nombre} - {t.fecha_hora_inicio.strftime('%d/%m/%Y %H:%M')} - Estado: {t.estado} - Pago: {t.estado_pago}")
+        print(f"=====================================\n")
+
+        # Construir lista de turnos pendientes
         turnos_pendientes = []
         for turno in turnos:
-            if not turno.transactions.filter(type='INCOME_SERVICE').exists():
+            # Verificar si tiene transacciones de servicio
+            transacciones_servicio = turno.transactions.filter(type='INCOME_SERVICE')
+
+            # Calcular cuánto se ha pagado
+            total_pagado = sum(t.amount for t in transacciones_servicio)
+
+            # Calcular monto pendiente
+            monto_pendiente = float(turno.servicio.precio) - float(total_pagado)
+
+            # Solo mostrar si hay saldo pendiente
+            if monto_pendiente > 0:
+                # Determinar monto de seña pagada
+                monto_sena_pagado = float(total_pagado) if turno.estado_pago == 'CON_SENA' else 0
+
                 turnos_pendientes.append({
                     'id': turno.id,
                     'cliente': f"{turno.cliente.nombre} {turno.cliente.apellido}",
                     'servicio': turno.servicio.nombre,
-                    'monto': float(turno.servicio.precio),
+                    'profesional': turno.profesional.get_full_name() if turno.profesional else 'Sin asignar',
+                    'monto': monto_pendiente,
+                    'monto_total': float(turno.servicio.precio),
+                    'monto_sena': monto_sena_pagado,
                     'fecha': turno.fecha_hora_inicio.strftime('%Y-%m-%d'),
                     'hora': turno.fecha_hora_inicio.strftime('%H:%M'),
                     'estado_pago': turno.estado_pago
@@ -369,7 +414,15 @@ class MiCajaViewSet(viewsets.ViewSet):
         """
         Register a unified sale with multiple items (products and/or services)
         """
+        print(f"\n=== DEBUG VENTA UNIFICADA ===")
+        print(f"Request data: {request.data}")
+        print(f"=============================\n")
+
         serializer = VentaUnificadaSerializer(data=request.data)
+        if not serializer.is_valid():
+            print(f"\n=== VALIDATION ERROR ===")
+            print(f"Errors: {serializer.errors}")
+            print(f"========================\n")
         serializer.is_valid(raise_exception=True)
 
         items = serializer.validated_data['items']
@@ -465,6 +518,16 @@ class MiCajaViewSet(viewsets.ViewSet):
                         'servicio', 'cliente', 'profesional', 'sucursal'
                     ).get(id=turno_id)
 
+                    # Calculate pending amount
+                    # If has deposit (seña), charge remaining balance
+                    # If no deposit, charge full amount
+                    if turno.estado_pago == 'CON_SENA' and turno.monto_sena:
+                        monto_a_cobrar = turno.servicio.precio - turno.monto_sena
+                        descripcion = f"Saldo de servicio: {turno.servicio.nombre} (Seña ya pagada: ${turno.monto_sena})"
+                    else:
+                        monto_a_cobrar = turno.servicio.precio
+                        descripcion = f"Servicio: {turno.servicio.nombre}"
+
                     # Get service income category
                     categoria_servicios = TransactionCategory.objects.get(
                         branch=turno.sucursal,
@@ -480,10 +543,10 @@ class MiCajaViewSet(viewsets.ViewSet):
                         client=cliente,  # Use the unified sale client
                         appointment=turno,
                         type='INCOME_SERVICE',
-                        amount=turno.servicio.precio,
+                        amount=monto_a_cobrar,
                         payment_method=payment_method,
                         date=timezone.now().date(),
-                        description=f"Servicio: {turno.servicio.nombre}",
+                        description=descripcion,
                         notes=notas,
                         auto_generated=False,
                         registered_by=request.user,
@@ -491,9 +554,12 @@ class MiCajaViewSet(viewsets.ViewSet):
                         user_agent=self.get_user_agent(request)
                     )
 
-                    # Update appointment payment status
+                    # Update appointment status and payment
+                    # Mark as completed if not already (service was provided)
+                    if turno.estado != 'COMPLETADO':
+                        turno.estado = 'COMPLETADO'
                     turno.estado_pago = 'PAGADO'
-                    turno.save(update_fields=['estado_pago'])
+                    turno.save(update_fields=['estado', 'estado_pago'])
 
                     transacciones_creadas.append(transaccion)
 

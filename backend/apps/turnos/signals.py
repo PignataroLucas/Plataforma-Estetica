@@ -60,42 +60,30 @@ def create_transaction_from_appointment(sender, instance, created, **kwargs):
             is_deposit=True
         )
 
-    # ==================== SCENARIO 2: Service Completed ====================
-    # When estado changes to COMPLETADO, create income for the remaining amount
-    if (previous_estado != Turno.Estado.COMPLETADO and
-        instance.estado == Turno.Estado.COMPLETADO):
+    # ==================== SCENARIO 2: Service Completed (DISABLED) ====================
+    # IMPORTANTE: La creación de transacciones al completar un turno está DESHABILITADA
+    # Las transacciones ahora se crean SOLO desde "Mi Caja" donde el empleado:
+    # 1. Elige el método de pago correcto (efectivo, tarjeta, transferencia, etc.)
+    # 2. Registra el cobro manualmente
+    # 3. El sistema marca el turno como PAGADO automáticamente
+    #
+    # FLUJO ACTUAL:
+    # - Marcar turno como COMPLETADO → Solo cambia el estado (servicio realizado)
+    # - NO crea transacción automáticamente
+    # - NO cambia estado de pago a PAGADO
+    # - El empleado debe ir a Mi Caja para cobrar y registrar la transacción
+    #
+    # VENTAJAS:
+    # ✅ Control preciso del método de pago
+    # ✅ Registro consciente del cobro
+    # ✅ Evita transacciones con método de pago incorrecto (CASH por defecto)
+    #
+    # Las señas (CON_SENA) SÍ se registran automáticamente (ver SCENARIO 1)
 
-        # Calculate remaining amount
-        if instance.estado_pago == Turno.EstadoPago.CON_SENA and instance.monto_sena:
-            # Already paid deposit, charge the rest
-            remaining_amount = instance.monto_total - instance.monto_sena
-        else:
-            # No deposit, charge full amount
-            remaining_amount = instance.monto_total
-
-        if remaining_amount > 0:
-            _create_service_income(
-                instance=instance,
-                amount=remaining_amount,
-                description=f"Servicio completado: {instance.servicio.nombre} - {instance.cliente.nombre_completo}",
-                Transaction=Transaction,
-                TransactionCategory=TransactionCategory,
-                is_deposit=False
-            )
-
-        # Update payment status to PAGADO
-        if instance.estado_pago != Turno.EstadoPago.PAGADO:
-            # Use update() to avoid triggering signals again
-            Turno.objects.filter(pk=instance.pk).update(estado_pago=Turno.EstadoPago.PAGADO)
-
-        # ==================== Machine Rental Expense ====================
-        # If service uses a rented machine, create expense for daily rental
-        if instance.servicio.maquina_alquilada:
-            _create_machine_rental_expense(
-                instance=instance,
-                Transaction=Transaction,
-                TransactionCategory=TransactionCategory
-            )
+    # if (previous_estado != Turno.Estado.COMPLETADO and
+    #     instance.estado == Turno.Estado.COMPLETADO):
+    #     # CÓDIGO COMENTADO - Ya no se crea transacción automáticamente
+    #     pass
 
 
 def _create_service_income(instance, amount, description, Transaction, TransactionCategory, is_deposit=False):

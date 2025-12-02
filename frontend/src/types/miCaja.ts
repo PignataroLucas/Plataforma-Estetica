@@ -113,10 +113,13 @@ export interface TurnoPendienteCobro {
   id: number
   cliente: string
   servicio: string
-  monto: number | string
+  profesional: string
+  monto: number | string // Monto pendiente de pago (total - seña si aplica)
+  monto_total: number | string // Precio total del servicio
+  monto_sena: number | string // Seña pagada (0 si no hay)
   fecha: string
   hora: string
-  estado_pago: string
+  estado_pago: string // 'PENDIENTE' | 'CON_SENA'
 }
 
 /**
