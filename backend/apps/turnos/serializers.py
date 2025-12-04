@@ -75,9 +75,23 @@ class TurnoCreateUpdateSerializer(serializers.ModelSerializer):
         """
         Validación de disponibilidad y prevención de double-booking
         """
+        import pytz
+        from django.utils import timezone as django_timezone
+
         fecha_hora_inicio = attrs.get('fecha_hora_inicio')
         servicio = attrs.get('servicio')
         profesional = attrs.get('profesional')
+
+        if fecha_hora_inicio:
+            argentina_tz = pytz.timezone('America/Argentina/Buenos_Aires')
+
+            if django_timezone.is_naive(fecha_hora_inicio):
+                fecha_hora_inicio = argentina_tz.localize(fecha_hora_inicio)
+                attrs['fecha_hora_inicio'] = fecha_hora_inicio
+            elif fecha_hora_inicio.utcoffset().total_seconds() == 0:
+                fecha_hora_naive = fecha_hora_inicio.replace(tzinfo=None)
+                fecha_hora_inicio = argentina_tz.localize(fecha_hora_naive)
+                attrs['fecha_hora_inicio'] = fecha_hora_inicio
 
         # Validar que la fecha no sea en el pasado
         if fecha_hora_inicio and fecha_hora_inicio < timezone.now():

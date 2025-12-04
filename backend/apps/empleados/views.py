@@ -100,7 +100,6 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         from apps.servicios.models import Servicio
         from apps.turnos.models import Turno
 
-        # Validar parámetros requeridos
         fecha_str = request.query_params.get('fecha')
         servicio_id = request.query_params.get('servicio_id')
 
@@ -110,7 +109,6 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Parsear fecha
         try:
             fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         except ValueError:
@@ -119,7 +117,6 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Obtener servicio
         try:
             servicio = Servicio.objects.get(id=servicio_id)
         except Servicio.DoesNotExist:
@@ -128,26 +125,21 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Obtener profesional
         profesional = self.get_object()
 
-        # Verificar si el profesional tiene horario configurado
         if not profesional.horario_inicio or not profesional.horario_fin:
-            # Si no tiene horario configurado, usar horario por defecto (8:00 - 19:00)
             horario_inicio = time(8, 0)
             horario_fin = time(19, 0)
         else:
             horario_inicio = profesional.horario_inicio
             horario_fin = profesional.horario_fin
 
-        # Verificar día laboral
         dias_semana = {
             0: 'lunes', 1: 'martes', 2: 'miercoles', 3: 'jueves',
             4: 'viernes', 5: 'sabado', 6: 'domingo'
         }
         dia_semana = dias_semana[fecha.weekday()]
 
-        # Si tiene días laborales configurados, verificar
         if profesional.dias_laborales and dia_semana not in profesional.dias_laborales:
             return Response({
                 'disponible': False,
@@ -155,54 +147,47 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 'slots': []
             })
 
-        # Obtener turnos existentes del profesional en esa fecha
         turnos_existentes = Turno.objects.filter(
             profesional=profesional,
             fecha_hora_inicio__date=fecha,
             estado__in=['PENDIENTE', 'CONFIRMADO']
         ).order_by('fecha_hora_inicio')
 
-        # Generar slots disponibles
         duracion_servicio = servicio.duracion_minutos
         intervalo = profesional.intervalo_minutos
 
-        # Crear lista de slots (usar timezone-aware datetimes)
         slots_disponibles = []
 
-        # Crear datetime naive y luego convertir a aware usando el timezone configurado
         hora_actual_naive = datetime.combine(fecha, horario_inicio)
         hora_fin_naive = datetime.combine(fecha, horario_fin)
 
-        # Hacer timezone-aware usando el timezone actual (que usa Django settings)
-        # Esto garantiza que las comparaciones con turnos de la DB sean correctas
         hora_actual = timezone.make_aware(hora_actual_naive)
         hora_fin = timezone.make_aware(hora_fin_naive)
 
         while hora_actual + timedelta(minutes=duracion_servicio) <= hora_fin:
-            # Verificar si este slot está disponible
             slot_fin = hora_actual + timedelta(minutes=duracion_servicio)
 
-            # Verificar conflictos con turnos existentes
             tiene_conflicto = False
+            turno_conflictivo = None
             for turno in turnos_existentes:
                 turno_inicio = turno.fecha_hora_inicio
                 turno_fin = turno.fecha_hora_fin
 
-                # Verificar overlap (ambos datetime son ahora aware)
                 if (hora_actual < turno_fin and slot_fin > turno_inicio):
                     tiene_conflicto = True
+                    turno_conflictivo = turno
                     break
 
             if not tiene_conflicto:
-                # Guardar solo la hora local (sin timezone info para el frontend)
                 slots_disponibles.append({
                     'hora': hora_actual.strftime('%H:%M'),
                     'hora_fin': slot_fin.strftime('%H:%M'),
                     'disponible': True
                 })
-
-            # Avanzar al siguiente slot
-            hora_actual += timedelta(minutes=intervalo)
+                hora_actual += timedelta(minutes=intervalo)
+            else:
+                fin_turno_local = turno_conflictivo.fecha_hora_fin.astimezone(hora_actual.tzinfo)
+                hora_actual = fin_turno_local
 
         return Response({
             'disponible': True,

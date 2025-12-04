@@ -279,8 +279,8 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (validateForm()) {
-      // Combinar fecha y hora en formato ISO
-      const fechaHoraInicio = `${selectedDate}T${selectedTime}:00`
+      // Incluir timezone de Argentina en formato ISO
+      const fechaHoraInicio = `${selectedDate}T${selectedTime}:00-03:00`
       const submitData = {
         ...formData,
         fecha_hora_inicio: fechaHoraInicio
