@@ -95,11 +95,11 @@ class AnalyticsCalculator:
         """
         # Filtro base de transacciones
         transactions_qs = Transaction.objects.filter(
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            date__gte=start_date,
+            date__lte=end_date
         )
         if sucursal_id:
-            transactions_qs = transactions_qs.filter(sucursal_id=sucursal_id)
+            transactions_qs = transactions_qs.filter(branch_id=sucursal_id)
 
         # Ingresos por tipo
         revenue_data = transactions_qs.filter(
@@ -114,8 +114,8 @@ class AnalyticsCalculator:
 
         # Filtro base de turnos
         turnos_qs = Turno.objects.filter(
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
         if sucursal_id:
             turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
@@ -185,13 +185,13 @@ class AnalyticsCalculator:
         granularity: 'day', 'week', 'month'
         """
         transactions_qs = Transaction.objects.filter(
-            fecha__gte=start_date,
-            fecha__lte=end_date,
+            date__gte=start_date,
+            date__lte=end_date,
             type__in=['INCOME_SERVICE', 'INCOME_PRODUCT', 'INCOME_OTHER']
         )
 
         if sucursal_id:
-            transactions_qs = transactions_qs.filter(sucursal_id=sucursal_id)
+            transactions_qs = transactions_qs.filter(branch_id=sucursal_id)
 
         # Seleccionar función de truncado según granularidad
         if granularity == 'month':
@@ -231,13 +231,13 @@ class AnalyticsCalculator:
         Obtiene distribución de ingresos por método de pago
         """
         transactions_qs = Transaction.objects.filter(
-            fecha__gte=start_date,
-            fecha__lte=end_date,
+            date__gte=start_date,
+            date__lte=end_date,
             type__in=['INCOME_SERVICE', 'INCOME_PRODUCT', 'INCOME_OTHER']
         )
 
         if sucursal_id:
-            transactions_qs = transactions_qs.filter(sucursal_id=sucursal_id)
+            transactions_qs = transactions_qs.filter(branch_id=sucursal_id)
 
         by_method = transactions_qs.values('payment_method').annotate(
             amount=Sum('amount'),
@@ -267,8 +267,8 @@ class AnalyticsCalculator:
         """
         turnos_qs = Turno.objects.filter(
             estado='COMPLETADO',
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
 
         if sucursal_id:
@@ -305,8 +305,8 @@ class AnalyticsCalculator:
 
         turnos_qs = Turno.objects.filter(
             estado='COMPLETADO',
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
 
         if sucursal_id:
@@ -367,8 +367,8 @@ class AnalyticsCalculator:
         # Obtener movimientos de salida (ventas)
         movimientos_qs = MovimientoInventario.objects.filter(
             tipo='SALIDA',
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
 
         if sucursal_id:
@@ -404,7 +404,7 @@ class AnalyticsCalculator:
         Calcula el Lifetime Value total de un cliente
         """
         ltv = Transaction.objects.filter(
-            cliente_id=cliente_id,
+            client_id=cliente_id,
             type__in=['INCOME_SERVICE', 'INCOME_PRODUCT']
         ).aggregate(
             total=Sum('amount')
@@ -420,7 +420,7 @@ class AnalyticsCalculator:
         visitas = list(Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
-        ).order_by('fecha').values_list('fecha', flat=True))
+        ).order_by('fecha_hora_inicio').values_list('fecha_hora_inicio', flat=True))
 
         if len(visitas) < 2:
             return None
@@ -446,7 +446,7 @@ class AnalyticsCalculator:
         # Obtener percentil 80 (top 20%) de LTV
         all_clients_ltv = Transaction.objects.filter(
             type__in=['INCOME_SERVICE', 'INCOME_PRODUCT']
-        ).values('cliente_id').annotate(
+        ).values('client_id').annotate(
             client_ltv=Sum('amount')
         ).order_by('-client_ltv')
 
@@ -466,12 +466,12 @@ class AnalyticsCalculator:
         last_visit = Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
-        ).order_by('-fecha', '-hora').first()
+        ).order_by('-fecha_hora_inicio').first()
 
         if not last_visit:
             return 'INACTIVE'
 
-        days_since_last = (timezone.now().date() - last_visit.fecha).days
+        days_since_last = (timezone.now().date() - last_visit.fecha_hora_inicio.date()).days
 
         # Determinar estado según días desde última visita
         if days_since_last <= 30:
@@ -518,8 +518,8 @@ class AnalyticsCalculator:
         """
         turnos_qs = Turno.objects.filter(
             estado='COMPLETADO',
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
 
         if sucursal_id:
@@ -542,8 +542,8 @@ class AnalyticsCalculator:
             from apps.empleados.models import Comision
             comisiones_total = Comision.objects.filter(
                 empleado_id=item['profesional__id'],
-                turno__fecha__gte=start_date,
-                turno__fecha__lte=end_date
+                turno__fecha_hora_inicio__date__gte=start_date,
+                turno__fecha_hora_inicio__date__lte=end_date
             ).aggregate(total=Sum('monto'))['total'] or 0
 
             result.append({
@@ -565,8 +565,8 @@ class AnalyticsCalculator:
         Calcula ocupación por día de la semana
         """
         turnos_qs = Turno.objects.filter(
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
 
         if sucursal_id:
@@ -606,8 +606,8 @@ class AnalyticsCalculator:
         Obtiene estadísticas de no-shows
         """
         turnos_qs = Turno.objects.filter(
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
         )
 
         if sucursal_id:

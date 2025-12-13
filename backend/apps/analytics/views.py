@@ -12,6 +12,7 @@ from django.views.decorators.cache import cache_page
 from django.core.cache import cache
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.db.models import Sum, Count, Q
 
 from .utils import AnalyticsCalculator
 from .permissions import IsAdminOrManager, CanViewClientAnalytics
@@ -432,12 +433,12 @@ class ClientSummaryView(APIView):
         first_visit = Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
-        ).order_by('fecha', 'hora').first()
+        ).order_by('fecha_hora_inicio').first()
 
         last_visit = Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
-        ).order_by('-fecha', '-hora').first()
+        ).order_by('-fecha_hora_inicio').first()
 
         # Total de visitas
         total_visits = Turno.objects.filter(
@@ -448,7 +449,7 @@ class ClientSummaryView(APIView):
         # Días desde última visita
         days_since_last = None
         if last_visit:
-            days_since_last = (timezone.now().date() - last_visit.fecha).days
+            days_since_last = (timezone.now().date() - last_visit.fecha_hora_inicio.date()).days
 
         # Ticket promedio
         avg_ticket = ltv / total_visits if total_visits > 0 else 0
@@ -471,8 +472,8 @@ class ClientSummaryView(APIView):
             'summary': {
                 'lifetime_value': ltv,
                 'total_visits': total_visits,
-                'first_visit': first_visit.fecha.isoformat() if first_visit else None,
-                'last_visit': last_visit.fecha.isoformat() if last_visit else None,
+                'first_visit': first_visit.fecha_hora_inicio.date().isoformat() if first_visit else None,
+                'last_visit': last_visit.fecha_hora_inicio.date().isoformat() if last_visit else None,
                 'days_since_last_visit': days_since_last,
                 'average_frequency_days': frequency,
                 'average_ticket': round(avg_ticket, 2),
@@ -501,12 +502,12 @@ class ClientSpendingView(APIView):
         start_date = end_date - timedelta(days=365)
 
         monthly_spending = Transaction.objects.filter(
-            cliente_id=cliente_id,
+            client_id=cliente_id,
             type__in=['INCOME_SERVICE', 'INCOME_PRODUCT'],
-            fecha__gte=start_date,
-            fecha__lte=end_date
+            date__gte=start_date,
+            date__lte=end_date
         ).annotate(
-            month=TruncMonth('fecha')
+            month=TruncMonth('date')
         ).values('month').annotate(
             amount=Sum('amount'),
             visits=Count('id')
@@ -527,7 +528,7 @@ class ClientSpendingView(APIView):
 
         # Distribución servicios vs productos
         distribution = Transaction.objects.filter(
-            cliente_id=cliente_id,
+            client_id=cliente_id,
             type__in=['INCOME_SERVICE', 'INCOME_PRODUCT']
         ).values('type').annotate(
             amount=Sum('amount')
@@ -571,13 +572,14 @@ class ClientPatternsView(APIView):
     def get(self, request, cliente_id):
         from apps.turnos.models import Turno
         from django.db.models.functions import ExtractWeekDay, ExtractHour
+        from django.db.models import Count
 
         # Días preferidos
         preferred_days = Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
         ).annotate(
-            weekday=ExtractWeekDay('fecha')
+            weekday=ExtractWeekDay('fecha_hora_inicio')
         ).values('weekday').annotate(
             count=Count('id')
         )
@@ -601,12 +603,13 @@ class ClientPatternsView(APIView):
         turnos_with_hour = Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
-        ).values_list('hora', flat=True)
+        ).annotate(
+            hour=ExtractHour('fecha_hora_inicio')
+        ).values_list('hour', flat=True)
 
         time_slots = {'morning': 0, 'afternoon': 0, 'evening': 0}
-        for hora in turnos_with_hour:
-            if hora:
-                hour = hora.hour
+        for hour in turnos_with_hour:
+            if hour is not None:
                 if 9 <= hour < 13:
                     time_slots['morning'] += 1
                 elif 13 <= hour < 18:
@@ -649,11 +652,11 @@ class ClientAlertsView(APIView):
         last_visit = Turno.objects.filter(
             cliente_id=cliente_id,
             estado='COMPLETADO'
-        ).order_by('-fecha', '-hora').first()
+        ).order_by('-fecha_hora_inicio').first()
 
         days_since_last = None
         if last_visit:
-            days_since_last = (timezone.now().date() - last_visit.fecha).days
+            days_since_last = (timezone.now().date() - last_visit.fecha_hora_inicio.date()).days
 
         alerts = []
         insights = []

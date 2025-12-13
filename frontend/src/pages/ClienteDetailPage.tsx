@@ -6,9 +6,10 @@ import { Button, Card, CardHeader, CardBody } from '@/components/ui'
 import NotasCliente from '@/components/clientes/NotasCliente'
 import PlanesTratamiento from '@/components/clientes/PlanesTratamiento'
 import RutinasCuidado from '@/components/clientes/RutinasCuidado'
+import ClientAnalyticsTab from '@/components/analytics/client/ClientAnalyticsTab'
 import { formatDateArgentina } from '@/utils/dateUtils'
 
-type Tab = 'overview' | 'planes' | 'rutinas' | 'notas'
+type Tab = 'overview' | 'planes' | 'rutinas' | 'notas' | 'analytics'
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -61,6 +62,7 @@ export default function ClienteDetailPage() {
     { id: 'planes', label: 'Planes de Tratamiento', icon: '📋' },
     { id: 'rutinas', label: 'Rutinas de Cuidado', icon: '🧴' },
     { id: 'notas', label: 'Notas', icon: '📝' },
+    { id: 'analytics', label: 'Analytics', icon: '📊' },
   ]
 
   return (
@@ -356,6 +358,10 @@ export default function ClienteDetailPage() {
               <NotasCliente clienteId={cliente.id} />
             </CardBody>
           </Card>
+        )}
+
+        {activeTab === 'analytics' && (
+          <ClientAnalyticsTab clienteId={cliente.id} />
         )}
       </div>
     </div>
