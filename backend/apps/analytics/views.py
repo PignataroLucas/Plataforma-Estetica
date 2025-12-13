@@ -714,3 +714,90 @@ class ClientAlertsView(APIView):
             'insights': insights,
             'recommendations': recommendations
         })
+
+
+class ClientProductsView(APIView):
+    """
+    GET /api/analytics/client/<cliente_id>/products/
+
+    Historial de productos comprados por el cliente
+    """
+    permission_classes = [IsAuthenticated, CanViewClientAnalytics]
+
+    def get(self, request, cliente_id):
+        from apps.finanzas.models import Transaction
+        from apps.inventario.models import Producto
+
+        # Verificar que el cliente existe
+        from apps.clientes.models import Cliente
+        try:
+            cliente = Cliente.objects.get(id=cliente_id)
+        except Cliente.DoesNotExist:
+            return Response({'error': 'Cliente no encontrado'}, status=404)
+
+        # Obtener transacciones de productos del cliente
+        product_transactions = Transaction.objects.filter(
+            client_id=cliente_id,
+            type='INCOME_PRODUCT',
+            product__isnull=False
+        ).select_related('product').order_by('-date')
+
+        # Si no hay compras de productos
+        if not product_transactions.exists():
+            return Response({
+                'has_purchases': False,
+                'message': 'Este cliente aún no ha comprado productos',
+                'top_products': [],
+                'recent_purchases': [],
+                'total_spent': 0,
+                'total_products': 0
+            })
+
+        # Top productos más comprados (por cantidad de transacciones)
+        top_products_data = Transaction.objects.filter(
+            client_id=cliente_id,
+            type='INCOME_PRODUCT',
+            product__isnull=False
+        ).values(
+            'product_id',
+            'product__nombre'
+        ).annotate(
+            quantity=Count('id'),
+            total_spent=Sum('amount')
+        ).order_by('-quantity')[:5]
+
+        top_products = []
+        for item in top_products_data:
+            top_products.append({
+                'product_id': item['product_id'],
+                'product_name': item['product__nombre'],
+                'quantity': item['quantity'],
+                'total_spent': float(item['total_spent'])
+            })
+
+        # Historial reciente (últimas 10 compras)
+        recent_purchases = []
+        for transaction in product_transactions[:10]:
+            recent_purchases.append({
+                'date': transaction.date.isoformat(),
+                'product_id': transaction.product.id,
+                'product_name': transaction.product.nombre,
+                'amount': float(transaction.amount),
+                'payment_method': transaction.payment_method
+            })
+
+        # Total gastado en productos
+        total_spent = product_transactions.aggregate(
+            total=Sum('amount')
+        )['total'] or 0
+
+        # Total de compras de productos
+        total_products = product_transactions.count()
+
+        return Response({
+            'has_purchases': True,
+            'top_products': top_products,
+            'recent_purchases': recent_purchases,
+            'total_spent': float(total_spent),
+            'total_products': total_products
+        })

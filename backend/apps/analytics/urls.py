@@ -19,6 +19,7 @@ from .views import (
     ClientSpendingView,
     ClientPatternsView,
     ClientAlertsView,
+    ClientProductsView,
 )
 
 urlpatterns = [
@@ -37,4 +38,5 @@ urlpatterns = [
     path('client/<int:cliente_id>/spending/', ClientSpendingView.as_view(), name='client-spending'),
     path('client/<int:cliente_id>/patterns/', ClientPatternsView.as_view(), name='client-patterns'),
     path('client/<int:cliente_id>/alerts/', ClientAlertsView.as_view(), name='client-alerts'),
+    path('client/<int:cliente_id>/products/', ClientProductsView.as_view(), name='client-products'),
 ]

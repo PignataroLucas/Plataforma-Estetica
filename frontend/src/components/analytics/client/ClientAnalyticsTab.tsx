@@ -2,6 +2,7 @@ import { useClientAnalytics } from '../../../hooks/useAnalytics';
 import ClientSummaryCard from './ClientSummaryCard';
 import ClientSpendingChart from './ClientSpendingChart';
 import ClientAlertsPanel from './ClientAlertsPanel';
+import ClientProductsHistory from './ClientProductsHistory';
 import {
   PieChart,
   Pie,
@@ -18,7 +19,7 @@ interface ClientAnalyticsTabProps {
 export default function ClientAnalyticsTab({
   clienteId,
 }: ClientAnalyticsTabProps) {
-  const { summary, spending, patterns, alerts, loading, error } =
+  const { summary, spending, patterns, alerts, products, loading, error } =
     useClientAnalytics(clienteId);
 
   if (error) {
@@ -220,6 +221,9 @@ export default function ClientAnalyticsTab({
           </div>
         </div>
       )}
+
+      {/* Products History */}
+      <ClientProductsHistory data={products} loading={loading} />
     </div>
   );
 }
