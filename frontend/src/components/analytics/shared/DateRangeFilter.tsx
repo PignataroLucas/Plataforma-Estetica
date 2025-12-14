@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 
 interface DateRangeFilterProps {
-  onChange: (range: { startDate: string; endDate: string }) => void;
+  onChange: (range: { startDate: string; endDate: string; compare?: boolean }) => void;
 }
 
 type PresetRange = '7days' | '30days' | '3months' | '6months' | 'thisMonth' | 'lastMonth' | 'custom';
@@ -12,6 +12,7 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
   const [preset, setPreset] = useState<PresetRange>('30days');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [compare, setCompare] = useState(false);
 
   const presets = [
     { value: '7days', label: 'Últimos 7 días' },
@@ -49,6 +50,7 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
         return {
           startDate: format(start, 'yyyy-MM-dd'),
           endDate: format(endOfMonth(lastMonth), 'yyyy-MM-dd'),
+          compare,
         };
       default:
         return null;
@@ -57,6 +59,7 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
     return {
       startDate: format(start, 'yyyy-MM-dd'),
       endDate: format(end, 'yyyy-MM-dd'),
+      compare,
     };
   };
 
@@ -73,7 +76,21 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
 
   const handleCustomApply = () => {
     if (customStart && customEnd) {
-      onChange({ startDate: customStart, endDate: customEnd });
+      onChange({ startDate: customStart, endDate: customEnd, compare });
+    }
+  };
+
+  const handleCompareChange = (checked: boolean) => {
+    setCompare(checked);
+
+    // Re-aplicar el rango actual con el nuevo valor de compare
+    if (preset !== 'custom') {
+      const range = getDateRange(preset);
+      if (range) {
+        onChange({ ...range, compare: checked });
+      }
+    } else if (customStart && customEnd) {
+      onChange({ startDate: customStart, endDate: customEnd, compare: checked });
     }
   };
 
@@ -133,6 +150,19 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
           </button>
         </div>
       )}
+
+      {/* Opción de comparación */}
+      <div className="mt-4 pt-4 border-t border-gray-200">
+        <label className="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={compare}
+            onChange={(e) => handleCompareChange(e.target.checked)}
+            className="mr-2"
+          />
+          <span className="text-sm text-gray-700">Comparar con período anterior</span>
+        </label>
+      </div>
     </div>
   );
 }

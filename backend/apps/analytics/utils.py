@@ -137,8 +137,8 @@ class AnalyticsCalculator:
 
         # Clientes nuevos (primera visita en este período)
         new_clients = Cliente.objects.filter(
-            created_at__gte=start_date,
-            created_at__lte=end_date
+            creado_en__date__gte=start_date,
+            creado_en__date__lte=end_date
         )
         if sucursal_id:
             new_clients = new_clients.filter(sucursal__id=sucursal_id)
@@ -206,7 +206,7 @@ class AnalyticsCalculator:
 
         # Agrupar por período
         evolution = transactions_qs.annotate(
-            period=trunc_func('fecha')
+            period=trunc_func('date')
         ).values('period').annotate(
             services_revenue=Sum('amount', filter=Q(type='INCOME_SERVICE')),
             products_revenue=Sum('amount', filter=Q(type='INCOME_PRODUCT')),
@@ -279,7 +279,7 @@ class AnalyticsCalculator:
             'servicio__nombre'
         ).annotate(
             quantity_sold=Count('id'),
-            revenue=Sum('precio_final')
+            revenue=Sum('monto_total')
         ).order_by('-quantity_sold')[:limit]
 
         result = []
@@ -320,7 +320,7 @@ class AnalyticsCalculator:
             'servicio__maquina_alquilada__costo_diario'
         ).annotate(
             quantity=Count('id'),
-            revenue=Sum('precio_final')
+            revenue=Sum('monto_total')
         )
 
         result = []
@@ -334,7 +334,7 @@ class AnalyticsCalculator:
                 # Obtener días únicos donde se usó el servicio
                 days_used = turnos_qs.filter(
                     servicio__id=item['servicio__id']
-                ).values('fecha').distinct().count()
+                ).dates('fecha_hora_inicio', 'day').count()
 
                 daily_cost = float(item['servicio__maquina_alquilada__costo_diario'] or 0)
                 cost = daily_cost * days_used
@@ -357,6 +357,77 @@ class AnalyticsCalculator:
 
         return result
 
+    @staticmethod
+    def get_service_evolution(sucursal_id=None, start_date=None, end_date=None, granularity='day'):
+        """
+        Obtiene la evolución temporal de los top 5 servicios
+        """
+        from datetime import datetime, timedelta
+        from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
+
+        # Primero obtener los top 5 servicios
+        top_services = AnalyticsCalculator.get_top_services(
+            sucursal_id=sucursal_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=5
+        )
+
+        if not top_services:
+            return []
+
+        top_service_ids = [s['service_id'] for s in top_services]
+
+        # Filtrar turnos por los top servicios
+        turnos_qs = Turno.objects.filter(
+            servicio_id__in=top_service_ids,
+            estado='COMPLETADO',
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
+        )
+
+        if sucursal_id:
+            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+
+        # Elegir función de truncamiento según granularidad
+        if granularity == 'week':
+            trunc_func = TruncWeek('fecha_hora_inicio')
+        elif granularity == 'month':
+            trunc_func = TruncMonth('fecha_hora_inicio')
+        else:  # 'day'
+            trunc_func = TruncDate('fecha_hora_inicio')
+
+        # Agrupar por fecha y servicio
+        evolution_data = turnos_qs.annotate(
+            period=trunc_func
+        ).values(
+            'period', 'servicio__id', 'servicio__nombre'
+        ).annotate(
+            count=Count('id')
+        ).order_by('period')
+
+        # Organizar datos por período
+        result_by_period = {}
+        for item in evolution_data:
+            period_str = item['period'].strftime('%Y-%m-%d')
+            if period_str not in result_by_period:
+                result_by_period[period_str] = {'date': period_str}
+
+            service_name = item['servicio__nombre']
+            result_by_period[period_str][service_name] = item['count']
+
+        # Asegurar que todos los servicios estén presentes en todos los períodos
+        service_names = [s['service_name'] for s in top_services]
+        for period_data in result_by_period.values():
+            for service_name in service_names:
+                if service_name not in period_data:
+                    period_data[service_name] = 0
+
+        # Convertir a lista ordenada por fecha
+        result = sorted(result_by_period.values(), key=lambda x: x['date'])
+
+        return result
+
     # ========== PRODUCT ANALYTICS ==========
 
     @staticmethod
@@ -367,8 +438,8 @@ class AnalyticsCalculator:
         # Obtener movimientos de salida (ventas)
         movimientos_qs = MovimientoInventario.objects.filter(
             tipo='SALIDA',
-            fecha_hora_inicio__date__gte=start_date,
-            fecha_hora_inicio__date__lte=end_date
+            creado_en__date__gte=start_date,
+            creado_en__date__lte=end_date
         )
 
         if sucursal_id:
@@ -501,7 +572,7 @@ class AnalyticsCalculator:
         # Esto puede ser lento con muchos clientes - considerar caché
         for cliente in clientes_qs:
             # Clientes nuevos (menos de 30 días)
-            if cliente.created_at and (timezone.now().date() - cliente.created_at.date()).days <= 30:
+            if cliente.creado_en and (timezone.now().date() - cliente.creado_en.date()).days <= 30:
                 segmentation['NEW'] += 1
             else:
                 status = AnalyticsCalculator.get_client_status(cliente.id)
@@ -531,7 +602,7 @@ class AnalyticsCalculator:
             'profesional__last_name'
         ).annotate(
             services_count=Count('id'),
-            revenue=Sum('precio_final')
+            revenue=Sum('monto_total')
         ).order_by('-revenue')
 
         result = []
@@ -539,12 +610,14 @@ class AnalyticsCalculator:
             avg_ticket = (item['revenue'] / item['services_count']) if item['services_count'] > 0 else 0
 
             # Obtener comisiones del empleado en el período
-            from apps.empleados.models import Comision
-            comisiones_total = Comision.objects.filter(
-                empleado_id=item['profesional__id'],
-                turno__fecha_hora_inicio__date__gte=start_date,
-                turno__fecha_hora_inicio__date__lte=end_date
-            ).aggregate(total=Sum('monto'))['total'] or 0
+            # TODO: Implementar cuando el modelo Comision esté disponible
+            # from apps.empleados.models import Comision
+            # comisiones_total = Comision.objects.filter(
+            #     empleado_id=item['profesional__id'],
+            #     turno__fecha_hora_inicio__date__gte=start_date,
+            #     turno__fecha_hora_inicio__date__lte=end_date
+            # ).aggregate(total=Sum('monto'))['total'] or 0
+            comisiones_total = 0
 
             result.append({
                 'employee_id': item['profesional__id'],
@@ -557,12 +630,116 @@ class AnalyticsCalculator:
 
         return result
 
+    @staticmethod
+    def get_workload_distribution(sucursal_id=None, start_date=None, end_date=None, group_by='weekday'):
+        """
+        Calcula distribución de carga de trabajo por empleado
+        group_by: 'weekday' o 'time_slot'
+        """
+        turnos_qs = Turno.objects.filter(
+            estado='COMPLETADO',
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
+        )
+
+        if sucursal_id:
+            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+
+        if group_by == 'weekday':
+            # Agrupar por día de la semana
+            workload = turnos_qs.annotate(
+                weekday=ExtractWeekDay('fecha_hora_inicio')
+            ).values(
+                'weekday',
+                'profesional__id',
+                'profesional__first_name',
+                'profesional__last_name'
+            ).annotate(
+                count=Count('id')
+            ).order_by('weekday', 'profesional__id')
+
+            days_map = {
+                1: 'Sunday',
+                2: 'Monday',
+                3: 'Tuesday',
+                4: 'Wednesday',
+                5: 'Thursday',
+                6: 'Friday',
+                7: 'Saturday'
+            }
+
+            # Organizar por día
+            result_by_day = {}
+            employee_names = {}
+
+            for item in workload:
+                day_name = days_map.get(item['weekday'], 'Unknown')
+                employee_id = item['profesional__id']
+                employee_name = f"{item['profesional__first_name']} {item['profesional__last_name']}"
+
+                if day_name not in result_by_day:
+                    result_by_day[day_name] = {'day': day_name}
+
+                result_by_day[day_name][employee_name] = item['count']
+                employee_names[employee_id] = employee_name
+
+            # Asegurar que todos los empleados estén en todos los días
+            all_employees = list(employee_names.values())
+            for day_data in result_by_day.values():
+                for employee_name in all_employees:
+                    if employee_name not in day_data:
+                        day_data[employee_name] = 0
+
+            # Ordenar días
+            ordered_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            result = [result_by_day[day] for day in ordered_days if day in result_by_day]
+
+        else:  # group_by == 'time_slot'
+            # Agrupar por franja horaria
+            time_slots = {
+                'Mañana': (6, 12),
+                'Tarde': (12, 18),
+                'Noche': (18, 24)
+            }
+
+            result = []
+            employee_names = {}
+
+            for slot_name, (start_hour, end_hour) in time_slots.items():
+                slot_data = {'time_slot': slot_name}
+
+                slot_turnos = turnos_qs.filter(
+                    fecha_hora_inicio__hour__gte=start_hour,
+                    fecha_hora_inicio__hour__lt=end_hour
+                ).values(
+                    'profesional__id',
+                    'profesional__first_name',
+                    'profesional__last_name'
+                ).annotate(
+                    count=Count('id')
+                )
+
+                for item in slot_turnos:
+                    employee_name = f"{item['profesional__first_name']} {item['profesional__last_name']}"
+                    slot_data[employee_name] = item['count']
+                    employee_names[item['profesional__id']] = employee_name
+
+                # Asegurar que todos los empleados estén en todas las franjas
+                all_employees = list(employee_names.values())
+                for employee_name in all_employees:
+                    if employee_name not in slot_data:
+                        slot_data[employee_name] = 0
+
+                result.append(slot_data)
+
+        return result
+
     # ========== OCCUPANCY ANALYTICS ==========
 
     @staticmethod
     def get_occupancy_by_day_of_week(sucursal_id=None, start_date=None, end_date=None):
         """
-        Calcula ocupación por día de la semana
+        Calcula ocupación por día de la semana con porcentaje
         """
         turnos_qs = Turno.objects.filter(
             fecha_hora_inicio__date__gte=start_date,
@@ -572,9 +749,16 @@ class AnalyticsCalculator:
         if sucursal_id:
             turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
 
+        # Calcular días totales en el rango para capacidad teórica
+        total_days = (end_date - start_date).days + 1
+        weeks = total_days / 7
+
+        # Capacidad teórica: 10 turnos por día (simplificado)
+        capacity_per_day = 10 * weeks
+
         # Contar turnos por día de semana
         by_weekday = turnos_qs.annotate(
-            weekday=ExtractWeekDay('fecha')
+            weekday=ExtractWeekDay('fecha_hora_inicio')
         ).values('weekday').annotate(
             total=Count('id'),
             completed=Count('id', filter=Q(estado='COMPLETADO'))
@@ -590,11 +774,85 @@ class AnalyticsCalculator:
             7: 'Saturday'
         }
 
-        result = {day: 0 for day in days_map.values()}
+        result = []
+        for day_num, day_name in days_map.items():
+            # Buscar datos para este día
+            day_data = next((item for item in by_weekday if item['weekday'] == day_num), None)
 
-        for item in by_weekday:
-            day_name = days_map.get(item['weekday'], 'Unknown')
-            result[day_name] = item['completed']
+            if day_data:
+                completed_count = day_data['completed']
+                occupancy_percentage = (completed_count / capacity_per_day * 100) if capacity_per_day > 0 else 0
+            else:
+                completed_count = 0
+                occupancy_percentage = 0
+
+            result.append({
+                'day': day_name,
+                'count': completed_count,
+                'occupancy_percentage': round(min(occupancy_percentage, 100), 1)  # Cap at 100%
+            })
+
+        return result
+
+    @staticmethod
+    def get_occupancy_heatmap(sucursal_id=None, start_date=None, end_date=None):
+        """
+        Calcula ocupación por día de semana y franja horaria
+        Franjas: Morning (6-12), Afternoon (12-18), Evening (18-24)
+        """
+        from datetime import time
+
+        turnos_qs = Turno.objects.filter(
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date,
+            estado__in=['COMPLETADO', 'CONFIRMADO']
+        )
+
+        if sucursal_id:
+            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+
+        # Definir franjas horarias
+        time_slots = {
+            'morning': (6, 12),
+            'afternoon': (12, 18),
+            'evening': (18, 24)
+        }
+
+        days_map = {
+            1: 'Sunday',
+            2: 'Monday',
+            3: 'Tuesday',
+            4: 'Wednesday',
+            5: 'Thursday',
+            6: 'Friday',
+            7: 'Saturday'
+        }
+
+        # Calcular total de días en el rango para capacidad teórica
+        total_days = (end_date - start_date).days + 1
+        weeks = total_days / 7
+
+        # Capacidad teórica: 8 turnos por hora, asumiendo 1 empleado
+        # Esto es simplificado - en producción debería considerar empleados disponibles
+        capacity_per_slot = 8 * 6 * weeks  # 8 turnos/hora * 6 horas por franja * semanas
+
+        result = []
+        for day_num, day_name in days_map.items():
+            day_data = {'day': day_name}
+
+            for slot_name, (start_hour, end_hour) in time_slots.items():
+                # Contar turnos en esta franja
+                count = turnos_qs.filter(
+                    fecha_hora_inicio__iso_week_day=day_num,
+                    fecha_hora_inicio__hour__gte=start_hour,
+                    fecha_hora_inicio__hour__lt=end_hour
+                ).count()
+
+                # Calcular porcentaje de ocupación
+                occupancy_percentage = (count / capacity_per_slot * 100) if capacity_per_slot > 0 else 0
+                day_data[slot_name] = round(min(occupancy_percentage, 100), 1)  # Cap at 100%
+
+            result.append(day_data)
 
         return result
 

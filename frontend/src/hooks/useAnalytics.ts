@@ -6,6 +6,7 @@ interface AnalyticsFilters {
   endDate?: string;
   sucursalId?: number;
   granularity?: 'day' | 'week' | 'month';
+  compare?: boolean;
 }
 
 export function useAnalytics(filters: AnalyticsFilters = {}) {
@@ -22,7 +23,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [filters.startDate, filters.endDate, filters.sucursalId, filters.granularity]);
+  }, [filters.startDate, filters.endDate, filters.sucursalId, filters.granularity, filters.compare]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -35,6 +36,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
       if (filters.endDate) params.append('end_date', filters.endDate);
       if (filters.sucursalId) params.append('sucursal_id', filters.sucursalId.toString());
       if (filters.granularity) params.append('granularity', filters.granularity);
+      if (filters.compare) params.append('compare', 'true');
 
       const queryString = params.toString();
 

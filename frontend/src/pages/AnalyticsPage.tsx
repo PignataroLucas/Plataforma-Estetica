@@ -5,14 +5,25 @@ import DateRangeFilter from '../components/analytics/shared/DateRangeFilter';
 import RevenueChart from '../components/analytics/dashboard/RevenueChart';
 import TopServicesChart from '../components/analytics/dashboard/TopServicesChart';
 import TopProductsChart from '../components/analytics/dashboard/TopProductsChart';
+import PaymentMethodChart from '../components/analytics/dashboard/PaymentMethodChart';
+import RevenueComparisonChart from '../components/analytics/dashboard/RevenueComparisonChart';
+import ServiceProfitabilityChart from '../components/analytics/dashboard/ServiceProfitabilityChart';
+import OccupancyHeatmap from '../components/analytics/dashboard/OccupancyHeatmap';
+import WeekdayOccupancyChart from '../components/analytics/dashboard/WeekdayOccupancyChart';
+import ServicesEvolutionChart from '../components/analytics/dashboard/ServicesEvolutionChart';
+import WorkloadDistributionChart from '../components/analytics/dashboard/WorkloadDistributionChart';
 
 export default function AnalyticsPage() {
-  const [dateRange, setDateRange] = useState({
+  const [dateRange, setDateRange] = useState<{
+    startDate: string;
+    endDate: string;
+    compare?: boolean;
+  }>({
     startDate: '',
     endDate: '',
   });
 
-  const { summary, revenue, services, products, loading, error } =
+  const { summary, revenue, services, products, employees, ocupacion, loading, error } =
     useAnalytics(dateRange);
 
   if (error) {
@@ -128,6 +139,48 @@ export default function AnalyticsPage() {
             {/* Revenue Chart */}
             <RevenueChart
               data={revenue?.evolution || []}
+              loading={loading}
+            />
+
+            {/* Payment Method Distribution */}
+            <PaymentMethodChart
+              data={revenue?.by_payment_method || []}
+              loading={loading}
+            />
+
+            {/* Period Comparison */}
+            <RevenueComparisonChart
+              data={revenue?.comparison || null}
+              loading={loading}
+            />
+
+            {/* Service Profitability Analysis */}
+            <ServiceProfitabilityChart
+              data={services?.profitability || []}
+              loading={loading}
+            />
+
+            {/* Occupancy Heatmap */}
+            <OccupancyHeatmap
+              data={ocupacion?.heatmap || []}
+              loading={loading}
+            />
+
+            {/* Weekday Occupancy */}
+            <WeekdayOccupancyChart
+              data={ocupacion?.by_weekday || []}
+              loading={loading}
+            />
+
+            {/* Services Evolution */}
+            <ServicesEvolutionChart
+              data={services?.evolution || []}
+              loading={loading}
+            />
+
+            {/* Workload Distribution */}
+            <WorkloadDistributionChart
+              data={employees?.workload_distribution || []}
               loading={loading}
             />
 

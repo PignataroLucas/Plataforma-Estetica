@@ -40,17 +40,16 @@ class DashboardSummaryView(APIView):
         sucursal_id = request.query_params.get('sucursal_id')
 
         # Validar y parsear fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            # Default: últimos 30 días
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
+
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            # Default: últimos 30 días
+            start_date = end_date - timedelta(days=30)
 
         # Convertir sucursal_id a int si existe
         if sucursal_id:
@@ -91,16 +90,15 @@ class RevenueAnalyticsView(APIView):
         compare = request.query_params.get('compare', 'false').lower() == 'true'
 
         # Validar fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
+
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            start_date = end_date - timedelta(days=30)
 
         if sucursal_id:
             sucursal_id = int(sucursal_id)
@@ -172,18 +170,18 @@ class ServiceAnalyticsView(APIView):
         end_date = request.query_params.get('end_date')
         sucursal_id = request.query_params.get('sucursal_id')
         limit = int(request.query_params.get('limit', 10))
+        granularity = request.query_params.get('granularity', 'day')
 
         # Parsear fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
+
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            start_date = end_date - timedelta(days=30)
 
         if sucursal_id:
             sucursal_id = int(sucursal_id)
@@ -203,9 +201,18 @@ class ServiceAnalyticsView(APIView):
             end_date=end_date
         )
 
+        # Obtener evolución de servicios
+        evolution = AnalyticsCalculator.get_service_evolution(
+            sucursal_id=sucursal_id,
+            start_date=start_date,
+            end_date=end_date,
+            granularity=granularity
+        )
+
         return Response({
             'top_services': top_services,
-            'profitability': profitability
+            'profitability': profitability,
+            'evolution': evolution
         })
 
 
@@ -225,16 +232,15 @@ class ProductAnalyticsView(APIView):
         limit = int(request.query_params.get('limit', 10))
 
         # Parsear fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
+
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            start_date = end_date - timedelta(days=30)
 
         if sucursal_id:
             sucursal_id = int(sucursal_id)
@@ -267,19 +273,20 @@ class EmployeePerformanceView(APIView):
         sucursal_id = request.query_params.get('sucursal_id')
 
         # Parsear fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
 
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            start_date = end_date - timedelta(days=30)
+
         if sucursal_id:
             sucursal_id = int(sucursal_id)
+
+        group_by = request.query_params.get('group_by', 'weekday')
 
         # Obtener performance
         performance = AnalyticsCalculator.get_employee_performance(
@@ -288,8 +295,17 @@ class EmployeePerformanceView(APIView):
             end_date=end_date
         )
 
+        # Obtener distribución de carga de trabajo
+        workload_distribution = AnalyticsCalculator.get_workload_distribution(
+            sucursal_id=sucursal_id,
+            start_date=start_date,
+            end_date=end_date,
+            group_by=group_by
+        )
+
         return Response({
-            'employee_performance': performance
+            'employee_performance': performance,
+            'workload_distribution': workload_distribution
         })
 
 
@@ -336,16 +352,15 @@ class OccupancyAnalyticsView(APIView):
         sucursal_id = request.query_params.get('sucursal_id')
 
         # Parsear fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
+
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            start_date = end_date - timedelta(days=30)
 
         if sucursal_id:
             sucursal_id = int(sucursal_id)
@@ -357,8 +372,16 @@ class OccupancyAnalyticsView(APIView):
             end_date=end_date
         )
 
+        # Obtener heatmap de ocupación
+        heatmap = AnalyticsCalculator.get_occupancy_heatmap(
+            sucursal_id=sucursal_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+
         return Response({
-            'by_weekday': by_weekday
+            'by_weekday': by_weekday,
+            'heatmap': heatmap
         })
 
 
@@ -377,16 +400,15 @@ class NoShowAnalyticsView(APIView):
         sucursal_id = request.query_params.get('sucursal_id')
 
         # Parsear fechas
-        if start_date:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        else:
-            end_date = timezone.now().date()
-            start_date = end_date - timedelta(days=30)
-
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             end_date = timezone.now().date()
+
+        if start_date:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        else:
+            start_date = end_date - timedelta(days=30)
 
         if sucursal_id:
             sucursal_id = int(sucursal_id)
