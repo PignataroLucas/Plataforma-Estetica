@@ -4,7 +4,7 @@ Contiene funciones para agregaciones SQL optimizadas y cálculos de métricas
 """
 
 from django.db.models import Sum, Count, Avg, Q, F, FloatField, DecimalField, ExpressionWrapper
-from django.db.models.functions import TruncMonth, TruncWeek, TruncDay, ExtractWeekDay, ExtractHour
+from django.db.models.functions import TruncMonth, TruncWeek, TruncDay, ExtractWeekDay, ExtractHour, ExtractMonth
 from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -579,6 +579,302 @@ class AnalyticsCalculator:
                 segmentation[status] += 1
 
         return segmentation
+
+    @staticmethod
+    def get_top_clients(sucursal_id=None, limit=20):
+        """
+        Obtiene los top clientes por LTV (Lifetime Value)
+        """
+        from apps.finanzas.models import Transaction
+
+        # Obtener clientes
+        clientes_qs = Cliente.objects.all()
+        if sucursal_id:
+            clientes_qs = clientes_qs.filter(centro_estetica__sucursales__id=sucursal_id)
+
+        # Calcular LTV por cliente usando transacciones
+        clients_data = []
+        for cliente in clientes_qs:
+            # Calcular LTV (total gastado)
+            ltv = Transaction.objects.filter(
+                client_id=cliente.id,
+                type__in=['INCOME_SERVICE', 'INCOME_PRODUCT']
+            ).aggregate(total=Sum('amount'))['total'] or 0
+
+            # Contar visitas (turnos completados)
+            visits_count = Turno.objects.filter(
+                cliente_id=cliente.id,
+                estado='COMPLETADO'
+            ).count()
+
+            # Última visita
+            last_visit = Turno.objects.filter(
+                cliente_id=cliente.id,
+                estado='COMPLETADO'
+            ).order_by('-fecha_hora_inicio').first()
+
+            last_visit_date = last_visit.fecha_hora_inicio.date() if last_visit else None
+
+            # Determinar estado
+            status = AnalyticsCalculator.get_client_status(cliente.id)
+
+            if ltv > 0 or visits_count > 0:  # Solo incluir clientes con actividad
+                clients_data.append({
+                    'client_id': cliente.id,
+                    'client_name': f"{cliente.nombre} {cliente.apellido}",
+                    'email': cliente.email or '',
+                    'phone': cliente.telefono or '',
+                    'ltv': float(ltv),
+                    'visits_count': visits_count,
+                    'last_visit': last_visit_date.isoformat() if last_visit_date else None,
+                    'status': status
+                })
+
+        # Ordenar por LTV descendente y tomar top N
+        clients_data.sort(key=lambda x: x['ltv'], reverse=True)
+        return clients_data[:limit]
+
+    @staticmethod
+    def get_ltv_distribution(sucursal_id=None):
+        """
+        Obtiene la distribución de clientes por rangos de LTV
+        """
+        from apps.finanzas.models import Transaction
+
+        # Definir rangos de LTV (max_value None significa infinito para el último rango)
+        ranges = [
+            {'label': '$0 - $5,000', 'min': 0, 'max': 5000},
+            {'label': '$5,000 - $10,000', 'min': 5000, 'max': 10000},
+            {'label': '$10,000 - $20,000', 'min': 10000, 'max': 20000},
+            {'label': '$20,000 - $50,000', 'min': 20000, 'max': 50000},
+            {'label': '$50,000+', 'min': 50000, 'max': None}  # None = sin límite superior
+        ]
+
+        # Obtener clientes
+        clientes_qs = Cliente.objects.all()
+        if sucursal_id:
+            clientes_qs = clientes_qs.filter(centro_estetica__sucursales__id=sucursal_id)
+
+        # Inicializar contadores
+        distribution = {r['label']: 0 for r in ranges}
+
+        # Calcular LTV para cada cliente y clasificar
+        for cliente in clientes_qs:
+            ltv = Transaction.objects.filter(
+                client_id=cliente.id,
+                type__in=['INCOME_SERVICE', 'INCOME_PRODUCT']
+            ).aggregate(total=Sum('amount'))['total'] or 0
+
+            # Clasificar en rango
+            for range_def in ranges:
+                max_val = range_def['max']
+                if max_val is None:  # Último rango sin límite superior
+                    if ltv >= range_def['min']:
+                        distribution[range_def['label']] += 1
+                        break
+                elif range_def['min'] <= ltv < max_val:
+                    distribution[range_def['label']] += 1
+                    break
+
+        # Convertir a formato de respuesta
+        result = [
+            {
+                'range': label,
+                'count': count,
+                'min_value': next(r['min'] for r in ranges if r['label'] == label),
+                'max_value': next(r['max'] for r in ranges if r['label'] == label)
+            }
+            for label, count in distribution.items()
+        ]
+
+        return result
+
+    @staticmethod
+    def get_seasonal_trends(sucursal_id=None, year=None):
+        """
+        Obtiene tendencias estacionales por mes y trimestre
+        """
+        from datetime import datetime
+        from apps.finanzas.models import Transaction
+
+        # Si no se especifica año, usar el actual
+        if not year:
+            year = datetime.now().year
+
+        # Filtrar turnos completados del año
+        turnos_qs = Turno.objects.filter(
+            estado='COMPLETADO',
+            fecha_hora_inicio__year=year
+        )
+
+        if sucursal_id:
+            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+
+        # Agrupar por mes
+        monthly_data = turnos_qs.annotate(
+            month=ExtractMonth('fecha_hora_inicio')
+        ).values('month').annotate(
+            appointments=Count('id'),
+            revenue=Sum('monto_total')
+        ).order_by('month')
+
+        # Convertir a diccionario para fácil acceso
+        monthly_dict = {item['month']: item for item in monthly_data}
+
+        # Nombres de meses en español
+        month_names = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ]
+
+        # Crear resultado con todos los meses (incluso si no hay datos)
+        monthly_trends = []
+        for month_num in range(1, 13):
+            data = monthly_dict.get(month_num, {'appointments': 0, 'revenue': 0})
+            monthly_trends.append({
+                'month': month_num,
+                'month_name': month_names[month_num - 1],
+                'appointments': data['appointments'],
+                'revenue': float(data['revenue'] or 0),
+                'avg_ticket': float(data['revenue'] / data['appointments']) if data['appointments'] > 0 else 0
+            })
+
+        # Agrupar por trimestre
+        quarterly_data = []
+        quarters = [
+            {'name': 'Q1', 'months': [1, 2, 3]},
+            {'name': 'Q2', 'months': [4, 5, 6]},
+            {'name': 'Q3', 'months': [7, 8, 9]},
+            {'name': 'Q4', 'months': [10, 11, 12]}
+        ]
+
+        for quarter in quarters:
+            quarter_turnos = [m for m in monthly_trends if m['month'] in quarter['months']]
+            total_appointments = sum(m['appointments'] for m in quarter_turnos)
+            total_revenue = sum(m['revenue'] for m in quarter_turnos)
+
+            quarterly_data.append({
+                'quarter': quarter['name'],
+                'appointments': total_appointments,
+                'revenue': total_revenue,
+                'avg_ticket': total_revenue / total_appointments if total_appointments > 0 else 0
+            })
+
+        # Identificar mes pico
+        peak_month = max(monthly_trends, key=lambda x: x['revenue'])
+        lowest_month = min(monthly_trends, key=lambda x: x['revenue'])
+
+        return {
+            'year': year,
+            'monthly_trends': monthly_trends,
+            'quarterly_trends': quarterly_data,
+            'peak_month': peak_month['month_name'],
+            'peak_revenue': peak_month['revenue'],
+            'lowest_month': lowest_month['month_name'],
+            'lowest_revenue': lowest_month['revenue'],
+            'total_year_revenue': sum(m['revenue'] for m in monthly_trends),
+            'total_year_appointments': sum(m['appointments'] for m in monthly_trends)
+        }
+
+    @staticmethod
+    def get_inventory_rotation(sucursal_id=None, days=90):
+        """
+        Obtiene análisis de rotación de inventario de productos
+        """
+        from apps.inventario.models import Producto
+        from apps.finanzas.models import Transaction
+        from datetime import datetime, timedelta
+        from django.utils import timezone
+
+        # Fecha de inicio para el período de análisis
+        start_date = timezone.now().date() - timedelta(days=days)
+
+        # Obtener productos
+        productos_qs = Producto.objects.filter(activo=True)
+        if sucursal_id:
+            productos_qs = productos_qs.filter(sucursal_id=sucursal_id)
+
+        rotation_data = []
+
+        for producto in productos_qs:
+            # Calcular ventas en el período
+            sales = Transaction.objects.filter(
+                type='INCOME_PRODUCT',
+                description__icontains=producto.nombre,  # Assuming product name is in description
+                date__gte=start_date
+            ).count()
+
+            # Stock actual
+            current_stock = float(producto.stock_actual)
+
+            # Calcular tasa de rotación (ventas / días del período)
+            rotation_rate = sales / days if days > 0 else 0
+
+            # Días de inventario restante (stock / tasa de rotación diaria)
+            days_of_inventory = current_stock / rotation_rate if rotation_rate > 0 else 999
+
+            # Clasificar velocidad de rotación
+            if rotation_rate >= 1:  # Más de 1 venta por día
+                speed = 'FAST'
+                speed_label = 'Rápida'
+            elif rotation_rate >= 0.3:  # Al menos 1 venta cada 3 días
+                speed = 'MEDIUM'
+                speed_label = 'Media'
+            elif rotation_rate > 0:
+                speed = 'SLOW'
+                speed_label = 'Lenta'
+            else:
+                speed = 'DEAD'
+                speed_label = 'Sin Movimiento'
+
+            # Valorización del stock (stock * precio)
+            stock_value = current_stock * float(producto.precio_venta or 0)
+
+            rotation_data.append({
+                'product_id': producto.id,
+                'product_name': producto.nombre,
+                'category': getattr(producto.categoria, 'nombre', 'Sin categoría') if hasattr(producto, 'categoria') else 'Sin categoría',
+                'current_stock': current_stock,
+                'sales_count': sales,
+                'rotation_rate': round(rotation_rate, 2),
+                'days_of_inventory': min(days_of_inventory, 999),  # Cap at 999 for display
+                'speed': speed,
+                'speed_label': speed_label,
+                'stock_value': float(stock_value),
+                'unit_price': float(producto.precio_venta or 0)
+            })
+
+        # Ordenar por tasa de rotación descendente
+        rotation_data.sort(key=lambda x: x['rotation_rate'], reverse=True)
+
+        # Calcular estadísticas agregadas
+        total_stock_value = sum(item['stock_value'] for item in rotation_data)
+        fast_moving = len([item for item in rotation_data if item['speed'] == 'FAST'])
+        medium_moving = len([item for item in rotation_data if item['speed'] == 'MEDIUM'])
+        slow_moving = len([item for item in rotation_data if item['speed'] == 'SLOW'])
+        dead_stock = len([item for item in rotation_data if item['speed'] == 'DEAD'])
+
+        # Top 10 productos de mayor rotación
+        top_rotation = rotation_data[:10]
+
+        # Productos sin movimiento (dead stock)
+        dead_stock_items = [item for item in rotation_data if item['speed'] == 'DEAD']
+
+        return {
+            'period_days': days,
+            'products': rotation_data,
+            'top_rotation': top_rotation,
+            'dead_stock_items': dead_stock_items,
+            'summary': {
+                'total_products': len(rotation_data),
+                'total_stock_value': total_stock_value,
+                'fast_moving_count': fast_moving,
+                'medium_moving_count': medium_moving,
+                'slow_moving_count': slow_moving,
+                'dead_stock_count': dead_stock,
+                'avg_rotation_rate': sum(item['rotation_rate'] for item in rotation_data) / len(rotation_data) if rotation_data else 0
+            }
+        }
 
     # ========== EMPLOYEE ANALYTICS ==========
 

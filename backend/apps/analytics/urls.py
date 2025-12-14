@@ -12,6 +12,7 @@ from .views import (
     EmployeePerformanceView,
     ClientAnalyticsView,
     OccupancyAnalyticsView,
+    SeasonalTrendsView,
     NoShowAnalyticsView,
 
     # Cliente Individual
@@ -31,6 +32,7 @@ urlpatterns = [
     path('dashboard/employees/', EmployeePerformanceView.as_view(), name='dashboard-employees'),
     path('dashboard/clients/', ClientAnalyticsView.as_view(), name='dashboard-clients'),
     path('dashboard/ocupacion/', OccupancyAnalyticsView.as_view(), name='dashboard-ocupacion'),
+    path('dashboard/seasonal-trends/', SeasonalTrendsView.as_view(), name='dashboard-seasonal-trends'),
     path('dashboard/no-shows/', NoShowAnalyticsView.as_view(), name='dashboard-no-shows'),
 
     # ========== ANALYTICS DE CLIENTE INDIVIDUAL ==========

@@ -253,8 +253,16 @@ class ProductAnalyticsView(APIView):
             limit=limit
         )
 
+        # Obtener rotación de inventario
+        days = int(request.query_params.get('rotation_days', 90))
+        inventory_rotation = AnalyticsCalculator.get_inventory_rotation(
+            sucursal_id=sucursal_id,
+            days=days
+        )
+
         return Response({
-            'top_products': top_products
+            'top_products': top_products,
+            'inventory_rotation': inventory_rotation
         })
 
 
@@ -324,16 +332,28 @@ class ClientAnalyticsView(APIView):
         if sucursal_id:
             sucursal_id = int(sucursal_id)
 
+        limit = int(request.query_params.get('limit', 20))
+
         # Obtener segmentación
         segmentation = AnalyticsCalculator.get_client_segmentation(
             sucursal_id=sucursal_id
         )
 
-        # TODO: Implementar top_clients (requiere más lógica)
-        # Por ahora retornamos solo segmentación
+        # Obtener top clientes
+        top_clients = AnalyticsCalculator.get_top_clients(
+            sucursal_id=sucursal_id,
+            limit=limit
+        )
+
+        # Obtener distribución de LTV
+        ltv_distribution = AnalyticsCalculator.get_ltv_distribution(
+            sucursal_id=sucursal_id
+        )
 
         return Response({
-            'segmentation': segmentation
+            'segmentation': segmentation,
+            'top_clients': top_clients,
+            'ltv_distribution': ltv_distribution
         })
 
 
@@ -383,6 +403,33 @@ class OccupancyAnalyticsView(APIView):
             'by_weekday': by_weekday,
             'heatmap': heatmap
         })
+
+
+class SeasonalTrendsView(APIView):
+    """
+    GET /api/analytics/dashboard/seasonal-trends/
+
+    Tendencias estacionales por mes y trimestre
+    """
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+
+    @method_decorator(cache_page(60 * 15))
+    def get(self, request):
+        sucursal_id = request.query_params.get('sucursal_id')
+        year = request.query_params.get('year')
+
+        if sucursal_id:
+            sucursal_id = int(sucursal_id)
+
+        if year:
+            year = int(year)
+
+        trends = AnalyticsCalculator.get_seasonal_trends(
+            sucursal_id=sucursal_id,
+            year=year
+        )
+
+        return Response(trends)
 
 
 class NoShowAnalyticsView(APIView):

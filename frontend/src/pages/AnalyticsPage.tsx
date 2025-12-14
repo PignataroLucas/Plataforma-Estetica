@@ -12,6 +12,10 @@ import OccupancyHeatmap from '../components/analytics/dashboard/OccupancyHeatmap
 import WeekdayOccupancyChart from '../components/analytics/dashboard/WeekdayOccupancyChart';
 import ServicesEvolutionChart from '../components/analytics/dashboard/ServicesEvolutionChart';
 import WorkloadDistributionChart from '../components/analytics/dashboard/WorkloadDistributionChart';
+import TopClientsTable from '../components/analytics/dashboard/TopClientsTable';
+import LTVDistributionChart from '../components/analytics/dashboard/LTVDistributionChart';
+import SeasonalTrendsChart from '../components/analytics/dashboard/SeasonalTrendsChart';
+import InventoryRotationChart from '../components/analytics/dashboard/InventoryRotationChart';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<{
@@ -23,7 +27,7 @@ export default function AnalyticsPage() {
     endDate: '',
   });
 
-  const { summary, revenue, services, products, employees, ocupacion, loading, error } =
+  const { summary, revenue, services, products, employees, clients, ocupacion, seasonalTrends, loading, error } =
     useAnalytics(dateRange);
 
   if (error) {
@@ -195,6 +199,30 @@ export default function AnalyticsPage() {
                 loading={loading}
               />
             </div>
+
+            {/* Top Clients */}
+            <TopClientsTable
+              data={clients?.top_clients || []}
+              loading={loading}
+            />
+
+            {/* LTV Distribution */}
+            <LTVDistributionChart
+              data={clients?.ltv_distribution || []}
+              loading={loading}
+            />
+
+            {/* Seasonal Trends */}
+            <SeasonalTrendsChart
+              data={seasonalTrends}
+              loading={loading}
+            />
+
+            {/* Inventory Rotation */}
+            <InventoryRotationChart
+              data={products?.inventory_rotation || null}
+              loading={loading}
+            />
 
             {/* Additional Info */}
             {summary?.kpis && (
