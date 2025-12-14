@@ -103,48 +103,45 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
   }, []);
 
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <h3 className="text-sm font-medium text-gray-700 mb-3">Período</h3>
-
-      <div className="space-y-2">
+    <div className="flex flex-wrap items-center gap-4">
+      {/* Botones de preset en formato horizontal */}
+      <div className="flex flex-wrap gap-2">
         {presets.map((p) => (
-          <label key={p.value} className="flex items-center cursor-pointer">
-            <input
-              type="radio"
-              name="dateRange"
-              value={p.value}
-              checked={preset === p.value}
-              onChange={(e) => handlePresetChange(e.target.value as PresetRange)}
-              className="mr-2"
-            />
-            <span className="text-sm text-gray-700">{p.label}</span>
-          </label>
+          <button
+            key={p.value}
+            onClick={() => handlePresetChange(p.value as PresetRange)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              preset === p.value
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {p.label}
+          </button>
         ))}
       </div>
 
+      {/* Inputs personalizados si está en modo custom */}
       {preset === 'custom' && (
-        <div className="mt-4 space-y-2">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Desde</label>
-            <input
-              type="date"
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Hasta</label>
-            <input
-              type="date"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={customStart}
+            onChange={(e) => setCustomStart(e.target.value)}
+            placeholder="Desde"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
+          <span className="text-gray-500">→</span>
+          <input
+            type="date"
+            value={customEnd}
+            onChange={(e) => setCustomEnd(e.target.value)}
+            placeholder="Hasta"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
           <button
             onClick={handleCustomApply}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-blue-700"
+            className="bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-blue-700"
           >
             Aplicar
           </button>
@@ -152,15 +149,15 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
       )}
 
       {/* Opción de comparación */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <label className="flex items-center cursor-pointer">
+      <div className="ml-auto">
+        <label className="flex items-center gap-2 cursor-pointer bg-white px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">
           <input
             type="checkbox"
             checked={compare}
             onChange={(e) => handleCompareChange(e.target.checked)}
-            className="mr-2"
+            className="w-4 h-4"
           />
-          <span className="text-sm text-gray-700">Comparar con período anterior</span>
+          <span className="text-sm text-gray-700">Comparar períodos</span>
         </label>
       </div>
     </div>
