@@ -686,9 +686,89 @@ class ClientPatternsView(APIView):
                 elif 18 <= hour < 21:
                     time_slots['evening'] += 1
 
+        # Servicios favoritos
+        from django.db.models import Sum, Max
+        favorite_services = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO'
+        ).values(
+            'servicio__id',
+            'servicio__nombre'
+        ).annotate(
+            count=Count('id'),
+            total_spent=Sum('monto_total'),
+            last_visit=Max('fecha_hora_inicio')
+        ).order_by('-count')[:10]
+
+        # Calcular total de visitas para porcentajes
+        total_visits = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO'
+        ).count()
+
+        favorite_services_data = []
+        for service in favorite_services:
+            favorite_services_data.append({
+                'service_id': service['servicio__id'],
+                'service_name': service['servicio__nombre'],
+                'count': service['count'],
+                'total_spent': float(service['total_spent'] or 0),
+                'percentage': round((service['count'] / total_visits * 100), 2) if total_visits > 0 else 0,
+                'last_visit': service['last_visit'].isoformat() if service['last_visit'] else None
+            })
+
+        # Servicios por mes (últimos 12 meses)
+        from django.utils import timezone
+        from dateutil.relativedelta import relativedelta
+        from django.db.models.functions import TruncMonth
+
+        end_date = timezone.now().date()
+        start_date = end_date - relativedelta(months=11)
+
+        monthly_services = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO',
+            fecha_hora_inicio__date__gte=start_date,
+            fecha_hora_inicio__date__lte=end_date
+        ).annotate(
+            month=TruncMonth('fecha_hora_inicio')
+        ).values('month').annotate(
+            count=Count('id'),
+            total_amount=Sum('monto_total')
+        ).order_by('month')
+
+        # Crear estructura con todos los meses
+        monthly_services_data = []
+        current_date = start_date.replace(day=1)
+
+        # Convertir resultados a diccionario para fácil acceso
+        monthly_dict = {}
+        for item in monthly_services:
+            month_key = item['month'].strftime('%Y-%m')
+            monthly_dict[month_key] = {
+                'count': item['count'],
+                'total_amount': float(item['total_amount'] or 0)
+            }
+
+        # Generar datos para todos los meses
+        for _ in range(12):
+            month_key = current_date.strftime('%Y-%m')
+            month_data = monthly_dict.get(month_key, {'count': 0, 'total_amount': 0})
+
+            monthly_services_data.append({
+                'month': current_date.strftime('%Y-%m'),
+                'month_name': current_date.strftime('%b %Y'),
+                'count': month_data['count'],
+                'total_amount': month_data['total_amount']
+            })
+
+            current_date += relativedelta(months=1)
+
         return Response({
             'preferred_days': preferred_days_data,
-            'preferred_time_slots': time_slots
+            'preferred_time_slots': time_slots,
+            'favorite_services': favorite_services_data,
+            'monthly_services': monthly_services_data
         })
 
 
@@ -869,4 +949,385 @@ class ClientProductsView(APIView):
             'recent_purchases': recent_purchases,
             'total_spent': float(total_spent),
             'total_products': total_products
+        })
+
+
+class ClientServicesView(APIView):
+    """
+    GET /api/analytics/client/<cliente_id>/services/
+
+    Timeline completo de servicios del cliente con paginación y filtros
+    """
+    permission_classes = [IsAuthenticated, CanViewClientAnalytics]
+
+    def get(self, request, cliente_id):
+        from apps.turnos.models import Turno
+        from apps.clientes.models import Cliente
+        from django.core.paginator import Paginator, EmptyPage
+
+        # Verificar que el cliente existe
+        try:
+            cliente = Cliente.objects.get(id=cliente_id)
+        except Cliente.DoesNotExist:
+            return Response({'error': 'Cliente no encontrado'}, status=404)
+
+        # Obtener parámetros de paginación y filtros
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        servicio_id = request.query_params.get('servicio_id')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        # Query base - solo servicios completados
+        turnos_qs = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO'
+        ).select_related(
+            'servicio',
+            'profesional',
+            'sucursal'
+        ).order_by('-fecha_hora_inicio')
+
+        # Aplicar filtros opcionales
+        if servicio_id:
+            turnos_qs = turnos_qs.filter(servicio_id=int(servicio_id))
+
+        if start_date:
+            start_date_parsed = datetime.strptime(start_date, '%Y-%m-%d').date()
+            turnos_qs = turnos_qs.filter(fecha_hora_inicio__date__gte=start_date_parsed)
+
+        if end_date:
+            end_date_parsed = datetime.strptime(end_date, '%Y-%m-%d').date()
+            turnos_qs = turnos_qs.filter(fecha_hora_inicio__date__lte=end_date_parsed)
+
+        # Paginación
+        paginator = Paginator(turnos_qs, page_size)
+
+        try:
+            page_obj = paginator.page(page)
+        except EmptyPage:
+            page_obj = paginator.page(paginator.num_pages)
+
+        # Serializar servicios
+        services_history = []
+        for turno in page_obj:
+            # Buscar el método de pago en la transacción asociada
+            payment_method = 'No especificado'
+            try:
+                from apps.finanzas.models import Transaction
+                transaction = Transaction.objects.filter(
+                    turno_id=turno.id,
+                    type='INCOME_SERVICE'
+                ).first()
+                if transaction:
+                    payment_method = transaction.payment_method
+            except:
+                pass
+
+            services_history.append({
+                'id': turno.id,
+                'date': turno.fecha_hora_inicio.date().isoformat(),
+                'time': turno.fecha_hora_inicio.strftime('%H:%M'),
+                'service_id': turno.servicio.id if turno.servicio else None,
+                'service_name': turno.servicio.nombre if turno.servicio else 'Servicio no especificado',
+                'professional_id': turno.profesional.id if turno.profesional else None,
+                'professional_name': f"{turno.profesional.first_name} {turno.profesional.last_name}" if turno.profesional else 'No asignado',
+                'amount': float(turno.monto_total) if turno.monto_total else 0,
+                'payment_method': payment_method,
+                'payment_status': turno.estado_pago,
+                'notes': turno.notas or ''
+            })
+
+        # Calcular estadísticas del período filtrado
+        total_spent = sum(float(t.monto_total or 0) for t in turnos_qs)
+        avg_ticket = total_spent / turnos_qs.count() if turnos_qs.count() > 0 else 0
+
+        return Response({
+            'services_history': services_history,
+            'pagination': {
+                'total_count': paginator.count,
+                'page': page_obj.number,
+                'total_pages': paginator.num_pages,
+                'page_size': page_size,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous()
+            },
+            'statistics': {
+                'total_services': paginator.count,
+                'total_spent': total_spent,
+                'average_ticket': round(avg_ticket, 2)
+            }
+        })
+
+
+class ClientBehaviorView(APIView):
+    """
+    GET /api/analytics/client/<cliente_id>/behavior/
+
+    Análisis de comportamiento del cliente con loyalty score
+
+    El loyalty score es un valor de 0-100 calculado en base a:
+    - Frecuencia de visitas (30 puntos)
+    - Recencia de visitas (20 puntos)
+    - Valor monetario / LTV (25 puntos)
+    - Consistencia de visitas (15 puntos)
+    - Engagement / variedad de servicios (10 puntos)
+    """
+    permission_classes = [IsAuthenticated, CanViewClientAnalytics]
+
+    def get(self, request, cliente_id):
+        from apps.turnos.models import Turno
+        from apps.clientes.models import Cliente
+        from django.utils import timezone
+        from dateutil.relativedelta import relativedelta
+        from django.db.models import Count, Avg, StdDev
+        from datetime import timedelta
+
+        # Verificar que el cliente existe
+        try:
+            cliente = Cliente.objects.get(id=cliente_id)
+        except Cliente.DoesNotExist:
+            return Response({'error': 'Cliente no encontrado'}, status=404)
+
+        # Obtener todos los turnos completados
+        turnos = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO'
+        ).order_by('fecha_hora_inicio')
+
+        if not turnos.exists():
+            return Response({
+                'loyalty_score': 0,
+                'score_breakdown': {
+                    'frequency_score': 0,
+                    'recency_score': 0,
+                    'monetary_score': 0,
+                    'consistency_score': 0,
+                    'engagement_score': 0
+                },
+                'interpretation': 'Sin datos',
+                'message': 'El cliente no tiene servicios completados'
+            })
+
+        total_visits = turnos.count()
+        first_visit = turnos.first().fecha_hora_inicio.date()
+        last_visit = turnos.last().fecha_hora_inicio.date()
+        today = timezone.now().date()
+
+        # Calcular LTV
+        ltv = AnalyticsCalculator.get_client_lifetime_value(cliente_id)
+
+        # ========== 1. FREQUENCY SCORE (30 puntos) ==========
+        # Basado en número total de visitas
+        frequency_score = 0
+        if total_visits >= 50:
+            frequency_score = 30
+        elif total_visits >= 30:
+            frequency_score = 25
+        elif total_visits >= 15:
+            frequency_score = 20
+        elif total_visits >= 8:
+            frequency_score = 15
+        elif total_visits >= 4:
+            frequency_score = 10
+        elif total_visits >= 2:
+            frequency_score = 5
+        else:  # 1 visita
+            frequency_score = 2
+
+        # ========== 2. RECENCY SCORE (20 puntos) ==========
+        # Basado en días desde última visita
+        days_since_last = (today - last_visit).days
+        recency_score = 0
+        if days_since_last <= 7:
+            recency_score = 20  # Visitó esta semana
+        elif days_since_last <= 14:
+            recency_score = 18  # Visitó hace 1-2 semanas
+        elif days_since_last <= 30:
+            recency_score = 15  # Visitó este mes
+        elif days_since_last <= 60:
+            recency_score = 10  # Visitó hace 1-2 meses
+        elif days_since_last <= 90:
+            recency_score = 5   # Visitó hace 2-3 meses
+        else:
+            recency_score = 0   # Más de 3 meses sin visitar
+
+        # ========== 3. MONETARY SCORE (25 puntos) ==========
+        # Basado en LTV (Lifetime Value)
+        monetary_score = 0
+        if ltv >= 100000:
+            monetary_score = 25
+        elif ltv >= 50000:
+            monetary_score = 22
+        elif ltv >= 30000:
+            monetary_score = 18
+        elif ltv >= 15000:
+            monetary_score = 14
+        elif ltv >= 8000:
+            monetary_score = 10
+        elif ltv >= 3000:
+            monetary_score = 6
+        elif ltv >= 1000:
+            monetary_score = 3
+        else:
+            monetary_score = 1
+
+        # ========== 4. CONSISTENCY SCORE (15 puntos) ==========
+        # Basado en regularidad de visitas (desviación estándar de días entre visitas)
+        if total_visits >= 2:
+            # Calcular días entre cada visita
+            visit_dates = [t.fecha_hora_inicio.date() for t in turnos]
+            days_between_visits = []
+            for i in range(1, len(visit_dates)):
+                days_diff = (visit_dates[i] - visit_dates[i-1]).days
+                days_between_visits.append(days_diff)
+
+            if days_between_visits:
+                avg_days_between = sum(days_between_visits) / len(days_between_visits)
+
+                # Calcular desviación estándar manualmente
+                variance = sum((x - avg_days_between) ** 2 for x in days_between_visits) / len(days_between_visits)
+                std_dev = variance ** 0.5
+
+                # Coefficient of variation (CV = std_dev / mean)
+                # Menor CV = más consistente
+                if avg_days_between > 0:
+                    cv = std_dev / avg_days_between
+
+                    # Asignar puntos basado en consistencia
+                    if cv <= 0.3:  # Muy consistente
+                        consistency_score = 15
+                    elif cv <= 0.5:
+                        consistency_score = 12
+                    elif cv <= 0.8:
+                        consistency_score = 9
+                    elif cv <= 1.2:
+                        consistency_score = 6
+                    else:  # Muy inconsistente
+                        consistency_score = 3
+                else:
+                    consistency_score = 5
+            else:
+                consistency_score = 5
+        else:
+            consistency_score = 0  # Solo 1 visita
+
+        # ========== 5. ENGAGEMENT SCORE (10 puntos) ==========
+        # Basado en variedad de servicios utilizados
+        unique_services = turnos.values('servicio').distinct().count()
+        engagement_score = 0
+        if unique_services >= 10:
+            engagement_score = 10
+        elif unique_services >= 7:
+            engagement_score = 8
+        elif unique_services >= 5:
+            engagement_score = 6
+        elif unique_services >= 3:
+            engagement_score = 4
+        elif unique_services >= 2:
+            engagement_score = 2
+        else:  # Solo 1 servicio
+            engagement_score = 1
+
+        # ========== TOTAL SCORE ==========
+        total_score = (
+            frequency_score +
+            recency_score +
+            monetary_score +
+            consistency_score +
+            engagement_score
+        )
+
+        # Interpretación del score
+        if total_score >= 85:
+            interpretation = 'VIP'
+            level = 'Excelente'
+        elif total_score >= 70:
+            interpretation = 'Leal'
+            level = 'Muy Bueno'
+        elif total_score >= 55:
+            interpretation = 'Comprometido'
+            level = 'Bueno'
+        elif total_score >= 40:
+            interpretation = 'Regular'
+            level = 'Regular'
+        elif total_score >= 25:
+            interpretation = 'En Riesgo'
+            level = 'Bajo'
+        else:
+            interpretation = 'Inactivo'
+            level = 'Muy Bajo'
+
+        # ========== ACTIVITY HEATMAP (365 días) ==========
+        # Crear mapa de actividad para los últimos 365 días
+        activity_end_date = today
+        activity_start_date = today - timedelta(days=365)
+
+        # Obtener todos los turnos en el rango
+        activity_turnos = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO',
+            fecha_hora_inicio__date__gte=activity_start_date,
+            fecha_hora_inicio__date__lte=activity_end_date
+        ).values('fecha_hora_inicio__date').annotate(
+            count=Count('id')
+        )
+
+        # Crear diccionario de actividad por día
+        activity_by_day = {}
+        for item in activity_turnos:
+            date_str = item['fecha_hora_inicio__date'].isoformat()
+            activity_by_day[date_str] = item['count']
+
+        # Generar array con todos los días (365 días)
+        activity_heatmap = []
+        current_day = activity_start_date
+        max_activity = 0
+
+        while current_day <= activity_end_date:
+            date_str = current_day.isoformat()
+            count = activity_by_day.get(date_str, 0)
+            if count > max_activity:
+                max_activity = count
+
+            activity_heatmap.append({
+                'date': date_str,
+                'count': count,
+                'day_of_week': current_day.weekday(),  # 0=Monday, 6=Sunday
+                'week_of_year': current_day.isocalendar()[1]
+            })
+
+            current_day += timedelta(days=1)
+
+        return Response({
+            'loyalty_score': total_score,
+            'score_breakdown': {
+                'frequency_score': frequency_score,
+                'frequency_max': 30,
+                'recency_score': recency_score,
+                'recency_max': 20,
+                'monetary_score': monetary_score,
+                'monetary_max': 25,
+                'consistency_score': consistency_score,
+                'consistency_max': 15,
+                'engagement_score': engagement_score,
+                'engagement_max': 10
+            },
+            'interpretation': interpretation,
+            'level': level,
+            'metrics': {
+                'total_visits': total_visits,
+                'lifetime_value': round(ltv, 2),
+                'days_since_last_visit': days_since_last,
+                'unique_services': unique_services,
+                'first_visit': first_visit.isoformat(),
+                'last_visit': last_visit.isoformat(),
+                'customer_lifetime_days': (today - first_visit).days
+            },
+            'activity_heatmap': {
+                'data': activity_heatmap,
+                'max_activity': max_activity,
+                'total_days': len(activity_heatmap),
+                'active_days': sum(1 for item in activity_heatmap if item['count'] > 0)
+            }
         })

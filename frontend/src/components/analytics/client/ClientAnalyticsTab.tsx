@@ -3,6 +3,11 @@ import ClientSummaryCard from './ClientSummaryCard';
 import ClientSpendingChart from './ClientSpendingChart';
 import ClientAlertsPanel from './ClientAlertsPanel';
 import ClientProductsHistory from './ClientProductsHistory';
+import ServicesTimeline from './ServicesTimeline';
+import FavoriteServicesChart from './FavoriteServicesChart';
+import MonthlyServicesChart from './MonthlyServicesChart';
+import LoyaltyScoreGauge from './LoyaltyScoreGauge';
+import ActivityHeatmap from './ActivityHeatmap';
 import {
   PieChart,
   Pie,
@@ -19,7 +24,7 @@ interface ClientAnalyticsTabProps {
 export default function ClientAnalyticsTab({
   clienteId,
 }: ClientAnalyticsTabProps) {
-  const { summary, spending, patterns, alerts, products, loading, error } =
+  const { summary, spending, patterns, alerts, products, behavior, loading, error } =
     useClientAnalytics(clienteId);
 
   if (error) {
@@ -58,6 +63,14 @@ export default function ClientAnalyticsTab({
     <div className="space-y-6 p-6">
       {/* Summary Card */}
       <ClientSummaryCard data={summary} loading={loading} />
+
+      {/* Loyalty Score Gauge */}
+      <LoyaltyScoreGauge data={behavior} loading={loading} />
+
+      {/* Activity Heatmap */}
+      {behavior?.activity_heatmap && (
+        <ActivityHeatmap data={behavior.activity_heatmap} loading={loading} />
+      )}
 
       {/* Alerts Panel */}
       {alerts && (
@@ -222,8 +235,27 @@ export default function ClientAnalyticsTab({
         </div>
       )}
 
+      {/* Favorite Services */}
+      {patterns?.favorite_services && (
+        <FavoriteServicesChart
+          data={patterns.favorite_services}
+          loading={loading}
+        />
+      )}
+
+      {/* Monthly Services Chart */}
+      {patterns?.monthly_services && (
+        <MonthlyServicesChart
+          data={patterns.monthly_services}
+          loading={loading}
+        />
+      )}
+
       {/* Products History */}
       <ClientProductsHistory data={products} loading={loading} />
+
+      {/* Services Timeline */}
+      <ServicesTimeline clienteId={clienteId} />
     </div>
   );
 }

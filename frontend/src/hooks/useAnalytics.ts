@@ -103,6 +103,7 @@ export function useClientAnalytics(clienteId: number) {
   const [patterns, setPatterns] = useState<any>(null);
   const [alerts, setAlerts] = useState<any>(null);
   const [products, setProducts] = useState<any>(null);
+  const [behavior, setBehavior] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,12 +118,13 @@ export function useClientAnalytics(clienteId: number) {
     setError(null);
 
     try {
-      const [summaryRes, spendingRes, patternsRes, alertsRes, productsRes] = await Promise.all([
+      const [summaryRes, spendingRes, patternsRes, alertsRes, productsRes, behaviorRes] = await Promise.all([
         api.get(`/analytics/client/${clienteId}/summary/`),
         api.get(`/analytics/client/${clienteId}/spending/`),
         api.get(`/analytics/client/${clienteId}/patterns/`),
         api.get(`/analytics/client/${clienteId}/alerts/`),
         api.get(`/analytics/client/${clienteId}/products/`),
+        api.get(`/analytics/client/${clienteId}/behavior/`),
       ]);
 
       setSummary(summaryRes.data);
@@ -130,6 +132,7 @@ export function useClientAnalytics(clienteId: number) {
       setPatterns(patternsRes.data);
       setAlerts(alertsRes.data);
       setProducts(productsRes.data);
+      setBehavior(behaviorRes.data);
     } catch (err: any) {
       console.error('Error fetching client analytics:', err);
       setError(err.message || 'Error al cargar analytics del cliente');
@@ -144,6 +147,7 @@ export function useClientAnalytics(clienteId: number) {
     patterns,
     alerts,
     products,
+    behavior,
     loading,
     error,
     refetch: fetchClientAnalytics,
