@@ -49,7 +49,7 @@ export default function LoyaltyScoreGauge({
     );
   }
 
-  if (!data) {
+  if (!data || !data.metrics || !data.score_breakdown) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold mb-4 text-gray-800">
@@ -57,6 +57,7 @@ export default function LoyaltyScoreGauge({
         </h3>
         <div className="text-center py-12">
           <p className="text-gray-500">No hay datos disponibles</p>
+          <p className="text-sm text-gray-400 mt-2">Este cliente aún no tiene suficientes visitas para calcular el score de fidelización</p>
         </div>
       </div>
     );

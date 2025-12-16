@@ -37,6 +37,12 @@ export default function ClientAnalyticsTab({
     );
   }
 
+  // Helper function to calculate percentage safely
+  const calculatePercentage = (value: number, total: number): number => {
+    if (total === 0) return 0;
+    return (value / total) * 100;
+  };
+
   // Preparar datos para gráfico de días preferidos
   const daysData =
     patterns?.preferred_days &&
@@ -58,6 +64,13 @@ export default function ClientAnalyticsTab({
   ];
 
   const COLORS = ['#8b5cf6', '#10b981'];
+
+  // Calculate total time slots safely
+  const totalTimeSlots = patterns?.preferred_time_slots
+    ? patterns.preferred_time_slots.morning +
+      patterns.preferred_time_slots.afternoon +
+      patterns.preferred_time_slots.evening
+    : 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -145,13 +158,10 @@ export default function ClientAnalyticsTab({
                     <div
                       className="bg-yellow-500 h-2 rounded-full"
                       style={{
-                        width: `${
-                          (patterns.preferred_time_slots.morning /
-                            (patterns.preferred_time_slots.morning +
-                              patterns.preferred_time_slots.afternoon +
-                              patterns.preferred_time_slots.evening)) *
-                          100
-                        }%`,
+                        width: `${calculatePercentage(
+                          patterns.preferred_time_slots.morning,
+                          totalTimeSlots
+                        )}%`,
                       }}
                     ></div>
                   </div>
@@ -170,13 +180,10 @@ export default function ClientAnalyticsTab({
                     <div
                       className="bg-orange-500 h-2 rounded-full"
                       style={{
-                        width: `${
-                          (patterns.preferred_time_slots.afternoon /
-                            (patterns.preferred_time_slots.morning +
-                              patterns.preferred_time_slots.afternoon +
-                              patterns.preferred_time_slots.evening)) *
-                          100
-                        }%`,
+                        width: `${calculatePercentage(
+                          patterns.preferred_time_slots.afternoon,
+                          totalTimeSlots
+                        )}%`,
                       }}
                     ></div>
                   </div>
@@ -195,13 +202,10 @@ export default function ClientAnalyticsTab({
                     <div
                       className="bg-blue-500 h-2 rounded-full"
                       style={{
-                        width: `${
-                          (patterns.preferred_time_slots.evening /
-                            (patterns.preferred_time_slots.morning +
-                              patterns.preferred_time_slots.afternoon +
-                              patterns.preferred_time_slots.evening)) *
-                          100
-                        }%`,
+                        width: `${calculatePercentage(
+                          patterns.preferred_time_slots.evening,
+                          totalTimeSlots
+                        )}%`,
                       }}
                     ></div>
                   </div>
