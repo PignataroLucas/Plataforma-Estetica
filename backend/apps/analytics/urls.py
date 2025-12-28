@@ -25,6 +25,13 @@ from .views import (
     ClientBehaviorView,
 )
 
+from .export_views import (
+    # Exportación
+    ExportCSVView,
+    ExportExcelView,
+    ExportPDFView,
+)
+
 urlpatterns = [
     # ========== ANALYTICS GLOBAL - DASHBOARD ==========
     path('dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
@@ -45,4 +52,9 @@ urlpatterns = [
     path('client/<int:cliente_id>/products/', ClientProductsView.as_view(), name='client-products'),
     path('client/<int:cliente_id>/services/', ClientServicesView.as_view(), name='client-services'),
     path('client/<int:cliente_id>/behavior/', ClientBehaviorView.as_view(), name='client-behavior'),
+
+    # ========== EXPORTACIÓN DE DATOS ==========
+    path('export/csv/', ExportCSVView.as_view(), name='export-csv'),
+    path('export/excel/', ExportExcelView.as_view(), name='export-excel'),
+    path('export/pdf/', ExportPDFView.as_view(), name='export-pdf'),
 ]

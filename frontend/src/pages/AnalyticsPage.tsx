@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAnalytics } from '../hooks/useAnalytics';
 import KPICard from '../components/analytics/shared/KPICard';
 import DateRangeFilter from '../components/analytics/shared/DateRangeFilter';
+import ExportButton from '../components/analytics/shared/ExportButton';
 import RevenueChart from '../components/analytics/dashboard/RevenueChart';
 import TopServicesChart from '../components/analytics/dashboard/TopServicesChart';
 import TopProductsChart from '../components/analytics/dashboard/TopProductsChart';
@@ -54,6 +55,9 @@ export default function AnalyticsPage() {
                 <p className="text-gray-600 mt-1">
                   Análisis completo de tu negocio
                 </p>
+              </div>
+              <div>
+                <ExportButton dateRange={dateRange} />
               </div>
             </div>
             {/* Filtros */}

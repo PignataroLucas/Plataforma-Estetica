@@ -11,6 +11,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from django.core.cache import cache
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from django.db.models import Sum, Count, Q
 
@@ -623,10 +624,72 @@ class ClientSpendingView(APIView):
             }
         }
 
+        # Desglose mensual de servicios vs productos (últimos 12 meses)
+        # Reutilizar las mismas fechas de monthly_spending_12m
+        monthly_by_type = Transaction.objects.filter(
+            client_id=cliente_id,
+            type__in=['INCOME_SERVICE', 'INCOME_PRODUCT'],
+            date__gte=start_date,
+            date__lte=end_date
+        ).annotate(
+            month=TruncMonth('date')
+        ).values('month', 'type').annotate(
+            amount=Sum('amount')
+        ).order_by('month')
+
+        # Crear diccionario para acceso rápido
+        monthly_dict = {}
+        for item in monthly_by_type:
+            month_key = item['month'].strftime('%Y-%m')
+            if month_key not in monthly_dict:
+                monthly_dict[month_key] = {'services': 0, 'products': 0}
+
+            if item['type'] == 'INCOME_SERVICE':
+                monthly_dict[month_key]['services'] = float(item['amount'])
+            elif item['type'] == 'INCOME_PRODUCT':
+                monthly_dict[month_key]['products'] = float(item['amount'])
+
+        # Generar array con todos los meses
+        products_vs_services_monthly = []
+        current_date = start_date.replace(day=1)
+
+        for _ in range(12):
+            month_key = current_date.strftime('%Y-%m')
+            month_data = monthly_dict.get(month_key, {'services': 0, 'products': 0})
+
+            total_month = month_data['services'] + month_data['products']
+
+            products_vs_services_monthly.append({
+                'month': month_key,
+                'month_name': current_date.strftime('%b %Y'),
+                'services': month_data['services'],
+                'products': month_data['products'],
+                'total': total_month,
+                'services_percentage': round((month_data['services'] / total_month * 100), 2) if total_month > 0 else 0,
+                'products_percentage': round((month_data['products'] / total_month * 100), 2) if total_month > 0 else 0
+            })
+
+            current_date += relativedelta(months=1)
+
+        # Calcular totales de 12 meses
+        total_services_12m = sum(item['services'] for item in products_vs_services_monthly)
+        total_products_12m = sum(item['products'] for item in products_vs_services_monthly)
+        total_12m = total_services_12m + total_products_12m
+
         return Response({
             'monthly_spending_12m': monthly_data,
             'average_monthly': round(average_monthly, 2),
-            'spending_distribution': spending_distribution
+            'spending_distribution': spending_distribution,
+            'products_vs_services_monthly': {
+                'data': products_vs_services_monthly,
+                'totals_12m': {
+                    'services': total_services_12m,
+                    'products': total_products_12m,
+                    'total': total_12m,
+                    'services_percentage': round((total_services_12m / total_12m * 100), 2) if total_12m > 0 else 0,
+                    'products_percentage': round((total_products_12m / total_12m * 100), 2) if total_12m > 0 else 0
+                }
+            }
         })
 
 
@@ -764,11 +827,97 @@ class ClientPatternsView(APIView):
 
             current_date += relativedelta(months=1)
 
+        # Patrón anual de actividad (promedio histórico por mes del año)
+        from django.db.models.functions import ExtractMonth
+
+        # Obtener todos los turnos completados del cliente (histórico completo)
+        all_turnos = Turno.objects.filter(
+            cliente_id=cliente_id,
+            estado='COMPLETADO'
+        )
+
+        # Agrupar por mes del año (1-12) independiente del año
+        monthly_pattern = all_turnos.annotate(
+            month_number=ExtractMonth('fecha_hora_inicio')
+        ).values('month_number').annotate(
+            total_visits=Count('id')
+        ).order_by('month_number')
+
+        # Crear diccionario de visitas por mes
+        visits_by_month = {}
+        for item in monthly_pattern:
+            visits_by_month[item['month_number']] = item['total_visits']
+
+        # Calcular cuántos años de historia tiene el cliente
+        if all_turnos.exists():
+            first_turno = all_turnos.order_by('fecha_hora_inicio').first()
+            last_turno = all_turnos.order_by('-fecha_hora_inicio').first()
+
+            years_span = (last_turno.fecha_hora_inicio.year - first_turno.fecha_hora_inicio.year) + 1
+            # Mínimo 1 año para evitar división por 0
+            years_span = max(years_span, 1)
+        else:
+            years_span = 1
+
+        # Nombres de meses en español
+        month_names = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ]
+
+        # Generar array con promedio para cada mes
+        monthly_activity_pattern = []
+        max_avg = 0
+        min_avg = float('inf')
+        peak_month = None
+        low_month = None
+
+        for month_num in range(1, 13):
+            total_visits = visits_by_month.get(month_num, 0)
+            avg_visits = total_visits / years_span
+
+            if avg_visits > max_avg:
+                max_avg = avg_visits
+                peak_month = month_names[month_num - 1]
+
+            if total_visits > 0 and avg_visits < min_avg:  # Solo considerar meses con visitas
+                min_avg = avg_visits
+                low_month = month_names[month_num - 1]
+
+            monthly_activity_pattern.append({
+                'month': month_num,
+                'month_name': month_names[month_num - 1],
+                'total_visits': total_visits,
+                'average_visits': round(avg_visits, 2),
+                'years_counted': years_span
+            })
+
+        # Determinar interpretación (temporada preferida)
+        # Verano: Dic, Ene, Feb (meses 12, 1, 2)
+        # Otoño: Mar, Abr, May (meses 3, 4, 5)
+        # Invierno: Jun, Jul, Ago (meses 6, 7, 8)
+        # Primavera: Sep, Oct, Nov (meses 9, 10, 11)
+        season_totals = {
+            'Verano': sum(visits_by_month.get(m, 0) for m in [12, 1, 2]),
+            'Otoño': sum(visits_by_month.get(m, 0) for m in [3, 4, 5]),
+            'Invierno': sum(visits_by_month.get(m, 0) for m in [6, 7, 8]),
+            'Primavera': sum(visits_by_month.get(m, 0) for m in [9, 10, 11])
+        }
+
+        preferred_season = max(season_totals, key=season_totals.get) if any(season_totals.values()) else None
+
         return Response({
             'preferred_days': preferred_days_data,
             'preferred_time_slots': time_slots,
             'favorite_services': favorite_services_data,
-            'monthly_services': monthly_services_data
+            'monthly_services': monthly_services_data,
+            'monthly_activity_pattern': {
+                'data': monthly_activity_pattern,
+                'peak_month': peak_month,
+                'low_month': low_month,
+                'preferred_season': preferred_season,
+                'years_analyzed': years_span
+            }
         })
 
 
@@ -1299,6 +1448,39 @@ class ClientBehaviorView(APIView):
 
             current_day += timedelta(days=1)
 
+        # ========== BEHAVIOR METRICS ==========
+        # Obtener todos los turnos del cliente (no solo completados)
+        all_appointments = Turno.objects.filter(cliente_id=cliente_id)
+        total_appointments = all_appointments.count()
+
+        # Calcular tasa de no-show
+        no_show_count = all_appointments.filter(estado='NO_SHOW').count()
+        no_show_rate = round((no_show_count / total_appointments * 100), 2) if total_appointments > 0 else 0
+
+        # Calcular tasa de cancelación
+        cancelled_count = all_appointments.filter(estado='CANCELADO').count()
+        cancellation_rate = round((cancelled_count / total_appointments * 100), 2) if total_appointments > 0 else 0
+
+        # Calcular tiempo promedio entre visitas (usar días entre visitas calculado arriba)
+        avg_interval_days = 0
+        if total_visits >= 2:
+            visit_dates = [t.fecha_hora_inicio.date() for t in turnos]
+            days_between = []
+            for i in range(1, len(visit_dates)):
+                days_between.append((visit_dates[i] - visit_dates[i-1]).days)
+
+            if days_between:
+                avg_interval_days = round(sum(days_between) / len(days_between), 1)
+
+        # Calcular puntuación de puntualidad (placeholder - podría mejorarse con datos de llegada real)
+        # Por ahora, basado en tasa de completitud vs cancelaciones/no-shows
+        completed_count = turnos.count()
+        punctuality_score = 0
+        if total_appointments > 0:
+            completion_rate = (completed_count / total_appointments) * 100
+            # Score de 0-100 basado en tasa de completitud
+            punctuality_score = round(completion_rate, 1)
+
         return Response({
             'loyalty_score': total_score,
             'score_breakdown': {
@@ -1329,5 +1511,15 @@ class ClientBehaviorView(APIView):
                 'max_activity': max_activity,
                 'total_days': len(activity_heatmap),
                 'active_days': sum(1 for item in activity_heatmap if item['count'] > 0)
+            },
+            'behavior_metrics': {
+                'no_show_rate': no_show_rate,
+                'cancellation_rate': cancellation_rate,
+                'average_interval_days': avg_interval_days,
+                'punctuality_score': punctuality_score,
+                'total_appointments': total_appointments,
+                'completed_appointments': completed_count,
+                'no_show_count': no_show_count,
+                'cancelled_count': cancelled_count
             }
         })
