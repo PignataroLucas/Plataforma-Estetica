@@ -32,7 +32,17 @@ from .export_views import (
     ExportPDFView,
 )
 
+from .dashboard_home_views import (
+    # Dashboard Home (Página Principal)
+    DashboardHomeView,
+    DashboardStatsView,
+)
+
 urlpatterns = [
+    # ========== DASHBOARD HOME (PÁGINA PRINCIPAL) ==========
+    path('dashboard/home/', DashboardHomeView.as_view(), name='dashboard-home'),
+    path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard-stats'),
+
     # ========== ANALYTICS GLOBAL - DASHBOARD ==========
     path('dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
     path('dashboard/revenue/', RevenueAnalyticsView.as_view(), name='dashboard-revenue'),
