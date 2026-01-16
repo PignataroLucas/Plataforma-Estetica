@@ -733,6 +733,47 @@ export interface Notificacion {
   leido_en?: string
 }
 
+// Tipos para Mensajes Templates (configuración de WhatsApp)
+export type TipoMensaje =
+  | 'CONFIRMACION'
+  | 'RECORDATORIO_24H'
+  | 'RECORDATORIO_2H'
+  | 'CANCELACION'
+  | 'MODIFICACION'
+  | 'PROMOCION'
+
+export interface MensajeTemplate {
+  id: number
+  sucursal: number
+  tipo: TipoMensaje
+  tipo_display: string
+  mensaje: string
+  activo: boolean
+  creado_en: string
+  actualizado_en: string
+  actualizado_por: number | null
+  actualizado_por_nombre: string | null
+}
+
+export interface MensajeTemplateList {
+  id: number
+  tipo: TipoMensaje
+  tipo_display: string
+  activo: boolean
+  preview: string
+  actualizado_en: string
+}
+
+export interface VariableTemplate {
+  variable: string
+  descripcion: string
+}
+
+export interface VariablesDisponibles {
+  generales: VariableTemplate[]
+  turnos: VariableTemplate[]
+}
+
 // Tipos para las respuestas de autenticación
 export interface LoginResponse {
   access: string

@@ -1,6 +1,7 @@
 """
 Signals for appointments (turnos) app to automatically create financial transactions
-when payment states change (deposits and completed services).
+when payment states change (deposits and completed services), and to send WhatsApp
+notifications when appointments are created or modified.
 """
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
@@ -223,3 +224,52 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
 
     print(f"✅ Machine rental expense auto-created: {transaction} (${alquiler.costo})")
     print(f"   → Rental {alquiler.pk} marked as COBRADO")
+
+
+# ==================== WhatsApp NOTIFICATION SIGNALS ====================
+
+@receiver(post_save, sender=Turno)
+def send_whatsapp_notifications(sender, instance, created, **kwargs):
+    """
+    Automatically send WhatsApp notifications when appointments are created or modified.
+
+    Scenarios:
+    1. New appointment created (created=True) with estado=CONFIRMADO or PENDIENTE
+       → Send confirmation WhatsApp
+
+    2. Appointment cancelled (estado changes to CANCELADO)
+       → Send cancellation WhatsApp
+
+    Note: The actual WhatsApp sending is done asynchronously via Celery tasks
+    to avoid blocking the HTTP request.
+    """
+    # Import here to avoid circular imports
+    from apps.notificaciones.tasks import (
+        enviar_confirmacion_turno_task,
+        enviar_cancelacion_turno_task
+    )
+
+    previous_estado = getattr(instance, '_previous_estado', None)
+
+    # ==================== SCENARIO 1: New Appointment Created ====================
+    # Send confirmation WhatsApp for new confirmed/pending appointments
+    if created and instance.estado in [Turno.Estado.CONFIRMADO, Turno.Estado.PENDIENTE]:
+        # Verify client accepts WhatsApp notifications
+        if instance.cliente.acepta_whatsapp and instance.cliente.telefono:
+            # Send async task to avoid blocking
+            enviar_confirmacion_turno_task.delay(instance.id)
+            print(f"📲 Confirmation WhatsApp scheduled for turno #{instance.id}")
+        else:
+            print(f"⚠️ Cliente {instance.cliente.nombre_completo} does not accept WhatsApp or has no phone")
+
+    # ==================== SCENARIO 2: Appointment Cancelled ====================
+    # Send cancellation WhatsApp when appointment is cancelled
+    elif (previous_estado and previous_estado != Turno.Estado.CANCELADO and
+          instance.estado == Turno.Estado.CANCELADO):
+        # Verify client accepts WhatsApp notifications
+        if instance.cliente.acepta_whatsapp and instance.cliente.telefono:
+            # Send async task to avoid blocking
+            enviar_cancelacion_turno_task.delay(instance.id)
+            print(f"📲 Cancellation WhatsApp scheduled for turno #{instance.id}")
+        else:
+            print(f"⚠️ Cliente {instance.cliente.nombre_completo} does not accept WhatsApp or has no phone")

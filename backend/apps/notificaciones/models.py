@@ -79,3 +79,57 @@ class Notificacion(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.cliente.nombre_completo} - {self.get_estado_display()}"
+
+
+class MensajeTemplate(models.Model):
+    """
+    Plantillas configurables de mensajes WhatsApp
+    Cada centro puede personalizar sus mensajes
+    """
+
+    class TipoMensaje(models.TextChoices):
+        CONFIRMACION_TURNO = 'CONFIRMACION', 'Confirmación de Turno'
+        RECORDATORIO_24H = 'RECORDATORIO_24H', 'Recordatorio 24 horas'
+        RECORDATORIO_2H = 'RECORDATORIO_2H', 'Recordatorio 2 horas'
+        CANCELACION = 'CANCELACION', 'Cancelación de Turno'
+        MODIFICACION = 'MODIFICACION', 'Modificación de Turno'
+        PROMOCION = 'PROMOCION', 'Mensaje Promocional'
+
+    # Multi-tenancy
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='mensajes_templates'
+    )
+
+    # Tipo de mensaje
+    tipo = models.CharField(max_length=30, choices=TipoMensaje.choices)
+
+    # Contenido del mensaje
+    mensaje = models.TextField(
+        help_text="Contenido del mensaje. Usa variables: {nombre_cliente}, {fecha}, {hora}, {servicio}, {profesional}, {sucursal_nombre}, {sucursal_direccion}"
+    )
+
+    # Metadata
+    activo = models.BooleanField(
+        default=True,
+        help_text="Si está inactivo, se usa el mensaje por defecto"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(
+        'empleados.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mensajes_templates_actualizados'
+    )
+
+    class Meta:
+        verbose_name = "Plantilla de Mensaje"
+        verbose_name_plural = "Plantillas de Mensajes"
+        unique_together = ['sucursal', 'tipo']  # Una plantilla por tipo por sucursal
+        ordering = ['tipo']
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - {self.sucursal.nombre}"

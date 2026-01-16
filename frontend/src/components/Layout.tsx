@@ -10,6 +10,7 @@ import {
   Wallet,
   UserCog,
   BarChart3,
+  MessageSquare,
   LogOut,
   LucideIcon,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ const navigation: NavigationItem[] = [
   { name: 'Mi Caja', href: '/mi-caja', icon: Wallet }, // Todos
   { name: 'Empleados', href: '/empleados', icon: UserCog, roles: ['ADMIN', 'MANAGER'] },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
+  { name: 'WhatsApp', href: '/configuracion-whatsapp', icon: MessageSquare, roles: ['ADMIN'] },
 ]
 
 export default function Layout() {

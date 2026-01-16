@@ -11,6 +11,7 @@ import FinanzasPage from '@/pages/FinanzasPage'
 import EmpleadosPage from '@/pages/EmpleadosPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import MiCajaPage from '@/pages/MiCajaPage'
+import ConfiguracionWhatsAppPage from '@/pages/ConfiguracionWhatsAppPage'
 import Layout from '@/components/Layout'
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
         <Route path="/mi-caja" element={<MiCajaPage />} />
         <Route path="/empleados" element={<EmpleadosPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/configuracion-whatsapp" element={<ConfiguracionWhatsAppPage />} />
       </Route>
     </Routes>
   )
