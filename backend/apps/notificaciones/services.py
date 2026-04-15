@@ -21,6 +21,8 @@ class WhatsAppService:
         self.account_sid = settings.TWILIO_ACCOUNT_SID
         self.auth_token = settings.TWILIO_AUTH_TOKEN
         self.whatsapp_number = settings.TWILIO_WHATSAPP_NUMBER
+        # URL base para webhooks (ej: https://tu-dominio.com)
+        self.webhook_base_url = getattr(settings, 'TWILIO_WEBHOOK_BASE_URL', '')
         self.client = None
 
         if self.account_sid and self.auth_token:
@@ -116,12 +118,24 @@ class WhatsAppService:
         )
 
         try:
+            # Preparar el número de origen (agregar prefijo solo si no lo tiene)
+            from_number = self.whatsapp_number
+            if not from_number.startswith('whatsapp:'):
+                from_number = f'whatsapp:{from_number}'
+
+            # Preparar parámetros del mensaje
+            message_params = {
+                'from_': from_number,
+                'to': telefono_whatsapp,
+                'body': mensaje
+            }
+
+            # Agregar status callback si está configurado
+            if self.webhook_base_url:
+                message_params['status_callback'] = f'{self.webhook_base_url}/api/notificaciones/webhook/status/'
+
             # Enviar mensaje via Twilio
-            message = self.client.messages.create(
-                from_=f'whatsapp:{self.whatsapp_number}',
-                to=telefono_whatsapp,
-                body=mensaje
-            )
+            message = self.client.messages.create(**message_params)
 
             # Actualizar notificación con éxito
             notificacion.mensaje_id_externo = message.sid

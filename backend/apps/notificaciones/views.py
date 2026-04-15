@@ -1,11 +1,14 @@
 from rest_framework import viewsets, filters, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 from datetime import timedelta
 from django.db.models import Count, Q
+import logging
 
 from .models import Notificacion, MensajeTemplate
 from .serializers import (
@@ -561,3 +564,105 @@ Saludos!"""
         }
 
         return Response(variables)
+
+
+logger = logging.getLogger(__name__)
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def twilio_status_webhook(request):
+    """
+    Webhook para recibir actualizaciones de estado de mensajes de Twilio.
+
+    Twilio envía POST con estos campos:
+    - MessageSid: ID único del mensaje
+    - MessageStatus: sent, delivered, read, failed, undelivered
+    - ErrorCode: código de error (si falló)
+    - ErrorMessage: descripción del error
+
+    Configurar en Twilio Console:
+    POST https://tu-dominio.com/api/notificaciones/webhook/status/
+    """
+    # Validar firma de Twilio (IMPORTANTE para producción)
+    # La validación de firma requiere el paquete twilio y el token
+    try:
+        from twilio.request_validator import RequestValidator
+
+        auth_token = settings.TWILIO_AUTH_TOKEN
+        if auth_token:
+            validator = RequestValidator(auth_token)
+
+            # Obtener la URL completa y la firma
+            request_url = request.build_absolute_uri()
+            signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
+
+            # Validar
+            if not validator.validate(request_url, request.data, signature):
+                logger.warning("Twilio webhook: firma inválida")
+                return Response(
+                    {'error': 'Firma inválida'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+    except ImportError:
+        logger.warning("twilio package no instalado, omitiendo validación de firma")
+    except Exception as e:
+        logger.error(f"Error validando firma Twilio: {e}")
+
+    # Extraer datos del webhook
+    message_sid = request.data.get('MessageSid') or request.data.get('SmsSid')
+    message_status = request.data.get('MessageStatus') or request.data.get('SmsStatus')
+    error_code = request.data.get('ErrorCode')
+    error_message = request.data.get('ErrorMessage')
+
+    if not message_sid:
+        return Response(
+            {'error': 'MessageSid requerido'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    logger.info(f"Twilio webhook: SID={message_sid}, Status={message_status}")
+
+    # Buscar la notificación por el SID externo
+    try:
+        notificacion = Notificacion.objects.get(mensaje_id_externo=message_sid)
+    except Notificacion.DoesNotExist:
+        logger.warning(f"Notificación no encontrada para SID: {message_sid}")
+        # Responder 200 para que Twilio no reintente
+        return Response({'status': 'not_found'})
+
+    # Mapear estados de Twilio a nuestros estados
+    status_mapping = {
+        'queued': 'PENDIENTE',
+        'sending': 'PENDIENTE',
+        'sent': 'ENVIADO',
+        'delivered': 'ENTREGADO',
+        'read': 'LEIDO',
+        'failed': 'FALLIDO',
+        'undelivered': 'FALLIDO',
+    }
+
+    nuevo_estado = status_mapping.get(message_status, notificacion.estado)
+
+    # Actualizar estado y timestamps
+    notificacion.estado = nuevo_estado
+
+    if message_status == 'sent' and not notificacion.enviado_en:
+        notificacion.enviado_en = timezone.now()
+    elif message_status == 'delivered' and not notificacion.entregado_en:
+        notificacion.entregado_en = timezone.now()
+    elif message_status == 'read' and not notificacion.leido_en:
+        notificacion.leido_en = timezone.now()
+    elif message_status in ('failed', 'undelivered'):
+        error_info = f"Code: {error_code}" if error_code else ""
+        if error_message:
+            error_info += f" - {error_message}"
+        notificacion.error_mensaje = error_info or "Error de entrega"
+
+    notificacion.save()
+
+    logger.info(f"Notificación {notificacion.id} actualizada a estado: {nuevo_estado}")
+
+    # Twilio espera respuesta 200 vacía o con TwiML
+    return Response({'status': 'ok'})
