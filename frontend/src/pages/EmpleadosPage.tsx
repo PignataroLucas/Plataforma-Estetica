@@ -156,7 +156,7 @@ export default function EmpleadosPage() {
       </Card>
 
       {/* Modal de Crear */}
-      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} size="large">
+      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} size="lg">
         <ModalHeader>Nuevo Empleado</ModalHeader>
         <ModalBody>
           <EmpleadoForm
@@ -177,7 +177,7 @@ export default function EmpleadosPage() {
       </Modal>
 
       {/* Modal de Editar */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} size="large">
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} size="lg">
         <ModalHeader>Editar Empleado</ModalHeader>
         <ModalBody>
           {selectedEmpleado && (

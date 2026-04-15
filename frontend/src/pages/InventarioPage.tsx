@@ -47,9 +47,7 @@ export default function InventarioPage() {
 
   const loadProductos = async () => {
     if (activeTab === 'stock-bajo') {
-      const productos = await fetchStockBajo()
-      // fetchStockBajo retorna los productos pero no los setea en el estado
-      // Necesitamos usar fetchProductos con filtros si queremos usar el estado
+      await fetchStockBajo()
       return
     }
 

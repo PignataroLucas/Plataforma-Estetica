@@ -63,7 +63,7 @@ export default function FinanzasPage() {
    */
   const handleOpenEditModal = async (transaction: TransactionList) => {
     // Fetch full transaction details
-    const fullTransaction = await fetchTransaction(transaction.id)
+    await fetchTransaction(transaction.id)
     setTransactionToEdit(transaction)
   }
 
