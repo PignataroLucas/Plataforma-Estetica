@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { AlquilerMaquina, EstadoAlquiler, MaquinaAlquilada, PaginatedResponse } from '@/types/models'
 import api from '@/services/api'
 import { Input, Select, Button, DateInput } from '@/components/ui'
-import { getTodayForInput, formatDateForInput } from '@/utils/dateUtils'
+import { getTodayForInput } from '@/utils/dateUtils'
 
 interface AlquilerFormProps {
   alquiler?: AlquilerMaquina
@@ -229,7 +229,7 @@ const AlquilerForm = ({ alquiler, maquinaId, onSubmit, onCancel }: AlquilerFormP
             min="0"
             step="0.01"
             placeholder="0.00"
-            helpText={costoAutomatico ? 'Costo automático según la máquina seleccionada' : 'Costo personalizado'}
+            helperText={costoAutomatico ? 'Costo automático según la máquina seleccionada' : 'Costo personalizado'}
           />
 
           <div>

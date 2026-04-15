@@ -41,7 +41,7 @@ const generateTimeSlots = () => {
   return slots
 }
 
-const timeSlots = generateTimeSlots()
+const _timeSlots = generateTimeSlots()
 
 export const TurnoForm: React.FC<TurnoFormProps> = ({
   initialData,
@@ -225,7 +225,7 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
   }
 
   // Verificar si un horario está ocupado (considerando duración del servicio)
-  const isTimeSlotOccupied = (time: string) => {
+  const _isTimeSlotOccupied = (time: string) => {
     if (!turnosDelDia.length || !servicioSeleccionado) {
       return false
     }

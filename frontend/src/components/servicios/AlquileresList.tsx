@@ -50,7 +50,7 @@ const AlquileresList = () => {
     }
   }
 
-  const handleFormSubmit = async (alquiler: AlquilerMaquina) => {
+  const handleFormSubmit = async (_alquiler: AlquilerMaquina) => {
     setShowForm(false)
     setSelectedAlquiler(undefined)
     await fetchAlquileres()

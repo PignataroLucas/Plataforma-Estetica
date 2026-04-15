@@ -1,5 +1,5 @@
 import { Servicio } from '@/types/models'
-import { Table, Column, Badge, Button } from '@/components/ui'
+import { Table, Column, Badge } from '@/components/ui'
 
 /**
  * ServiciosList - Lista de Servicios (Presentación)

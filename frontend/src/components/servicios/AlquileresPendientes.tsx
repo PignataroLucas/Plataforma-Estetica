@@ -3,7 +3,6 @@ import { AlquilerPendiente } from '@/types/models'
 import api from '@/services/api'
 import { Button } from '@/components/ui'
 import AlquilerForm from './AlquilerForm'
-import { formatDateArgentina } from '@/utils/dateUtils'
 
 interface AlquilerPendientesProps {
   onAlquilerCreated?: () => void
@@ -108,7 +107,7 @@ const AlquilerPendientes = ({ onAlquilerCreated }: AlquilerPendientesProps) => {
             </p>
 
             <div className="space-y-3">
-              {pendientes.map((pendiente, index) => (
+              {pendientes.map((pendiente) => (
                 <div
                   key={`${pendiente.maquina_id}-${pendiente.fecha}`}
                   className="bg-white border border-amber-300 rounded-lg p-4"

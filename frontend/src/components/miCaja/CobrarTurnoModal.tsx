@@ -36,7 +36,7 @@ const CobrarTurnoModal = ({ isOpen, onClose, onSuccess }: CobrarTurnoModalProps)
     if (turnoId) {
       const selectedTurno = turnosPendientes.find(t => t.id === turnoId)
       if (selectedTurno) {
-        setAmount(selectedTurno.monto)
+        setAmount(Number(selectedTurno.monto))
       }
     }
   }, [turnoId, turnosPendientes])

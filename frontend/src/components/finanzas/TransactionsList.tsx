@@ -335,7 +335,7 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${
                           isIncome ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
+                          {isIncome ? '+' : '-'}{formatCurrency(Number(transaction.amount))}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex justify-center gap-2">
@@ -404,7 +404,7 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
             <div className="mt-3 p-3 bg-gray-50 rounded-md">
               <p className="text-sm font-medium">{transactionToDelete.description}</p>
               <p className="text-sm text-gray-500">
-                {formatDate(transactionToDelete.date)} - {formatCurrency(transactionToDelete.amount)}
+                {formatDate(transactionToDelete.date)} - {formatCurrency(Number(transactionToDelete.amount))}
               </p>
             </div>
           )}

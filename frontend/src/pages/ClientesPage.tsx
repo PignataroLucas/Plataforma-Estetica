@@ -10,7 +10,6 @@ import {
   ModalBody,
   ModalFooter,
   Card,
-  CardHeader,
   CardBody,
 } from '@/components/ui'
 import ClientesList from '@/components/clientes/ClientesList'

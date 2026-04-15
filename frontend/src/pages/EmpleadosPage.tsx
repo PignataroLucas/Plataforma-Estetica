@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, Button, Input, Modal, ModalHeader, ModalBody, ModalFooter } from '../components/ui'
 import { EmpleadosList } from '../components/empleados/EmpleadosList'
 import { EmpleadoForm } from '../components/empleados/EmpleadoForm'

@@ -3,7 +3,8 @@ import { Card, Button, Input, Select, Modal, ModalHeader, ModalBody, ModalFooter
 import { ProductosList } from '../components/productos/ProductosList'
 import { ProductoForm } from '../components/productos/ProductoForm'
 import { useProductos } from '../hooks/useProductos'
-import type { ProductoList, Producto, TipoMovimiento } from '../types/models'
+import type { ProductoList, Producto } from '../types/models'
+import { TipoMovimiento } from '../types/models'
 
 type TabType = 'todos' | 'stock-bajo'
 
@@ -101,7 +102,7 @@ export default function InventarioPage() {
       setIsStockModalOpen(false)
       setSelectedProducto(null)
       setStockAjuste({
-        tipo_movimiento: 'ENTRADA',
+        tipo_movimiento: TipoMovimiento.ENTRADA,
         cantidad: 0,
         motivo: '',
         notas: '',
@@ -126,7 +127,7 @@ export default function InventarioPage() {
     clearError()
     setSelectedProducto(producto)
     setStockAjuste({
-      tipo_movimiento: 'ENTRADA',
+      tipo_movimiento: TipoMovimiento.ENTRADA,
       cantidad: 0,
       motivo: '',
       notas: '',

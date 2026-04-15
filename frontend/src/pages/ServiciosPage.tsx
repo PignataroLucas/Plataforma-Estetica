@@ -197,7 +197,7 @@ export default function ServiciosPage() {
     setSelectedMaquinaForRental(undefined)
   }
 
-  const handleAlquilerFormSubmit = (alquiler: AlquilerMaquina) => {
+  const handleAlquilerFormSubmit = (_alquiler: AlquilerMaquina) => {
     handleCloseAlquilerForm()
     setAlquileresRefreshKey(prev => prev + 1)
     toast.success('Alquiler programado exitosamente')

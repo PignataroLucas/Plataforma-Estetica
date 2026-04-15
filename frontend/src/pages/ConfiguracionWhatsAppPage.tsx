@@ -148,7 +148,7 @@ export default function ConfiguracionWhatsAppPage() {
                           <span className="template-name">{TIPO_LABELS[tipo]}</span>
                         </div>
                         {template && (
-                          <Badge variant={template.activo ? 'success' : 'secondary'}>
+                          <Badge variant={template.activo ? 'success' : 'gray'}>
                             {template.activo ? 'Activo' : 'Inactivo'}
                           </Badge>
                         )}
