@@ -20,7 +20,7 @@ interface CategoriesListProps {
  */
 export default function CategoriesList({ onEdit, onRefresh }: CategoriesListProps) {
   const { fetchCategories, deleteCategory, loading: hookLoading } = useFinanzas()
-  const [categories, setCategories] = useState<TransactionCategory[]>([])
+  const [categories, setCategories] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<TransactionCategory | null>(null)

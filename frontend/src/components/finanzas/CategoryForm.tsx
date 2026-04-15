@@ -39,7 +39,7 @@ export default function CategoryForm({
   showButtons = true,
 }: CategoryFormProps) {
   const { fetchCategories } = useFinanzas()
-  const [parentCategories, setParentCategories] = useState<TransactionCategory[]>([])
+  const [parentCategories, setParentCategories] = useState<any[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
 
   // Form setup

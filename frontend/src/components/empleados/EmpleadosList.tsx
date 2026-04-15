@@ -10,16 +10,16 @@ interface EmpleadosListProps {
   loading?: boolean
 }
 
-const getRolBadgeVariant = (rol: string): 'success' | 'warning' | 'error' | 'info' | 'default' => {
+const getRolBadgeVariant = (rol: string): 'success' | 'warning' | 'danger' | 'info' | 'gray' => {
   switch (rol) {
     case 'ADMIN':
-      return 'error'
+      return 'danger'
     case 'MANAGER':
       return 'warning'
     case 'EMPLEADO':
       return 'info'
     default:
-      return 'default'
+      return 'gray'
   }
 }
 
@@ -101,7 +101,7 @@ export const EmpleadosList: React.FC<EmpleadosListProps> = ({
       key: 'activo',
       header: 'Estado',
       accessor: (empleado: Usuario) => (
-        <Badge variant={empleado.activo ? 'success' : 'error'}>
+        <Badge variant={empleado.activo ? 'success' : 'danger'}>
           {empleado.activo ? 'Activo' : 'Inactivo'}
         </Badge>
       ),
@@ -114,7 +114,7 @@ export const EmpleadosList: React.FC<EmpleadosListProps> = ({
           {onToggleStatus && (
             <Button
               variant={empleado.activo ? 'secondary' : 'success'}
-              size="small"
+              size="sm"
               onClick={() => onToggleStatus(empleado)}
             >
               {empleado.activo ? 'Desactivar' : 'Activar'}
@@ -122,14 +122,14 @@ export const EmpleadosList: React.FC<EmpleadosListProps> = ({
           )}
           <Button
             variant="secondary"
-            size="small"
+            size="sm"
             onClick={() => onEdit(empleado)}
           >
             Editar
           </Button>
           <Button
             variant="danger"
-            size="small"
+            size="sm"
             onClick={() => onDelete(empleado)}
           >
             Eliminar
