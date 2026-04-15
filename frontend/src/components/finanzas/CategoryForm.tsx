@@ -71,8 +71,8 @@ export default function CategoryForm({
       try {
         const categories = await fetchCategories({ type: selectedType })
         // Filter to only show main categories (no parent)
-        const mainCategories = categories.filter(
-          (cat: TransactionCategory) => !cat.parent_category && cat.id !== category?.id
+        const mainCategories = (categories as any[]).filter(
+          (cat: any) => !cat.parent_category && cat.id !== category?.id
         )
         setParentCategories(mainCategories)
       } catch (error) {

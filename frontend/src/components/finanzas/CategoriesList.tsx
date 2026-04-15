@@ -59,12 +59,14 @@ export default function CategoriesList({ onEdit, onRefresh }: CategoriesListProp
   const handleConfirmDelete = async () => {
     if (!categoryToDelete) return
 
-    const success = await deleteCategory(categoryToDelete.id)
-    if (success) {
+    try {
+      await deleteCategory(categoryToDelete.id)
       setDeleteModalOpen(false)
       setCategoryToDelete(null)
       loadCategories()
       if (onRefresh) onRefresh()
+    } catch (e) {
+      // error already handled in hook
     }
   }
 
