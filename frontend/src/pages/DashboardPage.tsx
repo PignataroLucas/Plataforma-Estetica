@@ -44,7 +44,12 @@ export default function DashboardPage() {
     );
   }
 
-  const fecha = new Date(dashboardData?.fecha || new Date());
+  const parseLocalDate = (s?: string) => {
+    if (!s) return new Date();
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+  const fecha = parseLocalDate(dashboardData?.fecha);
   const fechaFormateada = fecha.toLocaleDateString('es-AR', {
     weekday: 'long',
     year: 'numeric',
