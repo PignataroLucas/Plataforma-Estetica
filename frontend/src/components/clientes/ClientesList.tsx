@@ -1,13 +1,6 @@
+import { useState } from 'react'
 import { Cliente } from '@/types/models'
 import { Table, Column, Badge, Button } from '@/components/ui'
-
-/**
- * ClientesList - Lista de Clientes (Presentación)
- * Aplica principios SOLID:
- * - SRP: Solo renderiza la lista de clientes
- * - DIP: Recibe datos y callbacks como props
- * - OCP: Extensible via props y column configuration
- */
 
 interface ClientesListProps {
   clientes: Cliente[]
@@ -17,6 +10,8 @@ interface ClientesListProps {
   onView: (cliente: Cliente) => void
 }
 
+const PAGE_SIZE = 10
+
 export default function ClientesList({
   clientes,
   loading = false,
@@ -24,9 +19,17 @@ export default function ClientesList({
   onDelete,
   onView,
 }: ClientesListProps) {
-  /**
-   * Definición de columnas (OCP - extensible sin modificar componente)
-   */
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const totalPages = Math.max(1, Math.ceil(clientes.length / PAGE_SIZE))
+  const startIndex = (currentPage - 1) * PAGE_SIZE
+  const paginatedClientes = clientes.slice(startIndex, startIndex + PAGE_SIZE)
+
+  // Reset to page 1 if clientes change and current page is out of bounds
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1)
+  }
+
   const columns: Column<Cliente>[] = [
     {
       key: 'nombre_completo',
@@ -41,7 +44,7 @@ export default function ClientesList({
     },
     {
       key: 'telefono',
-      header: 'Teléfono',
+      header: 'Telefono',
       width: '15%',
     },
     {
@@ -123,14 +126,54 @@ export default function ClientesList({
   ]
 
   return (
-    <Table
-      data={clientes}
-      columns={columns}
-      loading={loading}
-      emptyMessage="No se encontraron clientes. Crea uno para comenzar."
-      hoverable
-      striped
-      onRowClick={onView}
-    />
+    <div>
+      <Table
+        data={paginatedClientes}
+        columns={columns}
+        loading={loading}
+        emptyMessage="No se encontraron clientes. Crea uno para comenzar."
+        hoverable
+        striped
+        onRowClick={onView}
+      />
+
+      {/* Pagination */}
+      {!loading && clientes.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200">
+          <p className="text-sm text-gray-600">
+            Mostrando {startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, clientes.length)} de {clientes.length} clientes
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Anterior
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`px-3 py-1 text-sm rounded-md ${
+                  page === currentPage
+                    ? 'bg-blue-600 text-white'
+                    : 'border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Input, Select, Button, Badge, DateInput } from '../ui'
+import SearchSelect from '../ui/SearchSelect/SearchSelect'
 import type { Turno, Cliente, Servicio, Usuario, EstadoTurno, EstadoPago, TurnoList } from '../../types/models'
 import api from '../../services/api'
 import { getTodayForInput, formatDateForInput } from '../../utils/dateUtils'
@@ -322,12 +323,12 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <Select
+        <SearchSelect
           label="Cliente"
-          name="cliente"
           value={formData.cliente?.toString() || ''}
-          onChange={handleChange}
+          onChange={(val) => setFormData(prev => ({ ...prev, cliente: val ? parseInt(val) : undefined }))}
           options={clienteOptions}
+          placeholder="Buscar cliente..."
           required
           error={errors.cliente}
         />
