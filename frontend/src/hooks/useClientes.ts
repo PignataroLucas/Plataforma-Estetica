@@ -22,7 +22,9 @@ export const useClientes = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get<PaginatedResponse<Cliente>>('/clientes/clientes/')
+      const response = await api.get<PaginatedResponse<Cliente>>('/clientes/clientes/', {
+        params: { page_size: 1000 }
+      })
       setClientes(response.data.results)
       return response.data.results
     } catch (err: any) {
@@ -180,7 +182,7 @@ export const useClientes = () => {
     setError(null)
     try {
       const response = await api.get<PaginatedResponse<Cliente>>('/clientes/clientes/', {
-        params: { search: query }
+        params: { search: query, page_size: 1000 }
       })
       setClientes(response.data.results)
       return response.data.results

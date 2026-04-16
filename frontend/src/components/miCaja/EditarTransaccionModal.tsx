@@ -43,7 +43,7 @@ const EditarTransaccionModal = ({ isOpen, onClose, onSuccess, transaccion }: Edi
   const loadClientes = async () => {
     try {
       setLoadingData(true)
-      const data = await getClientes({ activo: true })
+      const data = await getClientes({ activo: true, page_size: 1000 })
       setClientes(data.results || [])
     } catch (err) {
       console.error('Error loading clients:', err)

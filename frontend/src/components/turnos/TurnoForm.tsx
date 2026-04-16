@@ -176,9 +176,9 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     setLoadingData(true)
     try {
       const [clientesRes, serviciosRes, usuariosRes] = await Promise.all([
-        api.get('/clientes/clientes/'),
-        api.get('/servicios/servicios/?activo=true'),
-        api.get('/empleados/usuarios/'),
+        api.get('/clientes/clientes/', { params: { page_size: 1000 } }),
+        api.get('/servicios/servicios/', { params: { activo: true, page_size: 1000 } }),
+        api.get('/empleados/usuarios/', { params: { page_size: 1000 } }),
       ])
 
       // Manejar respuestas paginadas o arrays directos

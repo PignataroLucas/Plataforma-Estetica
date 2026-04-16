@@ -95,7 +95,7 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
       const [productosResponse, turnosData, clientesData, serviciosResponse] = await Promise.all([
         api.get('/inventario/productos/', { params: { activo: true } }),
         getTurnosPendientesCobro(),
-        getClientes({ activo: true }),
+        getClientes({ activo: true, page_size: 1000 }),
         api.get('/servicios/servicios/', { params: { activo: true } })
       ])
 
