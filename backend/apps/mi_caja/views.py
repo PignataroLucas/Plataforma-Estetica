@@ -10,16 +10,17 @@ from decimal import Decimal
 from apps.finanzas.models import Transaction, TransactionCategory
 from apps.turnos.models import Turno
 from apps.inventario.models import Producto, MovimientoInventario
+from apps.servicios.models import Servicio
 from apps.clientes.models import Cliente
-from .models import CierreCaja
 from .serializers import (
     TransaccionMiCajaSerializer,
-    CobrarTurnoSerializer,
-    VenderProductoSerializer,
     CierreCajaSerializer,
     CierreCajaCreateSerializer,
-    VentaUnificadaSerializer
+    VentaUnificadaSerializer,
+    EditarTransaccionSerializer,
+    EliminarTransaccionSerializer
 )
+from .models import CierreCaja, TransaccionEliminada
 from .permissions import CanAccessMiCaja, CanViewTransaction, CanCobrarTurno
 
 
@@ -43,196 +44,14 @@ class MiCajaViewSet(viewsets.ViewSet):
         """Get user agent from request"""
         return request.META.get('HTTP_USER_AGENT', '')
 
-    @action(detail=False, methods=['post'], url_path='cobrar-turno')
-    def cobrar_turno(self, request):
-        """
-        Register payment for a completed appointment
-        """
-        serializer = CobrarTurnoSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        turno_id = serializer.validated_data['turno_id']
-        amount = serializer.validated_data['amount']
-        payment_method = serializer.validated_data['payment_method']
-        notas = serializer.validated_data.get('notas', '')
-
-        try:
-            turno = Turno.objects.select_related(
-                'servicio', 'cliente', 'profesional', 'sucursal'
-            ).get(id=turno_id)
-        except Turno.DoesNotExist:
-            return Response(
-                {'error': 'Turno no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Verificar permisos: empleado solo puede cobrar sus turnos
-        if request.user.rol == 'EMPLEADO' and turno.profesional != request.user:
-            return Response(
-                {'error': 'Solo puedes cobrar tus propios turnos'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        # Obtener categoría de servicios (system category)
-        try:
-            categoria_servicios = TransactionCategory.objects.get(
-                branch=turno.sucursal,
-                name='Servicios',
-                type='INCOME',
-                is_system_category=True
-            )
-        except TransactionCategory.DoesNotExist:
-            return Response(
-                {'error': 'Categoría de Servicios no configurada'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # Determinar descripción según si tiene seña o no
-        if turno.estado_pago == 'CON_SENA' and turno.monto_sena:
-            descripcion = f"Saldo de servicio: {turno.servicio.nombre} - {turno.cliente.nombre} {turno.cliente.apellido} (Seña ya pagada: ${turno.monto_sena})"
-        else:
-            descripcion = f"Servicio: {turno.servicio.nombre} - {turno.cliente.nombre} {turno.cliente.apellido}"
-
-        # Crear transacción con atomic para prevenir race conditions
-        with transaction.atomic():
-            # Crear transacción de ingreso
-            transaccion = Transaction.objects.create(
-                branch=turno.sucursal,
-                category=categoria_servicios,
-                client=turno.cliente,
-                appointment=turno,
-                type='INCOME_SERVICE',
-                amount=amount,
-                payment_method=payment_method,
-                date=timezone.now().date(),
-                description=descripcion,
-                notes=notas,
-                auto_generated=False,
-                registered_by=request.user,
-                ip_address=self.get_client_ip(request),
-                user_agent=self.get_user_agent(request)
-            )
-
-            # Actualizar estado del turno y pago
-            # Marcar como completado si aún no lo está (servicio fue realizado)
-            if turno.estado != 'COMPLETADO':
-                turno.estado = 'COMPLETADO'
-            turno.estado_pago = 'PAGADO'
-            turno.save(update_fields=['estado', 'estado_pago'])
-
-        # Serializar respuesta
-        serializer = TransaccionMiCajaSerializer(transaccion)
-
-        return Response({
-            'success': True,
-            'message': f'Cobro registrado exitosamente: ${amount}',
-            'transaction': serializer.data
-        }, status=status.HTTP_201_CREATED)
-
-    @action(detail=False, methods=['post'], url_path='vender-producto')
-    def vender_producto(self, request):
-        """
-        Sell a product and update inventory
-        """
-        serializer = VenderProductoSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        producto_id = serializer.validated_data['producto_id']
-        cantidad = serializer.validated_data['cantidad']
-        cliente_id = serializer.validated_data['cliente_id']
-        payment_method = serializer.validated_data['payment_method']
-        descuento_porcentaje = serializer.validated_data.get('descuento_porcentaje', Decimal('0.00'))
-
-        try:
-            producto = Producto.objects.select_related('sucursal').get(id=producto_id)
-            cliente = Cliente.objects.get(id=cliente_id)
-        except (Producto.DoesNotExist, Cliente.DoesNotExist) as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Calcular montos
-        subtotal = producto.precio_venta * cantidad
-        descuento_monto = (subtotal * descuento_porcentaje) / 100
-        total = subtotal - descuento_monto
-
-        # Obtener categoría de productos (system category)
-        try:
-            categoria_productos = TransactionCategory.objects.get(
-                branch=producto.sucursal,
-                name='Productos',
-                type='INCOME',
-                is_system_category=True
-            )
-        except TransactionCategory.DoesNotExist:
-            return Response(
-                {'error': 'Categoría de Productos no configurada'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # Atomic transaction para consistencia
-        with transaction.atomic():
-            # Guardar stock anterior
-            stock_anterior = producto.stock_actual
-
-            # Reducir stock
-            producto.stock_actual -= cantidad
-            stock_nuevo = producto.stock_actual
-            producto.save(update_fields=['stock_actual'])
-
-            # Crear movimiento de inventario
-            # NOTE: This will automatically trigger a signal that creates a Transaction
-            movimiento = MovimientoInventario.objects.create(
-                producto=producto,
-                tipo='SALIDA',
-                cantidad=cantidad,
-                stock_anterior=stock_anterior,
-                stock_nuevo=stock_nuevo,
-                precio_unitario=producto.precio_venta,
-                usuario=request.user,
-                notas=f"Venta a {cliente.nombre} {cliente.apellido}"
-            )
-
-            # Refresh to get the auto-created transaction from signal
-            movimiento.refresh_from_db()
-
-            # Update the auto-created transaction with additional details
-            transaccion = movimiento.financial_transaction
-            transaccion.client = cliente
-            transaccion.payment_method = payment_method
-            transaccion.category = categoria_productos
-            transaccion.amount = total  # Update with discounted amount
-            transaccion.description = f"Venta: {cantidad}x {producto.nombre} - {cliente.nombre} {cliente.apellido}"
-            transaccion.notes = f"Subtotal: ${subtotal}, Descuento: {descuento_porcentaje}% (${descuento_monto})"
-            transaccion.ip_address = self.get_client_ip(request)
-            transaccion.user_agent = self.get_user_agent(request)
-            transaccion.save()
-
-        # Serializar respuesta
-        serializer = TransaccionMiCajaSerializer(transaccion)
-
-        return Response({
-            'success': True,
-            'message': f'Venta registrada: {cantidad}x {producto.nombre} - ${total}',
-            'transaction': serializer.data,
-            'producto': {
-                'id': producto.id,
-                'nombre': producto.nombre,
-                'stock_restante': producto.stock_actual
-            }
-        }, status=status.HTTP_201_CREATED)
-
     @action(detail=False, methods=['get'], url_path='mis-transacciones')
     def mis_transacciones(self, request):
         """
         Get transactions created by the current user
         """
-        # Obtener parámetros
         fecha_str = request.query_params.get('fecha')
         payment_method = request.query_params.get('payment_method')
 
-        # Fecha por defecto: hoy
         if fecha_str:
             try:
                 fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -244,20 +63,16 @@ class MiCajaViewSet(viewsets.ViewSet):
         else:
             fecha = timezone.now().date()
 
-        # Filtrar transacciones
         queryset = Transaction.objects.filter(
             registered_by=request.user,
             date=fecha
         ).select_related('client', 'appointment', 'product', 'registered_by')
 
-        # Filtrar por método de pago si se especifica
         if payment_method:
             queryset = queryset.filter(payment_method=payment_method)
 
-        # Ordenar por hora de creación
         queryset = queryset.order_by('created_at')
 
-        # Calcular resumen
         total = sum(t.amount for t in queryset if t.is_income)
         por_metodo = {}
         for t in queryset:
@@ -265,7 +80,6 @@ class MiCajaViewSet(viewsets.ViewSet):
                 metodo = t.payment_method
                 por_metodo[metodo] = por_metodo.get(metodo, Decimal('0.00')) + t.amount
 
-        # Serializar
         serializer = TransaccionMiCajaSerializer(queryset, many=True)
 
         return Response({
@@ -294,14 +108,12 @@ class MiCajaViewSet(viewsets.ViewSet):
         efectivo_contado = serializer.validated_data['efectivo_contado']
         notas = serializer.validated_data.get('notas', '')
 
-        # Verificar que no exista cierre para ese día
         if CierreCaja.objects.filter(empleado=request.user, fecha=fecha).exists():
             return Response(
                 {'error': f'Ya existe un cierre de caja para el {fecha.strftime("%d/%m/%Y")}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Calcular totales del sistema
         transacciones = Transaction.objects.filter(
             registered_by=request.user,
             date=fecha
@@ -309,18 +121,15 @@ class MiCajaViewSet(viewsets.ViewSet):
 
         total_sistema = sum(t.amount for t in transacciones if t.is_income)
 
-        # Desglose por método de pago
         desglose_metodos = {}
         for t in transacciones:
             if t.is_income:
                 metodo = t.payment_method
                 desglose_metodos[metodo] = desglose_metodos.get(metodo, 0) + float(t.amount)
 
-        # Calcular diferencia
         efectivo_sistema = desglose_metodos.get('CASH', 0)
         diferencia = float(efectivo_contado) - efectivo_sistema
 
-        # Crear cierre de caja
         cierre = CierreCaja.objects.create(
             empleado=request.user,
             sucursal=request.user.sucursal,
@@ -332,7 +141,6 @@ class MiCajaViewSet(viewsets.ViewSet):
             notas=notas
         )
 
-        # Serializar respuesta
         serializer = CierreCajaSerializer(cierre)
 
         return Response({
@@ -345,50 +153,27 @@ class MiCajaViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'], url_path='turnos-pendientes-cobro')
     def turnos_pendientes_cobro(self, request):
         """
-        Get appointments ready to be charged:
-        - COMPLETADO appointments with pending payment
-        - CONFIRMADO appointments whose date has passed (service was provided)
+        Get appointments ready to be charged
         """
         from django.db.models import Q
 
-        # Obtener fecha/hora actual
         now = timezone.now()
 
-        # Filtrar turnos que están listos para cobrar:
-        # 1. COMPLETADOS con pago pendiente/con seña
-        # 2. CONFIRMADOS cuya fecha ya pasó (servicio ya se realizó) con pago pendiente
         turnos = Turno.objects.filter(
             sucursal=request.user.sucursal,
             estado_pago__in=['PENDIENTE', 'CON_SENA']
         ).filter(
-            Q(estado='COMPLETADO') |  # Ya marcado como completado
-            Q(estado='CONFIRMADO', fecha_hora_fin__lt=now)  # Confirmado pero fecha ya pasó
+            Q(estado='COMPLETADO') |
+            Q(estado='CONFIRMADO', fecha_hora_fin__lt=now)
         ).select_related('cliente', 'servicio', 'profesional').order_by('fecha_hora_inicio')
 
-        # DEBUG: Log para diagnóstico
-        print(f"\n=== DEBUG TURNOS PENDIENTES COBRO ===")
-        print(f"Usuario: {request.user.get_full_name()} (Sucursal: {request.user.sucursal.nombre})")
-        print(f"Fecha/hora actual: {now.strftime('%d/%m/%Y %H:%M')}")
-        print(f"Total turnos listos para cobrar: {turnos.count()}")
-        for t in turnos:
-            print(f"  - Turno #{t.id}: {t.cliente.nombre_completo} - {t.servicio.nombre} - {t.fecha_hora_inicio.strftime('%d/%m/%Y %H:%M')} - Estado: {t.estado} - Pago: {t.estado_pago}")
-        print(f"=====================================\n")
-
-        # Construir lista de turnos pendientes
         turnos_pendientes = []
         for turno in turnos:
-            # Verificar si tiene transacciones de servicio
             transacciones_servicio = turno.transactions.filter(type='INCOME_SERVICE')
-
-            # Calcular cuánto se ha pagado
             total_pagado = sum(t.amount for t in transacciones_servicio)
-
-            # Calcular monto pendiente
             monto_pendiente = float(turno.servicio.precio) - float(total_pagado)
 
-            # Solo mostrar si hay saldo pendiente
             if monto_pendiente > 0:
-                # Determinar monto de seña pagada
                 monto_sena_pagado = float(total_pagado) if turno.estado_pago == 'CON_SENA' else 0
 
                 turnos_pendientes.append({
@@ -412,158 +197,54 @@ class MiCajaViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='venta-unificada')
     def venta_unificada(self, request):
         """
-        Register a unified sale with multiple items (products and/or services)
+        Register a unified sale with multiple items (products, services from turnos,
+        or direct services without turno). Client is optional.
         """
-        print(f"\n=== DEBUG VENTA UNIFICADA ===")
-        print(f"Request data: {request.data}")
-        print(f"=============================\n")
-
         serializer = VentaUnificadaSerializer(data=request.data)
         if not serializer.is_valid():
-            print(f"\n=== VALIDATION ERROR ===")
-            print(f"Errors: {serializer.errors}")
-            print(f"========================\n")
-        serializer.is_valid(raise_exception=True)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         items = serializer.validated_data['items']
-        cliente_id = serializer.validated_data['cliente_id']
+        cliente_id = serializer.validated_data.get('cliente_id')
         payment_method = serializer.validated_data['payment_method']
         notas = serializer.validated_data.get('notas', '')
 
-        try:
-            cliente = Cliente.objects.get(id=cliente_id)
-        except Cliente.DoesNotExist:
-            return Response(
-                {'error': 'Cliente no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        cliente = None
+        if cliente_id:
+            try:
+                cliente = Cliente.objects.get(id=cliente_id)
+            except Cliente.DoesNotExist:
+                return Response(
+                    {'error': 'Cliente no encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
         transacciones_creadas = []
         productos_actualizados = []
 
-        # Process all items in a single atomic transaction
         with transaction.atomic():
             for item_data in items:
                 tipo = item_data['tipo']
 
                 if tipo == 'producto':
-                    # Process product sale
-                    producto_id = item_data['producto_id']
-                    cantidad = item_data['cantidad']
-                    descuento_porcentaje = item_data.get('descuento_porcentaje', Decimal('0.00'))
-
-                    producto = Producto.objects.select_related('sucursal').get(id=producto_id)
-
-                    # Calculate amounts
-                    subtotal = producto.precio_venta * cantidad
-                    descuento_monto = (subtotal * descuento_porcentaje) / 100
-                    total = subtotal - descuento_monto
-
-                    # Get product income category
-                    categoria_productos = TransactionCategory.objects.get(
-                        branch=producto.sucursal,
-                        name='Productos',
-                        type='INCOME',
-                        is_system_category=True
+                    transaccion, producto_info = self._procesar_producto(
+                        item_data, cliente, payment_method, notas, request
                     )
-
-                    # Save previous stock
-                    stock_anterior = producto.stock_actual
-
-                    # Reduce stock
-                    producto.stock_actual -= cantidad
-                    stock_nuevo = producto.stock_actual
-                    producto.save(update_fields=['stock_actual'])
-
-                    # Create inventory movement
-                    movimiento = MovimientoInventario.objects.create(
-                        producto=producto,
-                        tipo='SALIDA',
-                        cantidad=cantidad,
-                        stock_anterior=stock_anterior,
-                        stock_nuevo=stock_nuevo,
-                        precio_unitario=producto.precio_venta,
-                        usuario=request.user,
-                        notas=f"Venta a {cliente.nombre} {cliente.apellido} - {notas}" if notas else f"Venta a {cliente.nombre} {cliente.apellido}"
-                    )
-
-                    # Refresh to get auto-created transaction
-                    movimiento.refresh_from_db()
-
-                    # Update auto-created transaction
-                    transaccion = movimiento.financial_transaction
-                    transaccion.client = cliente
-                    transaccion.payment_method = payment_method
-                    transaccion.category = categoria_productos
-                    transaccion.amount = total
-                    transaccion.description = f"Venta: {cantidad}x {producto.nombre}"
-                    if descuento_porcentaje > 0:
-                        transaccion.notes = f"Subtotal: ${subtotal}, Descuento: {descuento_porcentaje}% (${descuento_monto})"
-                    transaccion.ip_address = self.get_client_ip(request)
-                    transaccion.user_agent = self.get_user_agent(request)
-                    transaccion.save()
-
                     transacciones_creadas.append(transaccion)
-                    productos_actualizados.append({
-                        'id': producto.id,
-                        'nombre': producto.nombre,
-                        'stock_restante': producto.stock_actual
-                    })
+                    productos_actualizados.append(producto_info)
 
                 elif tipo == 'servicio':
-                    # Process service payment
-                    turno_id = item_data['turno_id']
-
-                    turno = Turno.objects.select_related(
-                        'servicio', 'cliente', 'profesional', 'sucursal'
-                    ).get(id=turno_id)
-
-                    # Calculate pending amount
-                    # If has deposit (seña), charge remaining balance
-                    # If no deposit, charge full amount
-                    if turno.estado_pago == 'CON_SENA' and turno.monto_sena:
-                        monto_a_cobrar = turno.servicio.precio - turno.monto_sena
-                        descripcion = f"Saldo de servicio: {turno.servicio.nombre} (Seña ya pagada: ${turno.monto_sena})"
-                    else:
-                        monto_a_cobrar = turno.servicio.precio
-                        descripcion = f"Servicio: {turno.servicio.nombre}"
-
-                    # Get service income category
-                    categoria_servicios = TransactionCategory.objects.get(
-                        branch=turno.sucursal,
-                        name='Servicios',
-                        type='INCOME',
-                        is_system_category=True
+                    transaccion = self._procesar_servicio_turno(
+                        item_data, cliente, payment_method, notas, request
                     )
-
-                    # Create income transaction
-                    transaccion = Transaction.objects.create(
-                        branch=turno.sucursal,
-                        category=categoria_servicios,
-                        client=cliente,  # Use the unified sale client
-                        appointment=turno,
-                        type='INCOME_SERVICE',
-                        amount=monto_a_cobrar,
-                        payment_method=payment_method,
-                        date=timezone.now().date(),
-                        description=descripcion,
-                        notes=notas,
-                        auto_generated=False,
-                        registered_by=request.user,
-                        ip_address=self.get_client_ip(request),
-                        user_agent=self.get_user_agent(request)
-                    )
-
-                    # Update appointment status and payment
-                    # Mark as completed if not already (service was provided)
-                    if turno.estado != 'COMPLETADO':
-                        turno.estado = 'COMPLETADO'
-                    turno.estado_pago = 'PAGADO'
-                    turno.save(update_fields=['estado', 'estado_pago'])
-
                     transacciones_creadas.append(transaccion)
 
-        # Serialize response
+                elif tipo == 'servicio_directo':
+                    transaccion = self._procesar_servicio_directo(
+                        item_data, cliente, payment_method, notas, request
+                    )
+                    transacciones_creadas.append(transaccion)
+
         transacciones_serializer = TransaccionMiCajaSerializer(transacciones_creadas, many=True)
 
         return Response({
@@ -574,6 +255,348 @@ class MiCajaViewSet(viewsets.ViewSet):
             'total_items': len(items),
             'total_monto': float(sum(t.amount for t in transacciones_creadas))
         }, status=status.HTTP_201_CREATED)
+
+    def _procesar_producto(self, item_data, cliente, payment_method, notas, request):
+        """Process a product sale item"""
+        producto_id = item_data['producto_id']
+        cantidad = item_data['cantidad']
+        descuento_porcentaje = item_data.get('descuento_porcentaje', Decimal('0.00'))
+        precio_override = item_data.get('precio_unitario')
+
+        producto = Producto.objects.select_related('sucursal').get(id=producto_id)
+
+        precio_unitario = precio_override if precio_override else producto.precio_venta
+        subtotal = precio_unitario * cantidad
+        descuento_monto = (subtotal * descuento_porcentaje) / 100
+        total = subtotal - descuento_monto
+
+        categoria_productos = TransactionCategory.objects.get(
+            branch=producto.sucursal,
+            name='Productos',
+            type='INCOME',
+            is_system_category=True
+        )
+
+        stock_anterior = producto.stock_actual
+        producto.stock_actual -= cantidad
+        stock_nuevo = producto.stock_actual
+        producto.save(update_fields=['stock_actual'])
+
+        cliente_desc = f" - {cliente.nombre} {cliente.apellido}" if cliente else ""
+        movimiento = MovimientoInventario.objects.create(
+            producto=producto,
+            tipo='SALIDA',
+            cantidad=cantidad,
+            stock_anterior=stock_anterior,
+            stock_nuevo=stock_nuevo,
+            precio_unitario=precio_unitario,
+            usuario=request.user,
+            notas=f"Venta{cliente_desc} - {notas}" if notas else f"Venta{cliente_desc}"
+        )
+
+        movimiento.refresh_from_db()
+
+        transaccion = movimiento.financial_transaction
+        transaccion.client = cliente
+        transaccion.payment_method = payment_method
+        transaccion.category = categoria_productos
+        transaccion.amount = total
+        transaccion.description = f"Venta: {cantidad}x {producto.nombre}"
+        notes_parts = []
+        if precio_override and precio_override != producto.precio_venta:
+            notes_parts.append(f"Precio modificado: ${precio_unitario} (catálogo: ${producto.precio_venta})")
+        if descuento_porcentaje > 0:
+            notes_parts.append(f"Subtotal: ${subtotal}, Descuento: {descuento_porcentaje}% (${descuento_monto})")
+        if notes_parts:
+            transaccion.notes = ". ".join(notes_parts)
+        transaccion.ip_address = self.get_client_ip(request)
+        transaccion.user_agent = self.get_user_agent(request)
+        transaccion.save()
+
+        producto_info = {
+            'id': producto.id,
+            'nombre': producto.nombre,
+            'stock_restante': producto.stock_actual
+        }
+
+        return transaccion, producto_info
+
+    def _procesar_servicio_turno(self, item_data, cliente, payment_method, notas, request):
+        """Process a service payment from an existing turno"""
+        turno_id = item_data['turno_id']
+        descuento_porcentaje = item_data.get('descuento_porcentaje', Decimal('0.00'))
+
+        turno = Turno.objects.select_related(
+            'servicio', 'cliente', 'profesional', 'sucursal'
+        ).get(id=turno_id)
+
+        if turno.estado_pago == 'CON_SENA' and turno.monto_sena:
+            monto_base = turno.servicio.precio - turno.monto_sena
+            descripcion = f"Saldo de servicio: {turno.servicio.nombre} (Seña ya pagada: ${turno.monto_sena})"
+        else:
+            monto_base = turno.servicio.precio
+            descripcion = f"Servicio: {turno.servicio.nombre}"
+
+        # Apply discount if any
+        if descuento_porcentaje > 0:
+            descuento_monto = (monto_base * descuento_porcentaje) / 100
+            monto_a_cobrar = monto_base - descuento_monto
+            descripcion += f" (Descuento: {descuento_porcentaje}%)"
+        else:
+            monto_a_cobrar = monto_base
+
+        categoria_servicios = TransactionCategory.objects.get(
+            branch=turno.sucursal,
+            name='Servicios',
+            type='INCOME',
+            is_system_category=True
+        )
+
+        # Use turno's client if no client specified in sale
+        transaction_client = cliente if cliente else turno.cliente
+
+        transaccion = Transaction.objects.create(
+            branch=turno.sucursal,
+            category=categoria_servicios,
+            client=transaction_client,
+            appointment=turno,
+            type='INCOME_SERVICE',
+            amount=monto_a_cobrar,
+            payment_method=payment_method,
+            date=timezone.now().date(),
+            description=descripcion,
+            notes=notas,
+            auto_generated=False,
+            registered_by=request.user,
+            ip_address=self.get_client_ip(request),
+            user_agent=self.get_user_agent(request)
+        )
+
+        if turno.estado != 'COMPLETADO':
+            turno.estado = 'COMPLETADO'
+        turno.estado_pago = 'PAGADO'
+        turno.save(update_fields=['estado', 'estado_pago'])
+
+        return transaccion
+
+    def _procesar_servicio_directo(self, item_data, cliente, payment_method, notas, request):
+        """Process a direct service sale (without turno/appointment)"""
+        servicio_id = item_data['servicio_id']
+        precio_override = item_data.get('precio_unitario')
+        descuento_porcentaje = item_data.get('descuento_porcentaje', Decimal('0.00'))
+
+        servicio = Servicio.objects.select_related('sucursal').get(id=servicio_id)
+
+        precio_unitario = precio_override if precio_override else servicio.precio
+        descuento_monto = (precio_unitario * descuento_porcentaje) / 100
+        monto_final = precio_unitario - descuento_monto
+
+        categoria_servicios = TransactionCategory.objects.get(
+            branch=servicio.sucursal,
+            name='Servicios',
+            type='INCOME',
+            is_system_category=True
+        )
+
+        descripcion = f"Servicio directo: {servicio.nombre}"
+        if cliente:
+            descripcion += f" - {cliente.nombre} {cliente.apellido}"
+
+        notes_parts = []
+        if precio_override and precio_override != servicio.precio:
+            notes_parts.append(f"Precio modificado: ${precio_unitario} (catálogo: ${servicio.precio})")
+        if descuento_porcentaje > 0:
+            notes_parts.append(f"Descuento: {descuento_porcentaje}% (${descuento_monto})")
+        if notas:
+            notes_parts.append(notas)
+
+        transaccion = Transaction.objects.create(
+            branch=servicio.sucursal,
+            category=categoria_servicios,
+            client=cliente,
+            type='INCOME_SERVICE',
+            amount=monto_final,
+            payment_method=payment_method,
+            date=timezone.now().date(),
+            description=descripcion,
+            notes=". ".join(notes_parts) if notes_parts else '',
+            auto_generated=False,
+            registered_by=request.user,
+            ip_address=self.get_client_ip(request),
+            user_agent=self.get_user_agent(request)
+        )
+
+        return transaccion
+
+    @action(detail=False, methods=['patch'], url_path='editar-transaccion')
+    def editar_transaccion(self, request):
+        """
+        Edit an existing transaction from Mi Caja.
+        Editable fields: amount, payment_method, notas, cliente_id.
+        """
+        serializer = EditarTransaccionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        transaccion_id = serializer.validated_data['transaccion_id']
+
+        try:
+            transaccion = Transaction.objects.select_related(
+                'client', 'appointment', 'product', 'registered_by', 'inventory_movement'
+            ).get(id=transaccion_id)
+        except Transaction.DoesNotExist:
+            return Response(
+                {'error': 'Transacción no encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Permission check: own transaction or ADMIN/MANAGER
+        if request.user.rol == 'EMPLEADO' and transaccion.registered_by != request.user:
+            return Response(
+                {'error': 'Solo puedes editar tus propias transacciones'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not transaccion.can_be_edited:
+            return Response(
+                {'error': 'No se pueden editar transacciones con más de 30 días'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        updated_fields = []
+
+        if 'amount' in serializer.validated_data:
+            transaccion.amount = serializer.validated_data['amount']
+            updated_fields.append('amount')
+
+        if 'payment_method' in serializer.validated_data:
+            transaccion.payment_method = serializer.validated_data['payment_method']
+            updated_fields.append('payment_method')
+
+        if 'notas' in serializer.validated_data:
+            transaccion.notes = serializer.validated_data['notas']
+            updated_fields.append('notes')
+
+        if 'cliente_id' in serializer.validated_data:
+            cliente_id = serializer.validated_data['cliente_id']
+            if cliente_id is None:
+                transaccion.client = None
+            else:
+                transaccion.client = Cliente.objects.get(id=cliente_id)
+            updated_fields.append('client')
+
+        if updated_fields:
+            transaccion.edited_by = request.user
+            updated_fields.append('edited_by')
+            transaccion.save(update_fields=updated_fields)
+
+        result_serializer = TransaccionMiCajaSerializer(transaccion)
+
+        return Response({
+            'success': True,
+            'message': 'Transacción actualizada exitosamente',
+            'transaction': result_serializer.data
+        })
+
+    @action(detail=False, methods=['post'], url_path='eliminar-transaccion')
+    def eliminar_transaccion(self, request):
+        """
+        Delete a transaction from Mi Caja.
+        Creates an audit log (TransaccionEliminada) with mandatory reason.
+        Reverses inventory if product sale. Resets turno if service payment.
+        """
+        serializer = EliminarTransaccionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        transaccion_id = serializer.validated_data['transaccion_id']
+        motivo = serializer.validated_data['motivo']
+
+        try:
+            transaccion = Transaction.objects.select_related(
+                'client', 'appointment', 'product', 'registered_by',
+                'inventory_movement', 'branch'
+            ).get(id=transaccion_id)
+        except Transaction.DoesNotExist:
+            return Response(
+                {'error': 'Transacción no encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Permission check
+        if request.user.rol == 'EMPLEADO' and transaccion.registered_by != request.user:
+            return Response(
+                {'error': 'Solo puedes eliminar tus propias transacciones'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not transaccion.can_be_edited:
+            return Response(
+                {'error': 'No se pueden eliminar transacciones con más de 30 días'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            # 1. Create audit log
+            cliente_nombre = ''
+            if transaccion.client:
+                cliente_nombre = f"{transaccion.client.nombre} {transaccion.client.apellido}"
+
+            registrada_por_nombre = ''
+            if transaccion.registered_by:
+                registrada_por_nombre = transaccion.registered_by.get_full_name()
+
+            TransaccionEliminada.objects.create(
+                eliminada_por=request.user,
+                sucursal=transaccion.branch,
+                motivo=motivo,
+                transaccion_id_original=transaccion.id,
+                tipo=transaccion.type,
+                monto=transaccion.amount,
+                metodo_pago=transaccion.payment_method,
+                fecha=transaccion.date,
+                descripcion=transaccion.description,
+                notas_originales=transaccion.notes,
+                cliente_nombre=cliente_nombre,
+                registrada_por_nombre=registrada_por_nombre
+            )
+
+            # 2. Collect related data before deleting
+            mov_to_reverse = None
+            if transaccion.inventory_movement:
+                mov = transaccion.inventory_movement
+                mov_to_reverse = (mov, mov.producto, mov.cantidad)
+
+            turno_to_reset = None
+            if transaccion.appointment:
+                turno = transaccion.appointment
+                other_payments = turno.transactions.filter(
+                    type='INCOME_SERVICE'
+                ).exclude(id=transaccion.id).exists()
+                if not other_payments:
+                    turno_to_reset = turno
+
+            # 3. Delete transaction first (before inventory movement,
+            #    because mov has OneToOneField SET_NULL to transaction)
+            transaccion.delete()
+
+            # 4. Reverse inventory if product sale
+            if mov_to_reverse:
+                mov, producto, cantidad = mov_to_reverse
+                producto.stock_actual += cantidad
+                producto.save(update_fields=['stock_actual'])
+                # Refresh from DB so the signal sees financial_transaction=None
+                # (it was SET_NULL when we deleted the transaction above)
+                mov.refresh_from_db()
+                mov.delete()
+
+            # 5. Reset turno payment status if service payment
+            if turno_to_reset:
+                turno_to_reset.estado_pago = 'PENDIENTE'
+                turno_to_reset.save(update_fields=['estado_pago'])
+
+        return Response({
+            'success': True,
+            'message': 'Transacción eliminada exitosamente'
+        })
 
     @action(detail=False, methods=['get'], url_path='resumen-dia')
     def resumen_dia(self, request):
@@ -590,24 +613,20 @@ class MiCajaViewSet(viewsets.ViewSet):
         else:
             fecha = timezone.now().date()
 
-        # Obtener transacciones del día
         transacciones = Transaction.objects.filter(
             registered_by=request.user,
             date=fecha
         )
 
-        # Calcular totales
         total_ingresos = sum(t.amount for t in transacciones if t.is_income)
         cantidad = transacciones.filter(type__startswith='INCOME').count()
 
-        # Desglose por método
         por_metodo = {}
         for t in transacciones:
             if t.is_income:
                 metodo = t.get_payment_method_display()
                 por_metodo[metodo] = por_metodo.get(metodo, Decimal('0.00')) + t.amount
 
-        # Verificar si hay cierre
         tiene_cierre = CierreCaja.objects.filter(
             empleado=request.user,
             fecha=fecha

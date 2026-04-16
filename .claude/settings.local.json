@@ -20,7 +20,8 @@
       "Bash(timeout 8 docker-compose logs:*)",
       "WebSearch",
       "Bash(find:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(xargs grep *)"
     ],
     "deny": [],
     "ask": []

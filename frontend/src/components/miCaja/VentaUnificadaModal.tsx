@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button/Button'
 import { registrarVentaUnificada, getTurnosPendientesCobro } from '@/services/miCajaService'
 import { getClientes } from '@/services/clienteService'
 import api from '@/services/api'
-import { PaymentMethod, type Producto, type Cliente } from '@/types/models'
+import { PaymentMethod, type Producto, type Cliente, type Servicio } from '@/types/models'
 import { PAYMENT_METHOD_LABELS, type TurnoPendienteCobro, type VentaUnificadaItem } from '@/types/miCaja'
 
 interface VentaUnificadaModalProps {
@@ -16,10 +16,11 @@ interface VentaUnificadaModalProps {
 }
 
 interface CartItem {
-  id: string // Temporary ID for cart management
-  tipo: 'producto' | 'servicio'
+  id: string
+  tipo: 'producto' | 'servicio' | 'servicio_directo'
   producto_id?: number
   turno_id?: number
+  servicio_id?: number
   nombre: string
   cantidad: number
   precio_unitario: number
@@ -28,16 +29,19 @@ interface CartItem {
   total: number
 }
 
+type ItemTipo = 'producto' | 'servicio' | 'servicio_directo'
+
 const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModalProps) => {
   const [productos, setProductos] = useState<Producto[]>([])
   const [turnos, setTurnos] = useState<TurnoPendienteCobro[]>([])
+  const [servicios, setServicios] = useState<Servicio[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Sale-wide settings
-  const [clienteId, setClienteId] = useState<number | ''>('')
+  const [clienteId, setClienteId] = useState<number | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH)
   const [notas, setNotas] = useState('')
 
@@ -45,10 +49,12 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
   const [cart, setCart] = useState<CartItem[]>([])
 
   // Add item form
-  const [itemTipo, setItemTipo] = useState<'producto' | 'servicio'>('producto')
+  const [itemTipo, setItemTipo] = useState<ItemTipo>('producto')
   const [selectedProducto, setSelectedProducto] = useState<number | ''>('')
   const [selectedTurno, setSelectedTurno] = useState<number | ''>('')
+  const [selectedServicio, setSelectedServicio] = useState<number | ''>('')
   const [cantidad, setCantidad] = useState(1)
+  const [precioUnitario, setPrecioUnitario] = useState<number | ''>('')
   const [descuento, setDescuento] = useState(0)
 
   useEffect(() => {
@@ -57,24 +63,52 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
     }
   }, [isOpen])
 
+  // Auto-fill price when product is selected
+  useEffect(() => {
+    if (selectedProducto) {
+      const producto = productos.find(p => p.id === selectedProducto)
+      if (producto) {
+        setPrecioUnitario(Number(producto.precio_venta))
+      }
+    } else {
+      setPrecioUnitario('')
+    }
+  }, [selectedProducto, productos])
+
+  // Auto-fill price when service is selected
+  useEffect(() => {
+    if (selectedServicio) {
+      const servicio = servicios.find(s => s.id === selectedServicio)
+      if (servicio) {
+        setPrecioUnitario(Number(servicio.precio))
+      }
+    } else if (itemTipo === 'servicio_directo') {
+      setPrecioUnitario('')
+    }
+  }, [selectedServicio, servicios, itemTipo])
+
   const loadData = async () => {
     try {
       setLoadingData(true)
       setError(null)
 
-      const [productosResponse, turnosData, clientesData] = await Promise.all([
+      const [productosResponse, turnosData, clientesData, serviciosResponse] = await Promise.all([
         api.get('/inventario/productos/', { params: { activo: true } }),
         getTurnosPendientesCobro(),
-        getClientes({ activo: true })
+        getClientes({ activo: true }),
+        api.get('/servicios/servicios/', { params: { activo: true } })
       ])
 
       const productosData = productosResponse.data.results || productosResponse.data || []
-      // Filter products with stock
       const productosConStock = productosData.filter((p: Producto) => p.stock_actual > 0)
+
+      const serviciosData = serviciosResponse.data.results || serviciosResponse.data || []
+      const serviciosActivos = serviciosData.filter((s: Servicio) => s.activo)
 
       setProductos(productosConStock)
       setTurnos(turnosData.turnos || [])
       setClientes(clientesData.results || [])
+      setServicios(serviciosActivos)
     } catch (err: any) {
       console.error('Error loading data:', err)
       setError('Error al cargar datos')
@@ -99,8 +133,9 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           return
         }
 
-        if (!producto.precio_venta || producto.precio_venta <= 0) {
-          setError('El producto no tiene un precio válido')
+        const precio = precioUnitario !== '' ? Number(precioUnitario) : Number(producto.precio_venta)
+        if (!precio || precio <= 0) {
+          setError('El precio debe ser mayor a 0')
           return
         }
 
@@ -114,7 +149,7 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           return
         }
 
-        const subtotal = Number(producto.precio_venta) * Number(cantidad)
+        const subtotal = precio * Number(cantidad)
         const descuentoMonto = (subtotal * Number(descuento)) / 100
         const total = subtotal - descuentoMonto
 
@@ -124,16 +159,16 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           producto_id: producto.id,
           nombre: `${producto.nombre} (x${cantidad})`,
           cantidad: Number(cantidad),
-          precio_unitario: Number(producto.precio_venta),
+          precio_unitario: precio,
           descuento_porcentaje: Number(descuento),
           subtotal,
           total
         }
 
         setCart([...cart, newItem])
-        // Reset form
         setSelectedProducto('')
         setCantidad(1)
+        setPrecioUnitario('')
         setDescuento(0)
 
       } else if (itemTipo === 'servicio') {
@@ -148,7 +183,6 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           return
         }
 
-        // Check if turno already in cart
         if (cart.some(item => item.turno_id === turno.id)) {
           setError('Este turno ya está en el carrito')
           return
@@ -163,6 +197,10 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           return
         }
 
+        // Apply discount if any
+        const descuentoMonto = (montoPendiente * Number(descuento)) / 100
+        const totalConDescuento = montoPendiente - descuentoMonto
+
         const newItem: CartItem = {
           id: `servicio-${Date.now()}-${Math.random()}`,
           tipo: 'servicio',
@@ -172,14 +210,53 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
             : `${turno.servicio} - ${turno.cliente}`,
           cantidad: 1,
           precio_unitario: montoPendiente,
-          descuento_porcentaje: 0,
+          descuento_porcentaje: Number(descuento),
           subtotal: montoPendiente,
-          total: montoPendiente
+          total: totalConDescuento
         }
 
         setCart([...cart, newItem])
-        // Reset form
         setSelectedTurno('')
+        setDescuento(0)
+
+      } else if (itemTipo === 'servicio_directo') {
+        if (!selectedServicio) {
+          setError('Seleccione un servicio')
+          return
+        }
+
+        const servicio = servicios.find(s => s.id === selectedServicio)
+        if (!servicio) {
+          setError('Servicio no encontrado')
+          return
+        }
+
+        const precio = precioUnitario !== '' ? Number(precioUnitario) : Number(servicio.precio)
+        if (!precio || precio <= 0) {
+          setError('El precio debe ser mayor a 0')
+          return
+        }
+
+        const subtotal = precio
+        const descuentoMonto = (subtotal * Number(descuento)) / 100
+        const total = subtotal - descuentoMonto
+
+        const newItem: CartItem = {
+          id: `servicio_directo-${Date.now()}-${Math.random()}`,
+          tipo: 'servicio_directo',
+          servicio_id: servicio.id,
+          nombre: `${servicio.nombre} (directo)`,
+          cantidad: 1,
+          precio_unitario: precio,
+          descuento_porcentaje: Number(descuento),
+          subtotal,
+          total
+        }
+
+        setCart([...cart, newItem])
+        setSelectedServicio('')
+        setPrecioUnitario('')
+        setDescuento(0)
       }
     } catch (err: any) {
       console.error('Error al agregar item:', err)
@@ -203,26 +280,33 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
       return
     }
 
-    if (!clienteId) {
-      setError('Seleccione un cliente')
-      return
-    }
-
     try {
       setLoading(true)
       setError(null)
 
-      const items: VentaUnificadaItem[] = cart.map(item => ({
-        tipo: item.tipo,
-        producto_id: item.producto_id,
-        turno_id: item.turno_id,
-        cantidad: item.cantidad,
-        descuento_porcentaje: item.descuento_porcentaje
-      }))
+      const items: VentaUnificadaItem[] = cart.map(item => {
+        const ventaItem: VentaUnificadaItem = {
+          tipo: item.tipo,
+          cantidad: item.cantidad,
+          descuento_porcentaje: item.descuento_porcentaje
+        }
+
+        if (item.tipo === 'producto') {
+          ventaItem.producto_id = item.producto_id
+          ventaItem.precio_unitario = item.precio_unitario
+        } else if (item.tipo === 'servicio') {
+          ventaItem.turno_id = item.turno_id
+        } else if (item.tipo === 'servicio_directo') {
+          ventaItem.servicio_id = item.servicio_id
+          ventaItem.precio_unitario = item.precio_unitario
+        }
+
+        return ventaItem
+      })
 
       await registrarVentaUnificada({
         items,
-        cliente_id: clienteId as number,
+        cliente_id: clienteId,
         payment_method: paymentMethod,
         notas
       })
@@ -232,15 +316,12 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
       onClose()
     } catch (err: any) {
       console.error('Error registering sale:', err)
-      console.error('Error response:', err.response?.data)
 
-      // Extraer mensaje de error más detallado
       let errorMessage = 'Error al registrar la venta'
       if (err.response?.data) {
         if (err.response.data.error) {
           errorMessage = err.response.data.error
         } else if (err.response.data.items) {
-          // Error de validación en items
           errorMessage = JSON.stringify(err.response.data.items)
         } else if (typeof err.response.data === 'string') {
           errorMessage = err.response.data
@@ -256,14 +337,16 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
   }
 
   const resetForm = () => {
-    setClienteId('')
+    setClienteId(null)
     setPaymentMethod(PaymentMethod.CASH)
     setNotas('')
     setCart([])
     setItemTipo('producto')
     setSelectedProducto('')
     setSelectedTurno('')
+    setSelectedServicio('')
     setCantidad(1)
+    setPrecioUnitario('')
     setDescuento(0)
     setError(null)
   }
@@ -273,19 +356,37 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
     onClose()
   }
 
+  const switchTab = (tab: ItemTipo) => {
+    setItemTipo(tab)
+    setSelectedProducto('')
+    setSelectedTurno('')
+    setSelectedServicio('')
+    setPrecioUnitario('')
+    setCantidad(1)
+    setDescuento(0)
+  }
+
   const paymentMethodOptions = Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({
     value,
     label
   }))
 
-  const clienteOptions = clientes.map(cliente => ({
-    value: cliente.id.toString(),
-    label: `${cliente.nombre} ${cliente.apellido}`
-  }))
+  const clienteOptions = [
+    { value: '', label: 'Sin cliente (consumidor final)' },
+    ...clientes.map(cliente => ({
+      value: cliente.id.toString(),
+      label: `${cliente.nombre} ${cliente.apellido}`
+    }))
+  ]
 
   const productoOptions = productos.map(producto => ({
     value: producto.id.toString(),
     label: `${producto.nombre} - Stock: ${producto.stock_actual} - $${producto.precio_venta}`
+  }))
+
+  const servicioOptions = servicios.map(servicio => ({
+    value: servicio.id.toString(),
+    label: `${servicio.nombre} - $${servicio.precio}`
   }))
 
   const turnoOptions = turnos.map(turno => {
@@ -296,10 +397,16 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
     return {
       value: turno.id.toString(),
       label: esConSena
-        ? `${turno.servicio} - ${turno.cliente} - Prof: ${turno.profesional} - ${turno.fecha} ${turno.hora} - SALDO PENDIENTE: $${montoPendiente.toFixed(2)} (Seña: $${montoSena.toFixed(2)})`
-        : `${turno.servicio} - ${turno.cliente} - Prof: ${turno.profesional} - ${turno.fecha} ${turno.hora} - $${montoPendiente.toFixed(2)}`
+        ? `${turno.servicio} - ${turno.cliente} - ${turno.fecha} ${turno.hora} - SALDO: $${montoPendiente.toFixed(2)} (Seña: $${montoSena.toFixed(2)})`
+        : `${turno.servicio} - ${turno.cliente} - ${turno.fecha} ${turno.hora} - $${montoPendiente.toFixed(2)}`
     }
   })
+
+  const tabConfig: { key: ItemTipo; label: string; color: string }[] = [
+    { key: 'producto', label: 'Producto', color: 'blue' },
+    { key: 'servicio', label: 'Cobrar Turno', color: 'green' },
+    { key: 'servicio_directo', label: 'Servicio Directo', color: 'purple' },
+  ]
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="xl">
@@ -322,17 +429,13 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Cliente y Método de Pago */}
+              {/* Cliente (opcional) y Método de Pago */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <Select
-                  label="Cliente"
-                  value={clienteId.toString()}
-                  onChange={(e) => setClienteId(e.target.value ? parseInt(e.target.value) : '')}
-                  options={[
-                    { value: '', label: 'Seleccione un cliente...' },
-                    ...clienteOptions
-                  ]}
-                  required
+                  label="Cliente (opcional)"
+                  value={clienteId?.toString() ?? ''}
+                  onChange={(e) => setClienteId(e.target.value ? parseInt(e.target.value) : null)}
+                  options={clienteOptions}
                 />
                 <Select
                   label="Método de Pago"
@@ -348,78 +451,140 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
                 <h3 className="font-semibold text-gray-900 mb-3">Agregar Item</h3>
 
                 <div className="space-y-3">
+                  {/* Tabs */}
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setItemTipo('producto')
-                        setSelectedTurno('')
-                      }}
-                      className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-                        itemTipo === 'producto'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Producto
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setItemTipo('servicio')
-                        setSelectedProducto('')
-                        setDescuento(0)
-                      }}
-                      className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-                        itemTipo === 'servicio'
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Servicio
-                    </button>
+                    {tabConfig.map(tab => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => switchTab(tab.key)}
+                        className={`flex-1 py-2 px-3 rounded-md font-medium text-sm transition-colors ${
+                          itemTipo === tab.key
+                            ? tab.color === 'blue' ? 'bg-blue-600 text-white'
+                              : tab.color === 'green' ? 'bg-green-600 text-white'
+                              : 'bg-purple-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
 
-                  {itemTipo === 'producto' ? (
-                    <div className="grid grid-cols-4 gap-3">
-                      <div className="col-span-2">
-                        <Select
-                          label="Producto"
-                          value={selectedProducto.toString()}
-                          onChange={(e) => setSelectedProducto(e.target.value ? parseInt(e.target.value) : '')}
-                          options={[
-                            { value: '', label: 'Seleccione...' },
-                            ...productoOptions
-                          ]}
+                  {/* Product form */}
+                  {itemTipo === 'producto' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <Select
+                            label="Producto"
+                            value={selectedProducto.toString()}
+                            onChange={(e) => setSelectedProducto(e.target.value ? parseInt(e.target.value) : '')}
+                            options={[
+                              { value: '', label: 'Seleccione...' },
+                              ...productoOptions
+                            ]}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <Input
+                          label="Precio unitario"
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={precioUnitario}
+                          onChange={(e) => setPrecioUnitario(e.target.value ? parseFloat(e.target.value) : '')}
+                          placeholder="Precio..."
+                        />
+                        <Input
+                          label="Cantidad"
+                          type="number"
+                          min="1"
+                          value={cantidad}
+                          onChange={(e) => setCantidad(parseInt(e.target.value) || 1)}
+                        />
+                        <Input
+                          label="Descuento %"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={descuento}
+                          onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
                         />
                       </div>
-                      <Input
-                        label="Cantidad"
-                        type="number"
-                        min="1"
-                        value={cantidad}
-                        onChange={(e) => setCantidad(parseInt(e.target.value) || 1)}
-                      />
-                      <Input
-                        label="Descuento %"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        value={descuento}
-                        onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
-                      />
                     </div>
-                  ) : (
-                    <Select
-                      label="Turno a Cobrar"
-                      value={selectedTurno.toString()}
-                      onChange={(e) => setSelectedTurno(e.target.value ? parseInt(e.target.value) : '')}
-                      options={[
-                        { value: '', label: 'Seleccione un turno...' },
-                        ...turnoOptions
-                      ]}
-                    />
+                  )}
+
+                  {/* Service from turno */}
+                  {itemTipo === 'servicio' && (
+                    <div className="space-y-3">
+                      <Select
+                        label="Turno a Cobrar"
+                        value={selectedTurno.toString()}
+                        onChange={(e) => setSelectedTurno(e.target.value ? parseInt(e.target.value) : '')}
+                        options={[
+                          { value: '', label: 'Seleccione un turno...' },
+                          ...turnoOptions
+                        ]}
+                      />
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2"></div>
+                        <Input
+                          label="Descuento %"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={descuento}
+                          onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      {turnos.length === 0 && (
+                        <p className="text-sm text-gray-500 italic">
+                          No hay turnos pendientes de cobro
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Direct service (no turno) */}
+                  {itemTipo === 'servicio_directo' && (
+                    <div className="space-y-3">
+                      <Select
+                        label="Servicio"
+                        value={selectedServicio.toString()}
+                        onChange={(e) => setSelectedServicio(e.target.value ? parseInt(e.target.value) : '')}
+                        options={[
+                          { value: '', label: 'Seleccione un servicio...' },
+                          ...servicioOptions
+                        ]}
+                      />
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          label="Precio"
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={precioUnitario}
+                          onChange={(e) => setPrecioUnitario(e.target.value ? parseFloat(e.target.value) : '')}
+                          placeholder="Se autocompleta del catálogo"
+                        />
+                        <Input
+                          label="Descuento %"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={descuento}
+                          onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Use esta opción para cobrar un servicio realizado sin turno previo. El precio se autocompleta pero puede modificarlo.
+                      </p>
+                    </div>
                   )}
 
                   <Button
@@ -433,7 +598,7 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
                 </div>
               </div>
 
-              {/* Carrito */}
+              {/* Cart */}
               {cart.length > 0 && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
@@ -448,14 +613,19 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
                               <span className={`px-2 py-0.5 text-xs rounded-full ${
                                 item.tipo === 'producto'
                                   ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-green-100 text-green-800'
+                                  : item.tipo === 'servicio'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-purple-100 text-purple-800'
                               }`}>
-                                {item.tipo === 'producto' ? 'Producto' : 'Servicio'}
+                                {item.tipo === 'producto' ? 'Producto'
+                                  : item.tipo === 'servicio' ? 'Servicio'
+                                  : 'Serv. Directo'}
                               </span>
                               <span className="font-medium text-gray-900">{item.nombre}</span>
                             </div>
                             <div className="mt-1 text-sm text-gray-600">
-                              ${item.precio_unitario.toFixed(2)} × {item.cantidad}
+                              ${item.precio_unitario.toFixed(2)}
+                              {item.cantidad > 1 && ` x ${item.cantidad}`}
                               {item.descuento_porcentaje > 0 && (
                                 <span className="ml-2 text-red-600">
                                   -{item.descuento_porcentaje}%
@@ -488,7 +658,7 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
                 </div>
               )}
 
-              {/* Notas */}
+              {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notas (opcional)

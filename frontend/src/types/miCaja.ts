@@ -2,14 +2,10 @@ import { PaymentMethod, TransactionType } from './models'
 
 /**
  * Mi Caja - Employee Point of Sale System Types
- * Simplified transaction views and operations for employees
  */
 
 // ==================== TRANSACTION TYPES ====================
 
-/**
- * Simplified transaction view for Mi Caja
- */
 export interface TransaccionMiCaja {
   id: number
   type: TransactionType
@@ -17,82 +13,32 @@ export interface TransaccionMiCaja {
   payment_method: PaymentMethod
   date: string
   description: string
+  notes: string
   created_by_nombre: string | null
   cliente_nombre: string | null
   concepto: string
   created_at: string
 }
 
-// ==================== REQUEST/RESPONSE TYPES ====================
+// ==================== UNIFIED SALE ====================
 
-/**
- * Request to charge a completed appointment
- */
-export interface CobrarTurnoRequest {
-  turno_id: number
-  amount: number
-  payment_method: PaymentMethod
-  notas?: string
-}
-
-/**
- * Response from cobrar-turno endpoint
- */
-export interface CobrarTurnoResponse {
-  success: boolean
-  message: string
-  transaction: TransaccionMiCaja
-}
-
-/**
- * Request to sell a product
- */
-export interface VenderProductoRequest {
-  producto_id: number
-  cantidad: number
-  cliente_id: number
-  payment_method: PaymentMethod
-  descuento_porcentaje?: number
-}
-
-/**
- * Response from vender-producto endpoint
- */
-export interface VenderProductoResponse {
-  success: boolean
-  message: string
-  transaction: TransaccionMiCaja
-  producto: {
-    id: number
-    nombre: string
-    stock_restante: number
-  }
-}
-
-/**
- * Item for unified sale (product or service)
- */
 export interface VentaUnificadaItem {
-  tipo: 'producto' | 'servicio'
+  tipo: 'producto' | 'servicio' | 'servicio_directo'
   producto_id?: number
   turno_id?: number
+  servicio_id?: number
   cantidad: number
+  precio_unitario?: number
   descuento_porcentaje: number
 }
 
-/**
- * Request for unified sale (multiple items)
- */
 export interface VentaUnificadaRequest {
   items: VentaUnificadaItem[]
-  cliente_id: number
+  cliente_id: number | null
   payment_method: PaymentMethod
   notas?: string
 }
 
-/**
- * Response from venta-unificada endpoint
- */
 export interface VentaUnificadaResponse {
   success: boolean
   message: string
@@ -106,33 +52,56 @@ export interface VentaUnificadaResponse {
   total_monto: number
 }
 
-/**
- * Unpaid appointment (pending payment)
- */
+// ==================== EDIT TRANSACTION ====================
+
+export interface EditarTransaccionRequest {
+  transaccion_id: number
+  amount?: number
+  payment_method?: PaymentMethod
+  notas?: string
+  cliente_id?: number | null
+}
+
+export interface EditarTransaccionResponse {
+  success: boolean
+  message: string
+  transaction: TransaccionMiCaja
+}
+
+// ==================== DELETE TRANSACTION ====================
+
+export interface EliminarTransaccionRequest {
+  transaccion_id: number
+  motivo: string
+}
+
+export interface EliminarTransaccionResponse {
+  success: boolean
+  message: string
+}
+
+// ==================== PENDING APPOINTMENTS ====================
+
 export interface TurnoPendienteCobro {
   id: number
   cliente: string
   servicio: string
   profesional: string
-  monto: number | string // Monto pendiente de pago (total - seña si aplica)
-  monto_total: number | string // Precio total del servicio
-  monto_sena: number | string // Seña pagada (0 si no hay)
+  monto: number | string
+  monto_total: number | string
+  monto_sena: number | string
   fecha: string
   hora: string
-  estado_pago: string // 'PENDIENTE' | 'CON_SENA'
+  estado_pago: string
 }
 
-/**
- * Response from turnos-pendientes-cobro endpoint
- */
 export interface TurnosPendientesResponse {
   count: number
   turnos: TurnoPendienteCobro[]
 }
 
-/**
- * Daily summary for current employee
- */
+// ==================== DAILY SUMMARY ====================
+
 export interface ResumenDiario {
   fecha: string
   total: number | string
@@ -141,9 +110,6 @@ export interface ResumenDiario {
   tiene_cierre: boolean
 }
 
-/**
- * Response from mis-transacciones endpoint
- */
 export interface MisTransaccionesResponse {
   fecha: string
   empleado: {
@@ -160,9 +126,6 @@ export interface MisTransaccionesResponse {
 
 // ==================== CASH REGISTER CLOSING ====================
 
-/**
- * Cash register closing (Cierre de Caja)
- */
 export interface CierreCaja {
   id: number
   empleado: number
@@ -179,18 +142,12 @@ export interface CierreCaja {
   cerrado_en: string
 }
 
-/**
- * Request to create cash register closing
- */
 export interface CierreCajaRequest {
   fecha: string
   efectivo_contado: number
   notas?: string
 }
 
-/**
- * Response from cierre-caja endpoint
- */
 export interface CierreCajaResponse {
   success: boolean
   message: string
@@ -198,11 +155,8 @@ export interface CierreCajaResponse {
   alerta: boolean
 }
 
-// ==================== PAYMENT METHOD DISPLAY ====================
+// ==================== DISPLAY HELPERS ====================
 
-/**
- * Helper to get payment method display name
- */
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   [PaymentMethod.CASH]: 'Efectivo',
   [PaymentMethod.BANK_TRANSFER]: 'Transferencia',
@@ -212,9 +166,6 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   [PaymentMethod.OTHER]: 'Otro'
 }
 
-/**
- * Helper to get transaction type display name
- */
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   [TransactionType.INCOME_SERVICE]: 'Servicio',
   [TransactionType.INCOME_PRODUCT]: 'Producto',

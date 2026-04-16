@@ -3,6 +3,8 @@ import Card, { CardHeader, CardBody } from '@/components/ui/Card/Card'
 import Button from '@/components/ui/Button/Button'
 import { DateInput } from '@/components/ui/DateInput/DateInput'
 import VentaUnificadaModal from '@/components/miCaja/VentaUnificadaModal'
+import EditarTransaccionModal from '@/components/miCaja/EditarTransaccionModal'
+import EliminarTransaccionModal from '@/components/miCaja/EliminarTransaccionModal'
 import CierreCajaModal from '@/components/miCaja/CierreCajaModal'
 import {
   getMisTransacciones,
@@ -14,7 +16,8 @@ import {
   TRANSACTION_TYPE_LABELS,
   type MisTransaccionesResponse,
   type ResumenDiario,
-  type TurnoPendienteCobro
+  type TurnoPendienteCobro,
+  type TransaccionMiCaja
 } from '@/types/miCaja'
 
 export default function MiCajaPage() {
@@ -25,6 +28,10 @@ export default function MiCajaPage() {
   // Modal states
   const [showVentaUnificadaModal, setShowVentaUnificadaModal] = useState(false)
   const [showCierreCajaModal, setShowCierreCajaModal] = useState(false)
+  const [showEditarModal, setShowEditarModal] = useState(false)
+  const [showEliminarModal, setShowEliminarModal] = useState(false)
+  const [transaccionToEdit, setTransaccionToEdit] = useState<TransaccionMiCaja | null>(null)
+  const [transaccionToDelete, setTransaccionToDelete] = useState<TransaccionMiCaja | null>(null)
 
   // Data states
   const [transacciones, setTransacciones] = useState<MisTransaccionesResponse | null>(null)
@@ -40,7 +47,6 @@ export default function MiCajaPage() {
       setLoading(true)
       setError(null)
 
-      // Load all data in parallel
       const [transaccionesData, resumenData, pendientesData] = await Promise.all([
         getMisTransacciones(fecha),
         getResumenDia(fecha),
@@ -59,8 +65,24 @@ export default function MiCajaPage() {
   }
 
   const handleModalSuccess = () => {
-    // Reload data after successful operation
     loadData()
+  }
+
+  const handleEditClick = (transaccion: TransaccionMiCaja) => {
+    setTransaccionToEdit(transaccion)
+    setShowEditarModal(true)
+  }
+
+  const handleDeleteClick = (transaccion: TransaccionMiCaja) => {
+    setTransaccionToDelete(transaccion)
+    setShowEliminarModal(true)
+  }
+
+  const isEditable = (transaccion: TransaccionMiCaja) => {
+    const txDate = new Date(transaccion.date)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - txDate.getTime()) / (1000 * 60 * 60 * 24))
+    return diffDays <= 30
   }
 
   const formatCurrency = (amount: number | string) => {
@@ -223,6 +245,9 @@ export default function MiCajaPage() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Monto
                     </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -248,6 +273,24 @@ export default function MiCajaPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">
                         {formatCurrency(transaccion.amount)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        {isEditable(transaccion) && (
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              onClick={() => handleEditClick(transaccion)}
+                              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(transaccion)}
+                              className="text-sm text-red-600 hover:text-red-800 font-medium"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -266,6 +309,26 @@ export default function MiCajaPage() {
         isOpen={showVentaUnificadaModal}
         onClose={() => setShowVentaUnificadaModal(false)}
         onSuccess={handleModalSuccess}
+      />
+
+      <EditarTransaccionModal
+        isOpen={showEditarModal}
+        onClose={() => {
+          setShowEditarModal(false)
+          setTransaccionToEdit(null)
+        }}
+        onSuccess={handleModalSuccess}
+        transaccion={transaccionToEdit}
+      />
+
+      <EliminarTransaccionModal
+        isOpen={showEliminarModal}
+        onClose={() => {
+          setShowEliminarModal(false)
+          setTransaccionToDelete(null)
+        }}
+        onSuccess={handleModalSuccess}
+        transaccion={transaccionToDelete}
       />
 
       <CierreCajaModal
