@@ -39,9 +39,12 @@ interface TransactionsListProps {
  * - Quick actions (view, edit, delete)
  * - Color-coded income/expense
  */
+const PAGE_SIZE = 20
+
 export default function TransactionsList({ onEdit, onView }: TransactionsListProps) {
   const {
     transactions,
+    transactionsCount,
     categories,
     loading,
     fetchTransactions,
@@ -58,31 +61,44 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
     search: '',
   })
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+
   // Delete confirmation modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionList | null>(null)
 
-  /**
-   * Load initial data
-   */
-  useEffect(() => {
-    fetchTransactions()
-    fetchCategories()
-  }, [fetchTransactions, fetchCategories])
-
-  /**
-   * Apply filters
-   */
-  const handleApplyFilters = async () => {
-    const apiFilters: any = {}
-
+  const buildApiFilters = (page: number) => {
+    const apiFilters: any = { page, page_size: PAGE_SIZE }
     if (filters.date_from) apiFilters.date_from = filters.date_from
     if (filters.date_to) apiFilters.date_to = filters.date_to
     if (filters.type === 'income') apiFilters.is_income = true
     if (filters.type === 'expense') apiFilters.is_expense = true
     if (filters.category_id) apiFilters.category_id = parseInt(filters.category_id)
+    return apiFilters
+  }
 
-    await fetchTransactions(apiFilters)
+  /**
+   * Load categories once
+   */
+  useEffect(() => {
+    fetchCategories()
+  }, [fetchCategories])
+
+  /**
+   * Fetch transactions on mount and when page changes
+   */
+  useEffect(() => {
+    fetchTransactions(buildApiFilters(currentPage))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage])
+
+  /**
+   * Apply filters
+   */
+  const handleApplyFilters = async () => {
+    setCurrentPage(1)
+    await fetchTransactions(buildApiFilters(1))
   }
 
   /**
@@ -96,8 +112,13 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
       category_id: '',
       search: '',
     })
-    fetchTransactions()
+    setCurrentPage(1)
+    fetchTransactions({ page: 1, page_size: PAGE_SIZE })
   }
+
+  const totalPages = Math.max(1, Math.ceil(transactionsCount / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const startIndex = (safePage - 1) * PAGE_SIZE
 
   /**
    * Handle delete confirmation
@@ -115,6 +136,7 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
       await deleteTransaction(transactionToDelete.id)
       setDeleteModalOpen(false)
       setTransactionToDelete(null)
+      await fetchTransactions(buildApiFilters(currentPage))
     }
   }
 
@@ -250,7 +272,7 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
         <CardHeader>
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-900">
-              Transacciones ({filteredTransactions.length})
+              Transacciones ({transactionsCount})
             </h3>
           </div>
         </CardHeader>
@@ -380,6 +402,42 @@ export default function TransactionsList({ onEdit, onView }: TransactionsListPro
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {!loading && transactionsCount > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Mostrando {startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, transactionsCount)} de {transactionsCount} transacciones
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="px-3 py-1 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Anterior
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      page === safePage
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="px-3 py-1 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           )}
         </CardBody>

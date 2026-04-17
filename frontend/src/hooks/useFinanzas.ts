@@ -24,6 +24,7 @@ import {
 export const useFinanzas = () => {
   // ==================== STATE ====================
   const [transactions, setTransactions] = useState<TransactionList[]>([])
+  const [transactionsCount, setTransactionsCount] = useState(0)
   const [categories, setCategories] = useState<TransactionCategoryList[]>([])
   const [accountsReceivable, setAccountsReceivable] = useState<AccountReceivable[]>([])
   const [loading, setLoading] = useState(false)
@@ -41,6 +42,8 @@ export const useFinanzas = () => {
     category_id?: number
     is_income?: boolean
     is_expense?: boolean
+    page?: number
+    page_size?: number
   }) => {
     setLoading(true)
     setError(null)
@@ -49,12 +52,14 @@ export const useFinanzas = () => {
         params: filters
       })
       setTransactions(response.data.results)
+      setTransactionsCount(response.data.count)
       return response.data.results
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Error al cargar transacciones'
       setError(errorMsg)
       toast.error(errorMsg)
       setTransactions([])
+      setTransactionsCount(0)
       throw err
     } finally {
       setLoading(false)
@@ -615,6 +620,7 @@ export const useFinanzas = () => {
   return {
     // State
     transactions,
+    transactionsCount,
     categories,
     accountsReceivable,
     loading,
