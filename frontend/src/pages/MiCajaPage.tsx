@@ -20,10 +20,13 @@ import {
   type TransaccionMiCaja
 } from '@/types/miCaja'
 
+const PAGE_SIZE = 10
+
 export default function MiCajaPage() {
   const [fecha, setFecha] = useState<string>(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Modal states
   const [showVentaUnificadaModal, setShowVentaUnificadaModal] = useState(false)
@@ -40,6 +43,7 @@ export default function MiCajaPage() {
 
   useEffect(() => {
     loadData()
+    setCurrentPage(1)
   }, [fecha])
 
   const loadData = async () => {
@@ -223,6 +227,17 @@ export default function MiCajaPage() {
               </Button>
             </div>
           ) : transacciones && transacciones.transacciones.length > 0 ? (
+            (() => {
+              const totalTx = transacciones.transacciones.length
+              const totalPages = Math.max(1, Math.ceil(totalTx / PAGE_SIZE))
+              const safePage = Math.min(currentPage, totalPages)
+              if (safePage !== currentPage) {
+                setCurrentPage(safePage)
+              }
+              const startIndex = (safePage - 1) * PAGE_SIZE
+              const paginated = transacciones.transacciones.slice(startIndex, startIndex + PAGE_SIZE)
+              return (
+            <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -251,7 +266,7 @@ export default function MiCajaPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {transacciones.transacciones.map((transaccion) => (
+                  {paginated.map((transaccion) => (
                     <tr key={transaccion.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {formatDateTime(transaccion.created_at)}
@@ -296,6 +311,45 @@ export default function MiCajaPage() {
                 </tbody>
               </table>
             </div>
+            {totalTx > PAGE_SIZE && (
+              <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200">
+                <p className="text-sm text-gray-600">
+                  Mostrando {startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, totalTx)} de {totalTx} transacciones
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                    className="px-3 py-1 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Anterior
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 text-sm rounded-md ${
+                        page === safePage
+                          ? 'bg-blue-600 text-white'
+                          : 'border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                    className="px-3 py-1 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
+              )
+            })()
           ) : (
             <div className="text-center py-12">
               <p className="text-gray-500">No hay transacciones registradas para esta fecha</p>
