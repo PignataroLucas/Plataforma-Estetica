@@ -146,9 +146,9 @@ export interface PlanTratamiento {
   cliente_nombre?: string
   tratamiento_sugerido: string
   frecuencia?: string
-  sesiones_estimadas?: number
+  sesiones_estimadas?: number | null
   indicaciones?: string
-  proximo_turno?: string
+  proximo_turno?: string | null
   creado_por?: number
   creado_por_nombre?: string
   creado_en: string

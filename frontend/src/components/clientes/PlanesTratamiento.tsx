@@ -41,11 +41,17 @@ export default function PlanesTratamiento({ clienteId }: PlanesTratamientoProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    const payload: Partial<PlanTratamiento> = {
+      ...formData,
+      proximo_turno: formData.proximo_turno || null,
+      sesiones_estimadas: formData.sesiones_estimadas ?? null,
+    }
+
     try {
       if (editingPlan) {
-        await updatePlanTratamiento(editingPlan.id, formData)
+        await updatePlanTratamiento(editingPlan.id, payload)
       } else {
-        await createPlanTratamiento(formData)
+        await createPlanTratamiento(payload)
       }
 
       await loadPlanes()
