@@ -122,7 +122,7 @@ class Transaction(models.Model):
 
     class PaymentMethod(models.TextChoices):
         CASH = 'CASH', 'Efectivo'
-        TRANSFER = 'TRANSFER', 'Transferencia'
+        BANK_TRANSFER = 'BANK_TRANSFER', 'Transferencia'
         DEBIT_CARD = 'DEBIT_CARD', 'Tarjeta de Débito'
         CREDIT_CARD = 'CREDIT_CARD', 'Tarjeta de Crédito'
         MERCADOPAGO = 'MERCADOPAGO', 'MercadoPago'
