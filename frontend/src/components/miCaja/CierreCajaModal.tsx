@@ -143,7 +143,7 @@ const CierreCajaModal = ({ isOpen, onClose, onSuccess }: CierreCajaModalProps) =
         <h2 className="text-xl font-bold text-gray-800">Cierre de Caja</h2>
       </ModalHeader>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <ModalBody>
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -210,18 +210,18 @@ const CierreCajaModal = ({ isOpen, onClose, onSuccess }: CierreCajaModalProps) =
                 {/* Difference Calculation */}
                 {efectivoContado > 0 && (
                   <div className="p-4 bg-gray-50 rounded-md">
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                       <div>
                         <p className="text-sm text-gray-600">Efectivo Sistema:</p>
                         <p className="font-medium">{formatCurrency(resumen.por_metodo['Efectivo'] || 0)}</p>
                       </div>
-                      <div className="text-center">
+                      <div className="sm:text-center">
                         <p className="text-sm text-gray-600">Diferencia:</p>
                         <p className={`text-xl font-bold ${getDiferenciaColor()}`}>
                           {diferencia > 0 ? '+' : ''}{formatCurrency(Math.abs(diferencia))}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="sm:text-right">
                         <p className="text-sm text-gray-600">Efectivo Contado:</p>
                         <p className="font-medium">{formatCurrency(efectivoContado)}</p>
                       </div>
