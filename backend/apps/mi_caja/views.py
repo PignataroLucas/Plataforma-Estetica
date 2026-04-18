@@ -324,18 +324,23 @@ class MiCajaViewSet(viewsets.ViewSet):
     def _procesar_servicio_turno(self, item_data, cliente, payment_method, notas, request):
         """Process a service payment from an existing turno"""
         turno_id = item_data['turno_id']
+        precio_override = item_data.get('precio_unitario')
         descuento_porcentaje = item_data.get('descuento_porcentaje', Decimal('0.00'))
 
         turno = Turno.objects.select_related(
             'servicio', 'cliente', 'profesional', 'sucursal'
         ).get(id=turno_id)
 
+        precio_catalogo = turno.servicio.precio
         if turno.estado_pago == 'CON_SENA' and turno.monto_sena:
-            monto_base = turno.servicio.precio - turno.monto_sena
+            monto_pendiente_original = precio_catalogo - turno.monto_sena
             descripcion = f"Saldo de servicio: {turno.servicio.nombre} (Seña ya pagada: ${turno.monto_sena})"
         else:
-            monto_base = turno.servicio.precio
+            monto_pendiente_original = precio_catalogo
             descripcion = f"Servicio: {turno.servicio.nombre}"
+
+        # If precio_unitario override provided, it represents the total to charge (pre-discount)
+        monto_base = precio_override if precio_override else monto_pendiente_original
 
         # Apply discount if any
         if descuento_porcentaje > 0:
@@ -355,6 +360,13 @@ class MiCajaViewSet(viewsets.ViewSet):
         # Use turno's client if no client specified in sale
         transaction_client = cliente if cliente else turno.cliente
 
+        notes_parts = []
+        if precio_override and precio_override != monto_pendiente_original:
+            notes_parts.append(f"Importe modificado: ${precio_override} (estimado: ${monto_pendiente_original})")
+        if notas:
+            notes_parts.append(notas)
+        final_notes = ". ".join(notes_parts) if notes_parts else notas
+
         transaccion = Transaction.objects.create(
             branch=turno.sucursal,
             category=categoria_servicios,
@@ -365,7 +377,7 @@ class MiCajaViewSet(viewsets.ViewSet):
             payment_method=payment_method,
             date=timezone.now().date(),
             description=descripcion,
-            notes=notas,
+            notes=final_notes,
             auto_generated=False,
             registered_by=request.user,
             ip_address=self.get_client_ip(request),

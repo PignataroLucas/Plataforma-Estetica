@@ -87,6 +87,19 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
     }
   }, [selectedServicio, servicios, itemTipo])
 
+  // Auto-fill price when turno is selected (pending amount)
+  useEffect(() => {
+    if (selectedTurno && itemTipo === 'servicio') {
+      const turno = turnos.find(t => t.id === selectedTurno)
+      if (turno) {
+        const montoPendiente = typeof turno.monto === 'string' ? parseFloat(turno.monto) : Number(turno.monto)
+        setPrecioUnitario(montoPendiente)
+      }
+    } else if (!selectedTurno && itemTipo === 'servicio') {
+      setPrecioUnitario('')
+    }
+  }, [selectedTurno, turnos, itemTipo])
+
   const loadData = async () => {
     try {
       setLoadingData(true)
@@ -192,31 +205,36 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
         const montoSena = typeof turno.monto_sena === 'string' ? parseFloat(turno.monto_sena) : Number(turno.monto_sena)
         const esConSena = montoSena > 0
 
-        if (!montoPendiente || montoPendiente <= 0) {
-          setError('El turno no tiene un monto pendiente válido')
+        const importeACobrar = precioUnitario !== '' ? Number(precioUnitario) : montoPendiente
+        if (!importeACobrar || importeACobrar <= 0) {
+          setError('El importe a cobrar debe ser mayor a 0')
           return
         }
 
         // Apply discount if any
-        const descuentoMonto = (montoPendiente * Number(descuento)) / 100
-        const totalConDescuento = montoPendiente - descuentoMonto
+        const descuentoMonto = (importeACobrar * Number(descuento)) / 100
+        const totalConDescuento = importeACobrar - descuentoMonto
+
+        const importeModificado = importeACobrar !== montoPendiente
+        const nombreBase = esConSena
+          ? `${turno.servicio} - ${turno.cliente} (SALDO - Seña: $${montoSena.toFixed(2)})`
+          : `${turno.servicio} - ${turno.cliente}`
 
         const newItem: CartItem = {
           id: `servicio-${Date.now()}-${Math.random()}`,
           tipo: 'servicio',
           turno_id: turno.id,
-          nombre: esConSena
-            ? `${turno.servicio} - ${turno.cliente} (SALDO - Seña: $${montoSena.toFixed(2)})`
-            : `${turno.servicio} - ${turno.cliente}`,
+          nombre: importeModificado ? `${nombreBase} [importe modificado]` : nombreBase,
           cantidad: 1,
-          precio_unitario: montoPendiente,
+          precio_unitario: importeACobrar,
           descuento_porcentaje: Number(descuento),
-          subtotal: montoPendiente,
+          subtotal: importeACobrar,
           total: totalConDescuento
         }
 
         setCart([...cart, newItem])
         setSelectedTurno('')
+        setPrecioUnitario('')
         setDescuento(0)
 
       } else if (itemTipo === 'servicio_directo') {
@@ -296,6 +314,7 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
           ventaItem.precio_unitario = item.precio_unitario
         } else if (item.tipo === 'servicio') {
           ventaItem.turno_id = item.turno_id
+          ventaItem.precio_unitario = item.precio_unitario
         } else if (item.tipo === 'servicio_directo') {
           ventaItem.servicio_id = item.servicio_id
           ventaItem.precio_unitario = item.precio_unitario
@@ -529,8 +548,16 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
                           ...turnoOptions
                         ]}
                       />
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="col-span-2"></div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          label="Importe a cobrar"
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={precioUnitario}
+                          onChange={(e) => setPrecioUnitario(e.target.value ? parseFloat(e.target.value) : '')}
+                          placeholder="Se autocompleta del turno"
+                        />
                         <Input
                           label="Descuento %"
                           type="number"
@@ -541,6 +568,9 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
                           onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
                         />
                       </div>
+                      <p className="text-xs text-gray-500">
+                        El importe se autocompleta con el monto pendiente del turno, pero puede modificarlo si el servicio realizado difiere del estimado.
+                      </p>
                       {turnos.length === 0 && (
                         <p className="text-sm text-gray-500 italic">
                           No hay turnos pendientes de cobro
