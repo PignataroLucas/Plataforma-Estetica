@@ -749,31 +749,35 @@ class ClientPatternsView(APIView):
                 elif 18 <= hour < 21:
                     time_slots['evening'] += 1
 
-        # Servicios favoritos
+        # Servicios favoritos - desde Transaction para incluir servicios directos
         from django.db.models import Sum, Max
-        favorite_services = Turno.objects.filter(
-            cliente_id=cliente_id,
-            estado='COMPLETADO'
+        from apps.finanzas.models import Transaction as FinTransaction
+
+        favorite_services = FinTransaction.objects.filter(
+            client_id=cliente_id,
+            type='INCOME_SERVICE',
+            service__isnull=False
         ).values(
-            'servicio__id',
-            'servicio__nombre'
+            'service__id',
+            'service__nombre'
         ).annotate(
             count=Count('id'),
-            total_spent=Sum('monto_total'),
-            last_visit=Max('fecha_hora_inicio')
+            total_spent=Sum('amount'),
+            last_visit=Max('date')
         ).order_by('-count')[:10]
 
-        # Calcular total de visitas para porcentajes
-        total_visits = Turno.objects.filter(
-            cliente_id=cliente_id,
-            estado='COMPLETADO'
+        # Calcular total de visitas para porcentajes (servicios pagados)
+        total_visits = FinTransaction.objects.filter(
+            client_id=cliente_id,
+            type='INCOME_SERVICE',
+            service__isnull=False
         ).count()
 
         favorite_services_data = []
         for service in favorite_services:
             favorite_services_data.append({
-                'service_id': service['servicio__id'],
-                'service_name': service['servicio__nombre'],
+                'service_id': service['service__id'],
+                'service_name': service['service__nombre'],
                 'count': service['count'],
                 'total_spent': float(service['total_spent'] or 0),
                 'percentage': round((service['count'] / total_visits * 100), 2) if total_visits > 0 else 0,
@@ -788,16 +792,17 @@ class ClientPatternsView(APIView):
         end_date = timezone.now().date()
         start_date = end_date - relativedelta(months=11)
 
-        monthly_services = Turno.objects.filter(
-            cliente_id=cliente_id,
-            estado='COMPLETADO',
-            fecha_hora_inicio__date__gte=start_date,
-            fecha_hora_inicio__date__lte=end_date
+        monthly_services = FinTransaction.objects.filter(
+            client_id=cliente_id,
+            type='INCOME_SERVICE',
+            service__isnull=False,
+            date__gte=start_date,
+            date__lte=end_date
         ).annotate(
-            month=TruncMonth('fecha_hora_inicio')
+            month=TruncMonth('date')
         ).values('month').annotate(
             count=Count('id'),
-            total_amount=Sum('monto_total')
+            total_amount=Sum('amount')
         ).order_by('month')
 
         # Crear estructura con todos los meses
@@ -1105,13 +1110,14 @@ class ClientServicesView(APIView):
     """
     GET /api/analytics/client/<cliente_id>/services/
 
-    Timeline completo de servicios del cliente con paginación y filtros
+    Timeline completo de servicios del cliente con paginación y filtros.
+    Usa Transaction como fuente para incluir servicios directos (sin turno).
     """
     permission_classes = [IsAuthenticated, CanViewClientAnalytics]
 
     def get(self, request, cliente_id):
-        from apps.turnos.models import Turno
         from apps.clientes.models import Cliente
+        from apps.finanzas.models import Transaction
         from django.core.paginator import Paginator, EmptyPage
 
         # Verificar que el cliente existe
@@ -1127,30 +1133,32 @@ class ClientServicesView(APIView):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
 
-        # Query base - solo servicios completados
-        turnos_qs = Turno.objects.filter(
-            cliente_id=cliente_id,
-            estado='COMPLETADO'
+        # Query base - transacciones de servicio del cliente (turno o directo)
+        tx_qs = Transaction.objects.filter(
+            client_id=cliente_id,
+            type='INCOME_SERVICE',
+            service__isnull=False
         ).select_related(
-            'servicio',
-            'profesional',
-            'sucursal'
-        ).order_by('-fecha_hora_inicio')
+            'service',
+            'appointment',
+            'appointment__profesional',
+            'branch'
+        ).order_by('-date', '-created_at')
 
         # Aplicar filtros opcionales
         if servicio_id:
-            turnos_qs = turnos_qs.filter(servicio_id=int(servicio_id))
+            tx_qs = tx_qs.filter(service_id=int(servicio_id))
 
         if start_date:
             start_date_parsed = datetime.strptime(start_date, '%Y-%m-%d').date()
-            turnos_qs = turnos_qs.filter(fecha_hora_inicio__date__gte=start_date_parsed)
+            tx_qs = tx_qs.filter(date__gte=start_date_parsed)
 
         if end_date:
             end_date_parsed = datetime.strptime(end_date, '%Y-%m-%d').date()
-            turnos_qs = turnos_qs.filter(fecha_hora_inicio__date__lte=end_date_parsed)
+            tx_qs = tx_qs.filter(date__lte=end_date_parsed)
 
         # Paginación
-        paginator = Paginator(turnos_qs, page_size)
+        paginator = Paginator(tx_qs, page_size)
 
         try:
             page_obj = paginator.page(page)
@@ -1159,37 +1167,46 @@ class ClientServicesView(APIView):
 
         # Serializar servicios
         services_history = []
-        for turno in page_obj:
-            # Buscar el método de pago en la transacción asociada
-            payment_method = 'No especificado'
-            try:
-                from apps.finanzas.models import Transaction
-                transaction = Transaction.objects.filter(
-                    turno_id=turno.id,
-                    type='INCOME_SERVICE'
-                ).first()
-                if transaction:
-                    payment_method = transaction.payment_method
-            except:
-                pass
+        for tx in page_obj:
+            turno = tx.appointment
+            if turno:
+                time_str = turno.fecha_hora_inicio.strftime('%H:%M')
+                professional = turno.profesional
+                professional_name = f"{professional.first_name} {professional.last_name}" if professional else 'No asignado'
+                professional_id = professional.id if professional else None
+                payment_status = turno.estado_pago
+                notes = turno.notas or tx.notes or ''
+                source_id = turno.id
+            else:
+                time_str = tx.created_at.strftime('%H:%M') if tx.created_at else ''
+                professional_name = 'Servicio directo'
+                professional_id = None
+                payment_status = 'PAGADO'
+                notes = tx.notes or ''
+                source_id = None
 
             services_history.append({
-                'id': turno.id,
-                'date': turno.fecha_hora_inicio.date().isoformat(),
-                'time': turno.fecha_hora_inicio.strftime('%H:%M'),
-                'service_id': turno.servicio.id if turno.servicio else None,
-                'service_name': turno.servicio.nombre if turno.servicio else 'Servicio no especificado',
-                'professional_id': turno.profesional.id if turno.profesional else None,
-                'professional_name': f"{turno.profesional.first_name} {turno.profesional.last_name}" if turno.profesional else 'No asignado',
-                'amount': float(turno.monto_total) if turno.monto_total else 0,
-                'payment_method': payment_method,
-                'payment_status': turno.estado_pago,
-                'notes': turno.notas or ''
+                'id': tx.id,
+                'turno_id': source_id,
+                'date': tx.date.isoformat(),
+                'time': time_str,
+                'service_id': tx.service.id,
+                'service_name': tx.service.nombre,
+                'professional_id': professional_id,
+                'professional_name': professional_name,
+                'amount': float(tx.amount),
+                'payment_method': tx.payment_method,
+                'payment_status': payment_status,
+                'notes': notes,
+                'is_direct': turno is None
             })
 
         # Calcular estadísticas del período filtrado
-        total_spent = sum(float(t.monto_total or 0) for t in turnos_qs)
-        avg_ticket = total_spent / turnos_qs.count() if turnos_qs.count() > 0 else 0
+        from django.db.models import Sum as DjSum
+        totals = tx_qs.aggregate(total=DjSum('amount'))
+        total_spent = float(totals['total'] or 0)
+        count = paginator.count
+        avg_ticket = total_spent / count if count > 0 else 0
 
         return Response({
             'services_history': services_history,

@@ -166,6 +166,14 @@ class Transaction(models.Model):
         blank=True,
         related_name='transactions'
     )
+    service = models.ForeignKey(
+        'servicios.Servicio',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions',
+        help_text="Servicio asociado (para servicios directos o turnos cobrados)"
+    )
 
     # NEW: Relationship with inventory movement (for traceability)
     inventory_movement = models.OneToOneField(

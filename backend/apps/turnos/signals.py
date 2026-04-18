@@ -133,6 +133,7 @@ def _create_service_income(instance, amount, description, Transaction, Transacti
         notes=f"Turno #{instance.pk} - {instance.fecha_hora_inicio.strftime('%d/%m/%Y %H:%M')}",
         client=instance.cliente,
         appointment=instance,
+        service=instance.servicio,
         payment_method='CASH',  # Default, can be edited later
         auto_generated=True,
         registered_by=instance.creado_por,

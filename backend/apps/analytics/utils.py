@@ -263,31 +263,33 @@ class AnalyticsCalculator:
     @staticmethod
     def get_top_services(sucursal_id=None, start_date=None, end_date=None, limit=10):
         """
-        Obtiene los servicios más vendidos
+        Obtiene los servicios más vendidos.
+        Usa Transaction como fuente para incluir servicios directos (sin turno).
         """
-        turnos_qs = Turno.objects.filter(
-            estado='COMPLETADO',
-            fecha_hora_inicio__date__gte=start_date,
-            fecha_hora_inicio__date__lte=end_date
+        tx_qs = Transaction.objects.filter(
+            type='INCOME_SERVICE',
+            service__isnull=False,
+            date__gte=start_date,
+            date__lte=end_date
         )
 
         if sucursal_id:
-            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+            tx_qs = tx_qs.filter(branch_id=sucursal_id)
 
-        top_services = turnos_qs.values(
-            'servicio__id',
-            'servicio__nombre'
+        top_services = tx_qs.values(
+            'service__id',
+            'service__nombre'
         ).annotate(
             quantity_sold=Count('id'),
-            revenue=Sum('monto_total')
+            revenue=Sum('amount')
         ).order_by('-quantity_sold')[:limit]
 
         result = []
         for item in top_services:
             avg_ticket = (item['revenue'] / item['quantity_sold']) if item['quantity_sold'] > 0 else 0
             result.append({
-                'service_id': item['servicio__id'],
-                'service_name': item['servicio__nombre'],
+                'service_id': item['service__id'],
+                'service_name': item['service__nombre'],
                 'quantity_sold': item['quantity_sold'],
                 'revenue': float(item['revenue'] or 0),
                 'average_ticket': float(avg_ticket)
@@ -299,28 +301,28 @@ class AnalyticsCalculator:
     def get_service_profitability(sucursal_id=None, start_date=None, end_date=None):
         """
         Calcula la rentabilidad de cada servicio
-        Considera costos de máquinas alquiladas si aplica
+        Considera costos de máquinas alquiladas si aplica.
+        Usa Transaction como fuente para incluir servicios directos (sin turno).
         """
-        from apps.servicios.models import AlquilerMaquina
-
-        turnos_qs = Turno.objects.filter(
-            estado='COMPLETADO',
-            fecha_hora_inicio__date__gte=start_date,
-            fecha_hora_inicio__date__lte=end_date
+        tx_qs = Transaction.objects.filter(
+            type='INCOME_SERVICE',
+            service__isnull=False,
+            date__gte=start_date,
+            date__lte=end_date
         )
 
         if sucursal_id:
-            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+            tx_qs = tx_qs.filter(branch_id=sucursal_id)
 
         # Agrupar por servicio
-        service_data = turnos_qs.values(
-            'servicio__id',
-            'servicio__nombre',
-            'servicio__maquina_alquilada__id',
-            'servicio__maquina_alquilada__costo_diario'
+        service_data = tx_qs.values(
+            'service__id',
+            'service__nombre',
+            'service__maquina_alquilada__id',
+            'service__maquina_alquilada__costo_diario'
         ).annotate(
             quantity=Count('id'),
-            revenue=Sum('monto_total')
+            revenue=Sum('amount')
         )
 
         result = []
@@ -328,23 +330,22 @@ class AnalyticsCalculator:
             revenue = float(item['revenue'] or 0)
             quantity = item['quantity']
 
-            # Calcular costo si usa máquina alquilada
+            # Calcular costo si usa máquina alquilada (días únicos con transacción del servicio)
             cost = 0
-            if item['servicio__maquina_alquilada__id']:
-                # Obtener días únicos donde se usó el servicio
-                days_used = turnos_qs.filter(
-                    servicio__id=item['servicio__id']
-                ).dates('fecha_hora_inicio', 'day').count()
+            if item['service__maquina_alquilada__id']:
+                days_used = tx_qs.filter(
+                    service__id=item['service__id']
+                ).dates('date', 'day').count()
 
-                daily_cost = float(item['servicio__maquina_alquilada__costo_diario'] or 0)
+                daily_cost = float(item['service__maquina_alquilada__costo_diario'] or 0)
                 cost = daily_cost * days_used
 
             gross_margin = revenue - cost
             margin_percentage = (gross_margin / revenue * 100) if revenue > 0 else 0
 
             result.append({
-                'service_id': item['servicio__id'],
-                'service_name': item['servicio__nombre'],
+                'service_id': item['service__id'],
+                'service_name': item['service__nombre'],
                 'quantity': quantity,
                 'revenue': revenue,
                 'cost': cost,
@@ -378,30 +379,30 @@ class AnalyticsCalculator:
 
         top_service_ids = [s['service_id'] for s in top_services]
 
-        # Filtrar turnos por los top servicios
-        turnos_qs = Turno.objects.filter(
-            servicio_id__in=top_service_ids,
-            estado='COMPLETADO',
-            fecha_hora_inicio__date__gte=start_date,
-            fecha_hora_inicio__date__lte=end_date
+        # Filtrar transacciones de servicio por los top servicios
+        tx_qs = Transaction.objects.filter(
+            service_id__in=top_service_ids,
+            type='INCOME_SERVICE',
+            date__gte=start_date,
+            date__lte=end_date
         )
 
         if sucursal_id:
-            turnos_qs = turnos_qs.filter(sucursal_id=sucursal_id)
+            tx_qs = tx_qs.filter(branch_id=sucursal_id)
 
         # Elegir función de truncamiento según granularidad
         if granularity == 'week':
-            trunc_func = TruncWeek('fecha_hora_inicio')
+            trunc_func = TruncWeek('date')
         elif granularity == 'month':
-            trunc_func = TruncMonth('fecha_hora_inicio')
+            trunc_func = TruncMonth('date')
         else:  # 'day'
-            trunc_func = TruncDate('fecha_hora_inicio')
+            trunc_func = TruncDate('date')
 
         # Agrupar por fecha y servicio
-        evolution_data = turnos_qs.annotate(
+        evolution_data = tx_qs.annotate(
             period=trunc_func
         ).values(
-            'period', 'servicio__id', 'servicio__nombre'
+            'period', 'service__id', 'service__nombre'
         ).annotate(
             count=Count('id')
         ).order_by('period')
@@ -413,7 +414,7 @@ class AnalyticsCalculator:
             if period_str not in result_by_period:
                 result_by_period[period_str] = {'date': period_str}
 
-            service_name = item['servicio__nombre']
+            service_name = item['service__nombre']
             result_by_period[period_str][service_name] = item['count']
 
         # Asegurar que todos los servicios estén presentes en todos los períodos
