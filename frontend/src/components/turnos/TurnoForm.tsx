@@ -28,12 +28,12 @@ const estadoPagoOptions = [
   { value: 'PAGADO', label: 'Pagado' },
 ]
 
-// Generar horarios de 8am a 7pm cada 30 minutos
+// Generar horarios de 8am a 10pm cada 30 minutos
 const generateTimeSlots = () => {
   const slots = []
-  for (let hour = 8; hour <= 19; hour++) {
+  for (let hour = 8; hour <= 22; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 19 && minute > 0) break // Terminar a las 19:00
+      if (hour === 22 && minute > 0) break // Terminar a las 22:00
       const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
       const label = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
       slots.push({ value: time, label })

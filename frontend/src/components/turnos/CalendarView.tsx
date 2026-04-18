@@ -154,7 +154,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         step={30}
         timeslots={1}
         min={new Date(2025, 0, 1, 8, 0, 0)} // 8:00 AM
-        max={new Date(2025, 0, 1, 19, 0, 0)} // 7:00 PM
+        max={new Date(2025, 0, 1, 22, 0, 0)} // 10:00 PM
         className="turnos-calendar"
         popup
         culture="es"

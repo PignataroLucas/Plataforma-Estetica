@@ -129,7 +129,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
         if not profesional.horario_inicio or not profesional.horario_fin:
             horario_inicio = time(8, 0)
-            horario_fin = time(19, 0)
+            horario_fin = time(22, 0)
         else:
             horario_inicio = profesional.horario_inicio
             horario_fin = profesional.horario_fin
