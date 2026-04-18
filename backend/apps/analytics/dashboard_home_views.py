@@ -70,7 +70,7 @@ class DashboardHomeView(APIView):
             'hora': turno.fecha_hora_inicio.strftime('%H:%M'),
             'cliente': f"{turno.cliente.nombre} {turno.cliente.apellido}",
             'servicio': turno.servicio.nombre if turno.servicio else 'Sin servicio',
-            'profesional': f"{turno.profesional.nombre} {turno.profesional.apellido}" if turno.profesional else 'Sin asignar',
+            'profesional': turno.profesional.get_full_name() if turno.profesional else 'Sin asignar',
             'estado': turno.estado,
         } for turno in proximas_citas]
 
