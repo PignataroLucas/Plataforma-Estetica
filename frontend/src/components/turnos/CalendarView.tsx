@@ -13,6 +13,7 @@ interface CalendarViewProps {
   turnos: TurnoList[]
   onSelectEvent: (turno: TurnoList) => void
   onSelectSlot: (slotInfo: { start: Date; end: Date }) => void
+  onRangeChange?: (range: { start: Date; end: Date }) => void
   loading?: boolean
 }
 
@@ -60,6 +61,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   turnos,
   onSelectEvent,
   onSelectSlot,
+  onRangeChange,
   loading,
 }) => {
   // Convertir turnos a eventos del calendario
@@ -90,6 +92,26 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       })
     },
     [onSelectSlot]
+  )
+
+  // Handler para cuando cambia el rango visible del calendario (navegación entre meses/semanas)
+  // react-big-calendar pasa Date[] en vista día/semana y { start, end } en vista mes
+  const handleRangeChange = useCallback(
+    (range: Date[] | { start: Date; end: Date }) => {
+      if (!onRangeChange) return
+
+      if (Array.isArray(range)) {
+        if (range.length === 0) return
+        const start = new Date(range[0])
+        start.setHours(0, 0, 0, 0)
+        const end = new Date(range[range.length - 1])
+        end.setHours(23, 59, 59, 999)
+        onRangeChange({ start, end })
+      } else {
+        onRangeChange({ start: range.start, end: range.end })
+      }
+    },
+    [onRangeChange]
   )
 
   // Personalizar el estilo de cada evento
@@ -144,6 +166,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         messages={messages}
         onSelectEvent={handleSelectEvent}
         onSelectSlot={handleSelectSlot}
+        onRangeChange={handleRangeChange}
         selectable
         eventPropGetter={eventStyleGetter}
         components={{

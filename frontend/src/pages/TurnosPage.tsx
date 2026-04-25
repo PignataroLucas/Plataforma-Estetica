@@ -31,29 +31,38 @@ export default function TurnosPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterEstado, setFilterEstado] = useState('')
   const [filterProfesional, setFilterProfesional] = useState('')
+  const [calendarRange, setCalendarRange] = useState<{ start: Date; end: Date } | null>(null)
 
   useEffect(() => {
     loadTurnos()
-  }, [activeTab, filterEstado, filterProfesional, viewType])
+  }, [activeTab, filterEstado, filterProfesional, viewType, calendarRange])
 
   const getDateFilters = () => {
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
     const nowISO = now.toISOString()
 
-    // Si estamos en vista calendario, cargar un rango amplio
+    // Si estamos en vista calendario, usar el rango visible (o un rango inicial amplio)
     if (viewType === 'calendar') {
-      const ago7Days = new Date(now)
-      ago7Days.setDate(now.getDate() - 7)
-      ago7Days.setHours(0, 0, 0, 0)
+      if (calendarRange) {
+        return {
+          fecha_desde: calendarRange.start.toISOString(),
+          fecha_hasta: calendarRange.end.toISOString(),
+        }
+      }
 
-      const in30Days = new Date(now)
-      in30Days.setDate(now.getDate() + 30)
-      in30Days.setHours(23, 59, 59)
+      // Rango inicial: -30 / +90 días para cubrir el mes visible aunque el usuario navegue
+      const ago30Days = new Date(now)
+      ago30Days.setDate(now.getDate() - 30)
+      ago30Days.setHours(0, 0, 0, 0)
+
+      const in90Days = new Date(now)
+      in90Days.setDate(now.getDate() + 90)
+      in90Days.setHours(23, 59, 59)
 
       return {
-        fecha_desde: ago7Days.toISOString(),
-        fecha_hasta: in30Days.toISOString(),
+        fecha_desde: ago30Days.toISOString(),
+        fecha_hasta: in90Days.toISOString(),
       }
     }
 
@@ -67,15 +76,12 @@ export default function TurnosPage() {
           fecha_hasta: endOfToday,
         }
       case 'proximos':
-        // Turnos desde mañana hasta 7 días en el futuro
+        // Todos los turnos desde mañana en adelante (sin tope superior)
         const tomorrow = new Date(now)
         tomorrow.setDate(now.getDate() + 1)
         tomorrow.setHours(0, 0, 0, 0)
-        const in7Days = new Date(tomorrow)
-        in7Days.setDate(tomorrow.getDate() + 7)
         return {
           fecha_desde: tomorrow.toISOString(),
-          fecha_hasta: in7Days.toISOString(),
         }
       case 'historial':
         // Turnos que ya pasaron (últimos 30 días hasta ahora)
@@ -176,6 +182,10 @@ export default function TurnosPage() {
     clearError()
     setIsCreateModalOpen(true)
     // TODO: Pre-llenar fecha y hora en el formulario usando slotInfo
+  }
+
+  const handleCalendarRangeChange = (range: { start: Date; end: Date }) => {
+    setCalendarRange(range)
   }
 
   const filteredTurnos = turnos.filter(turno => {
@@ -318,6 +328,7 @@ export default function TurnosPage() {
               turnos={turnos}
               onSelectEvent={handleCalendarSelectEvent}
               onSelectSlot={handleCalendarSelectSlot}
+              onRangeChange={handleCalendarRangeChange}
               loading={loading}
             />
           </div>

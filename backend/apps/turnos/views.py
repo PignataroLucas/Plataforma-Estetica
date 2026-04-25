@@ -91,14 +91,12 @@ class TurnoViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def proximos(self, request):
         """
-        Obtener próximos turnos (próximos 7 días)
+        Obtener próximos turnos (todos los futuros, pendientes o confirmados)
         """
         ahora = timezone.now()
-        en_7_dias = ahora + timedelta(days=7)
 
         turnos = self.get_queryset().filter(
             fecha_hora_inicio__gte=ahora,
-            fecha_hora_inicio__lte=en_7_dias,
             estado__in=[Turno.Estado.PENDIENTE, Turno.Estado.CONFIRMADO]
         )
 
