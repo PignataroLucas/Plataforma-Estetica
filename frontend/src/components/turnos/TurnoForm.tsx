@@ -28,22 +28,6 @@ const estadoPagoOptions = [
   { value: 'PAGADO', label: 'Pagado' },
 ]
 
-// Generar horarios de 8am a 10pm cada 30 minutos
-const generateTimeSlots = () => {
-  const slots = []
-  for (let hour = 8; hour <= 22; hour++) {
-    for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 22 && minute > 0) break // Terminar a las 22:00
-      const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
-      const label = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
-      slots.push({ value: time, label })
-    }
-  }
-  return slots
-}
-
-const _timeSlots = generateTimeSlots()
-
 export const TurnoForm: React.FC<TurnoFormProps> = ({
   initialData,
   onSubmit,
@@ -68,8 +52,7 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
   const [turnosDelDia, setTurnosDelDia] = useState<TurnoList[]>([])
   const [loadingTurnos, setLoadingTurnos] = useState(false)
 
-  // Nuevos estados para horarios dinámicos
-  const [availableSlots, setAvailableSlots] = useState<Array<{ hora: string; hora_fin: string; disponible: boolean }>>([])
+  // Estado para validar horario laboral del profesional
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [horarioLaboral, setHorarioLaboral] = useState<{ inicio: string; fin: string } | null>(null)
   const [diaNoLaboral, setDiaNoLaboral] = useState(false)
@@ -97,13 +80,11 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     }
   }, [selectedDate, formData.profesional, formData.servicio])
 
-  // Cargar horarios disponibles cuando cambie fecha, profesional o servicio
+  // Cargar horario laboral del profesional cuando cambie fecha, profesional o servicio
   useEffect(() => {
     if (selectedDate && formData.profesional && formData.servicio) {
       loadHorariosDisponibles()
     } else {
-      // Resetear slots si falta algún parámetro
-      setAvailableSlots([])
       setDiaNoLaboral(false)
       setHorarioLaboral(null)
     }
@@ -153,20 +134,15 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
       })
 
       if (response.data.disponible === false) {
-        // El profesional no trabaja ese día
         setDiaNoLaboral(true)
-        setAvailableSlots([])
         setHorarioLaboral(null)
       } else {
         setDiaNoLaboral(false)
-        setAvailableSlots(response.data.slots || [])
         setHorarioLaboral(response.data.horario_laboral || null)
       }
     } catch (err) {
       console.error('Error loading horarios disponibles:', err)
-      setAvailableSlots([])
       setHorarioLaboral(null)
-      // En caso de error, no marcar como día no laboral
       setDiaNoLaboral(false)
     } finally {
       setLoadingSlots(false)
@@ -220,13 +196,18 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     if (!selectedTime) {
       newErrors.fecha_hora_inicio = 'La hora es requerida'
     }
+    if (selectedTime && servicioSeleccionado && isTimeSlotOccupied(selectedTime)) {
+      newErrors.fecha_hora_inicio = 'Ese horario solapa con un turno existente'
+    }
+    if (selectedTime && horarioLaboral && servicioSeleccionado && !isWithinWorkingHours(selectedTime)) {
+      newErrors.fecha_hora_inicio = `Fuera del horario laboral (${horarioLaboral.inicio} - ${horarioLaboral.fin})`
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  // Verificar si un horario está ocupado (considerando duración del servicio)
-  const _isTimeSlotOccupied = (time: string) => {
+  const isTimeSlotOccupied = (time: string) => {
     if (!turnosDelDia.length || !servicioSeleccionado) {
       return false
     }
@@ -235,38 +216,31 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     const selectedDateTime = new Date(selectedDate)
     selectedDateTime.setHours(hours, minutes, 0)
 
-    // Calcular fin del turno según duración del servicio
     const finTurno = new Date(selectedDateTime)
     finTurno.setMinutes(finTurno.getMinutes() + servicioSeleccionado.duracion_minutos)
 
-    // Verificar si hay conflicto con algún turno existente
-    const hasConflict = turnosDelDia.some(turno => {
-      // Si estamos editando, excluir el turno actual de la verificación
+    return turnosDelDia.some(turno => {
       if (initialData?.id && turno.id === initialData.id) {
         return false
       }
-
       const inicioExistente = new Date(turno.fecha_hora_inicio)
       const finExistente = new Date(turno.fecha_hora_fin)
-
-      // Hay conflicto si:
-      // 1. El nuevo turno empieza durante un turno existente
-      // 2. El nuevo turno termina durante un turno existente
-      // 3. El nuevo turno engloba completamente un turno existente
-      const conflict = (
-        (selectedDateTime >= inicioExistente && selectedDateTime < finExistente) || // Empieza durante
-        (finTurno > inicioExistente && finTurno <= finExistente) || // Termina durante
-        (selectedDateTime <= inicioExistente && finTurno >= finExistente) // Engloba
+      return (
+        (selectedDateTime >= inicioExistente && selectedDateTime < finExistente) ||
+        (finTurno > inicioExistente && finTurno <= finExistente) ||
+        (selectedDateTime <= inicioExistente && finTurno >= finExistente)
       )
-
-      if (conflict) {
-        console.log(`Slot ${time}: OCUPADO - Conflicto con turno ${inicioExistente.toLocaleTimeString()} - ${finExistente.toLocaleTimeString()}`)
-      }
-
-      return conflict
     })
+  }
 
-    return hasConflict
+  const isWithinWorkingHours = (time: string) => {
+    if (!horarioLaboral || !servicioSeleccionado) return true
+    const [h, m] = time.split(':').map(Number)
+    const endTotal = h * 60 + m + servicioSeleccionado.duracion_minutos
+    const endH = Math.floor(endTotal / 60)
+    const endM = endTotal % 60
+    const endStr = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`
+    return time >= horarioLaboral.inicio && endStr <= horarioLaboral.fin
   }
 
   // Obtener el servicio seleccionado para calcular duración
@@ -294,8 +268,35 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
     setSelectedDate(e.target.value)
   }
 
-  const handleTimeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedTime(e.target.value)
+  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    let digits = raw.replace(/\D/g, '').slice(0, 4)
+
+    if (digits.length >= 1) {
+      const firstTwo = digits.slice(0, 2)
+      const hh = parseInt(firstTwo, 10)
+      if (digits.length === 1 && hh > 2) {
+        digits = '0' + digits
+      } else if (digits.length >= 2 && hh > 23) {
+        digits = '23' + digits.slice(2)
+      }
+    }
+    if (digits.length >= 3) {
+      const mm = parseInt(digits.slice(2, 4).padEnd(2, '0'), 10)
+      if (mm > 59) {
+        digits = digits.slice(0, 2) + '59'
+      }
+    }
+
+    let formatted = digits
+    if (digits.length > 2) {
+      formatted = `${digits.slice(0, 2)}:${digits.slice(2)}`
+    }
+
+    setSelectedTime(formatted)
+    if (errors.fecha_hora_inicio) {
+      setErrors(prev => ({ ...prev, fecha_hora_inicio: undefined }))
+    }
   }
 
   const clienteOptions = clientes.map(c => ({
@@ -395,52 +396,45 @@ export const TurnoForm: React.FC<TurnoFormProps> = ({
           <label htmlFor="hora" className="block text-sm font-medium text-gray-700 mb-1">
             Hora {horarioLaboral && `(${horarioLaboral.inicio} - ${horarioLaboral.fin})`} <span className="text-red-500">*</span>
           </label>
-          <select
+          <input
             id="hora"
+            type="text"
             value={selectedTime}
             onChange={handleTimeChange}
+            placeholder="HH:MM"
+            maxLength={5}
+            inputMode="numeric"
+            pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
-            disabled={loadingSlots || diaNoLaboral || !formData.servicio || !formData.profesional}
-          >
-            <option value="">
-              {loadingSlots ? 'Cargando horarios...' : 'Seleccionar hora'}
-            </option>
-            {availableSlots.map(slot => (
-              <option
-                key={slot.hora}
-                value={slot.hora}
-              >
-                {slot.hora} - {slot.hora_fin}
-              </option>
-            ))}
-          </select>
+            disabled={diaNoLaboral}
+          />
           {errors.fecha_hora_inicio && (
             <p className="mt-1 text-sm text-red-600">{errors.fecha_hora_inicio}</p>
           )}
-          {diaNoLaboral && (
+          {!errors.fecha_hora_inicio && diaNoLaboral && (
             <p className="mt-1 text-sm text-amber-600">
               ⚠️ El profesional no trabaja en este día
             </p>
           )}
-          {selectedDate && (!formData.servicio || !formData.profesional) && (
-            <p className="mt-1 text-sm text-blue-600">
-              💡 Selecciona servicio y profesional para ver horarios disponibles
-            </p>
-          )}
-          {loadingSlots && (
+          {!errors.fecha_hora_inicio && loadingSlots && (
             <p className="mt-1 text-sm text-gray-500">
-              🔄 Calculando horarios disponibles...
+              🔄 Verificando horario laboral...
             </p>
           )}
-          {!loadingSlots && availableSlots.length === 0 && formData.servicio && formData.profesional && selectedDate && !diaNoLaboral && (
+          {!errors.fecha_hora_inicio && selectedDate && (!formData.servicio || !formData.profesional) && (
+            <p className="mt-1 text-sm text-blue-600">
+              💡 Seleccioná servicio y profesional para validar disponibilidad
+            </p>
+          )}
+          {!errors.fecha_hora_inicio && selectedTime && servicioSeleccionado && isTimeSlotOccupied(selectedTime) && (
+            <p className="mt-1 text-sm text-red-600">
+              ⛔ Ese horario solapa con un turno existente
+            </p>
+          )}
+          {!errors.fecha_hora_inicio && selectedTime && horarioLaboral && servicioSeleccionado && !isTimeSlotOccupied(selectedTime) && !isWithinWorkingHours(selectedTime) && (
             <p className="mt-1 text-sm text-amber-600">
-              ⚠️ No hay horarios disponibles para este día
-            </p>
-          )}
-          {!loadingSlots && availableSlots.length > 0 && (
-            <p className="mt-1 text-sm text-green-600">
-              ✓ {availableSlots.length} horarios disponibles
+              ⚠️ Fuera del horario laboral del profesional
             </p>
           )}
         </div>
