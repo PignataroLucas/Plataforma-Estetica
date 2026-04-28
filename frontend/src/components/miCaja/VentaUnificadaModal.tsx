@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal, { ModalHeader, ModalBody, ModalFooter } from '@/components/ui/Modal/Modal'
 import Input from '@/components/ui/Input/Input'
 import Select from '@/components/ui/Select/Select'
+import SearchSelect from '@/components/ui/SearchSelect/SearchSelect'
 import Button from '@/components/ui/Button/Button'
 import { registrarVentaUnificada, getTurnosPendientesCobro } from '@/services/miCajaService'
 import { getClientes } from '@/services/clienteService'
@@ -118,9 +119,15 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
       const serviciosData = serviciosResponse.data.results || serviciosResponse.data || []
       const serviciosActivos = serviciosData.filter((s: Servicio) => s.activo)
 
+      const clientesList = (clientesData.results || []).slice().sort((a: Cliente, b: Cliente) => {
+        const nombreA = `${a.nombre} ${a.apellido}`.toLocaleLowerCase('es')
+        const nombreB = `${b.nombre} ${b.apellido}`.toLocaleLowerCase('es')
+        return nombreA.localeCompare(nombreB, 'es')
+      })
+
       setProductos(productosConStock)
       setTurnos(turnosData.turnos || [])
-      setClientes(clientesData.results || [])
+      setClientes(clientesList)
       setServicios(serviciosActivos)
     } catch (err: any) {
       console.error('Error loading data:', err)
@@ -450,11 +457,12 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
             <div className="space-y-6">
               {/* Cliente (opcional) y Método de Pago */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <Select
+                <SearchSelect
                   label="Cliente (opcional)"
                   value={clienteId?.toString() ?? ''}
-                  onChange={(e) => setClienteId(e.target.value ? parseInt(e.target.value) : null)}
+                  onChange={(value) => setClienteId(value ? parseInt(value) : null)}
                   options={clienteOptions}
+                  placeholder="Buscar cliente..."
                 />
                 <Select
                   label="Método de Pago"
