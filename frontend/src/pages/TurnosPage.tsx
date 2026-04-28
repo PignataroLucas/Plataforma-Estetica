@@ -23,7 +23,7 @@ export default function TurnosPage() {
   } = useTurnos()
 
   const [activeTab, setActiveTab] = useState<TabType>('hoy')
-  const [viewType, setViewType] = useState<ViewType>('list')
+  const [viewType, setViewType] = useState<ViewType>('calendar')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -209,16 +209,6 @@ export default function TurnosPage() {
           {/* Toggle de vistas */}
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
-              onClick={() => setViewType('list')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                viewType === 'list'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              📋 Lista
-            </button>
-            <button
               onClick={() => setViewType('calendar')}
               className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                 viewType === 'calendar'
@@ -227,6 +217,16 @@ export default function TurnosPage() {
               }`}
             >
               📅 Calendario
+            </button>
+            <button
+              onClick={() => setViewType('list')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                viewType === 'list'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📋 Lista
             </button>
           </div>
           <Button variant="primary" onClick={() => {
