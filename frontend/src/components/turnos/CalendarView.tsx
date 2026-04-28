@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react'
-import { Calendar, momentLocalizer, Event, SlotInfo } from 'react-big-calendar'
+import { useCallback, useMemo, useState } from 'react'
+import { Calendar, momentLocalizer, Event, SlotInfo, View } from 'react-big-calendar'
 import moment from 'moment'
 import 'moment/locale/es'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
@@ -64,6 +64,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onRangeChange,
   loading,
 }) => {
+  const [view, setView] = useState<View>('week')
+  const [date, setDate] = useState<Date>(new Date())
+
   // Convertir turnos a eventos del calendario
   const events: TurnoEvent[] = useMemo(() => {
     return turnos.map(turno => ({
@@ -146,18 +149,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     )
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96 bg-white rounded-lg">
-        <div className="text-center">
-          <div className="text-gray-500">Cargando calendario...</div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="bg-white rounded-lg p-4" style={{ height: '700px' }}>
+    <div className="bg-white rounded-lg p-4 relative" style={{ height: '700px' }}>
       <Calendar
         localizer={localizer}
         events={events}
@@ -172,7 +165,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         components={{
           event: EventComponent,
         }}
-        defaultView="week"
+        view={view}
+        onView={setView}
+        date={date}
+        onNavigate={setDate}
         views={['day', 'week', 'month']}
         step={30}
         timeslots={1}
@@ -182,6 +178,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         popup
         culture="es"
       />
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg pointer-events-none">
+          <div className="text-gray-500 text-sm bg-white px-3 py-1.5 rounded shadow">
+            Cargando calendario...
+          </div>
+        </div>
+      )}
     </div>
   )
 }
