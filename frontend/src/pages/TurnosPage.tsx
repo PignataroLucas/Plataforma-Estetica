@@ -48,6 +48,7 @@ export default function TurnosPage() {
         return {
           fecha_desde: calendarRange.start.toISOString(),
           fecha_hasta: calendarRange.end.toISOString(),
+          page_size: 500,
         }
       }
 
@@ -63,6 +64,7 @@ export default function TurnosPage() {
       return {
         fecha_desde: ago30Days.toISOString(),
         fecha_hasta: in90Days.toISOString(),
+        page_size: 500,
       }
     }
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Calendar, momentLocalizer, Event, SlotInfo, View } from 'react-big-calendar'
 import moment from 'moment'
 import 'moment/locale/es'
@@ -116,6 +116,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     },
     [onRangeChange]
   )
+
+  // react-big-calendar no dispara onRangeChange en el mount inicial.
+  // Lo emitimos manualmente para que el padre tenga el rango correcto desde el principio.
+  useEffect(() => {
+    if (!onRangeChange) return
+    const m = moment(date)
+    let start: Date
+    let end: Date
+    if (view === 'day') {
+      start = m.clone().startOf('day').toDate()
+      end = m.clone().endOf('day').toDate()
+    } else if (view === 'week') {
+      start = m.clone().startOf('week').toDate()
+      end = m.clone().endOf('week').toDate()
+    } else if (view === 'month') {
+      start = m.clone().startOf('month').startOf('week').toDate()
+      end = m.clone().endOf('month').endOf('week').toDate()
+    } else {
+      return
+    }
+    onRangeChange({ start, end })
+    // Excluimos onRangeChange de las deps a propósito: solo queremos re-emitir
+    // cuando cambia la vista o la fecha visible, no cuando el padre re-renderiza.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, date])
 
   // Personalizar el estilo de cada evento
   const eventStyleGetter = useCallback((event: TurnoEvent) => {
