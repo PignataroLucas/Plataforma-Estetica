@@ -130,7 +130,7 @@ def _create_service_income(instance, amount, description, Transaction, Transacti
         amount=amount,
         date=timezone.localtime(instance.fecha_hora_inicio).date(),
         description=description,
-        notes=f"Turno #{instance.pk} - {instance.fecha_hora_inicio.strftime('%d/%m/%Y %H:%M')}",
+        notes=f"Turno #{instance.pk} - {timezone.localtime(instance.fecha_hora_inicio).strftime('%d/%m/%Y %H:%M')}",
         client=instance.cliente,
         appointment=instance,
         service=instance.servicio,
@@ -199,7 +199,7 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
     if alquiler.transaccion_gasto:
         # Expense already exists, just update notes
         existing_expense = alquiler.transaccion_gasto
-        existing_expense.notes += f"\n+ Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})"
+        existing_expense.notes += f"\n+ Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({timezone.localtime(instance.fecha_hora_inicio).strftime('%H:%M')})"
         existing_expense.save()
         print(f"✅ Machine rental expense updated: {existing_expense}")
         return
@@ -212,7 +212,7 @@ def _create_machine_rental_expense(instance, Transaction, TransactionCategory):
         amount=alquiler.costo,  # Use cost from rental record
         date=appointment_date,
         description=f"Alquiler de {machine.nombre} - {appointment_date.strftime('%d/%m/%Y')}",
-        notes=f"Alquiler confirmado ID: {alquiler.pk}\nCosto: ${alquiler.costo}\nTurnos realizados:\n- Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({instance.fecha_hora_inicio.strftime('%H:%M')})",
+        notes=f"Alquiler confirmado ID: {alquiler.pk}\nCosto: ${alquiler.costo}\nTurnos realizados:\n- Turno #{instance.pk}: {instance.servicio.nombre} - {instance.cliente.nombre_completo} ({timezone.localtime(instance.fecha_hora_inicio).strftime('%H:%M')})",
         payment_method='BANK_TRANSFER',  # Default for equipment rentals
         auto_generated=True,
         registered_by=instance.creado_por,

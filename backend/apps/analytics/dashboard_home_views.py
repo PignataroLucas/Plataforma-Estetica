@@ -67,7 +67,7 @@ class DashboardHomeView(APIView):
 
         proximas_citas_data = [{
             'id': turno.id,
-            'hora': turno.fecha_hora_inicio.strftime('%H:%M'),
+            'hora': timezone.localtime(turno.fecha_hora_inicio).strftime('%H:%M'),
             'cliente': f"{turno.cliente.nombre} {turno.cliente.apellido}",
             'servicio': turno.servicio.nombre if turno.servicio else 'Sin servicio',
             'profesional': turno.profesional.get_full_name() if turno.profesional else 'Sin asignar',

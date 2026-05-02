@@ -175,6 +175,7 @@ class MiCajaViewSet(viewsets.ViewSet):
 
             if monto_pendiente > 0:
                 monto_sena_pagado = float(total_pagado) if turno.estado_pago == 'CON_SENA' else 0
+                fecha_hora_local = timezone.localtime(turno.fecha_hora_inicio)
 
                 turnos_pendientes.append({
                     'id': turno.id,
@@ -184,8 +185,8 @@ class MiCajaViewSet(viewsets.ViewSet):
                     'monto': monto_pendiente,
                     'monto_total': float(turno.servicio.precio),
                     'monto_sena': monto_sena_pagado,
-                    'fecha': turno.fecha_hora_inicio.strftime('%Y-%m-%d'),
-                    'hora': turno.fecha_hora_inicio.strftime('%H:%M'),
+                    'fecha': fecha_hora_local.strftime('%Y-%m-%d'),
+                    'hora': fecha_hora_local.strftime('%H:%M'),
                     'estado_pago': turno.estado_pago
                 })
 

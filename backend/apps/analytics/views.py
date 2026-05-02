@@ -1170,7 +1170,7 @@ class ClientServicesView(APIView):
         for tx in page_obj:
             turno = tx.appointment
             if turno:
-                time_str = turno.fecha_hora_inicio.strftime('%H:%M')
+                time_str = timezone.localtime(turno.fecha_hora_inicio).strftime('%H:%M')
                 professional = turno.profesional
                 professional_name = f"{professional.first_name} {professional.last_name}" if professional else 'No asignado'
                 professional_id = professional.id if professional else None
@@ -1178,7 +1178,7 @@ class ClientServicesView(APIView):
                 notes = turno.notas or tx.notes or ''
                 source_id = turno.id
             else:
-                time_str = tx.created_at.strftime('%H:%M') if tx.created_at else ''
+                time_str = timezone.localtime(tx.created_at).strftime('%H:%M') if tx.created_at else ''
                 professional_name = 'Servicio directo'
                 professional_id = None
                 payment_status = 'PAGADO'

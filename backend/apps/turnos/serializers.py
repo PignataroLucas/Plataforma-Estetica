@@ -128,8 +128,8 @@ class TurnoCreateUpdateSerializer(serializers.ModelSerializer):
                 conflicto = conflictos.first()
                 raise serializers.ValidationError({
                     'fecha_hora_inicio': f'El profesional ya tiene un turno asignado en ese horario '
-                                        f'({conflicto.fecha_hora_inicio.strftime("%H:%M")} - '
-                                        f'{conflicto.fecha_hora_fin.strftime("%H:%M")})'
+                                        f'({timezone.localtime(conflicto.fecha_hora_inicio).strftime("%H:%M")} - '
+                                        f'{timezone.localtime(conflicto.fecha_hora_fin).strftime("%H:%M")})'
                 })
 
         return attrs
