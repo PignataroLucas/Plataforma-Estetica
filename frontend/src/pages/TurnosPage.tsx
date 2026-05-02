@@ -90,6 +90,8 @@ export default function TurnosPage() {
         return {
           fecha_desde: ago30Days.toISOString(),
           fecha_hasta: nowISO,
+          ordering: '-fecha_hora_inicio',
+          page_size: 200,
         }
       default:
         return {}

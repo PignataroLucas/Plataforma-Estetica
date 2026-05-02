@@ -27,6 +27,8 @@ interface FetchTurnosParams {
   estado?: string
   estado_pago?: string
   search?: string
+  ordering?: string
+  page_size?: number
 }
 
 interface DisponibilidadData {
