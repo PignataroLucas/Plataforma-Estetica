@@ -99,11 +99,15 @@ class TurnoCreateUpdateSerializer(serializers.ModelSerializer):
                 'fecha_hora_inicio': 'No se pueden crear turnos en el pasado'
             })
 
-        # Calcular fecha_hora_fin si no se proporciona
-        if not attrs.get('fecha_hora_fin') and servicio and fecha_hora_inicio:
+        # Recalcular fecha_hora_fin a partir de inicio + duración del servicio.
+        # Sobrescribe el valor enviado por el cliente porque el form del frontend
+        # siempre reenvía el fin original del turno: al editar sólo el inicio quedaría
+        # un fin viejo y el clean() del modelo dispararía "fin debe ser posterior a inicio".
+        servicio_para_duracion = servicio or (self.instance.servicio if self.instance else None)
+        if fecha_hora_inicio and servicio_para_duracion:
             from datetime import timedelta
             attrs['fecha_hora_fin'] = fecha_hora_inicio + timedelta(
-                minutes=servicio.duracion_minutos
+                minutes=servicio_para_duracion.duracion_minutos
             )
 
         # Validar disponibilidad del profesional (prevención de double-booking)
