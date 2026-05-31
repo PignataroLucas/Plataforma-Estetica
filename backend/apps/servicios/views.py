@@ -3,7 +3,21 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
+from django.core.cache import cache
 from .models import Servicio, CategoriaServicio, MaquinaAlquilada, AlquilerMaquina
+
+
+def invalidate_analytics_cache():
+    """
+    Limpia las páginas de analytics cacheadas (cache_page) para que los cambios
+    de configuración (ej: costo o fecha de compra de una máquina) se reflejen
+    de inmediato y no queden esperando a que expire el caché.
+    """
+    try:
+        cache.delete_pattern('*views.decorators.cache*')
+    except Exception:
+        # Un problema de caché nunca debe romper la operación principal.
+        pass
 from .serializers import ServicioSerializer, CategoriaServicioSerializer, MaquinaAlquiladaSerializer, AlquilerMaquinaSerializer
 
 
@@ -142,6 +156,20 @@ class MaquinaAlquiladaViewSet(viewsets.ModelViewSet):
             serializer.save(sucursal=self.request.user.sucursal)
         else:
             serializer.save()
+        # Reflejar el cambio en Analytics de inmediato
+        invalidate_analytics_cache()
+
+    def perform_update(self, serializer):
+        """
+        Al editar una máquina (ej: costo o fecha de compra) se invalida el
+        caché de analytics para que la rentabilidad se recalcule al instante.
+        """
+        serializer.save()
+        invalidate_analytics_cache()
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        invalidate_analytics_cache()
 
 
 class AlquilerMaquinaViewSet(viewsets.ModelViewSet):
