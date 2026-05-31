@@ -27,6 +27,12 @@ class MaquinaAlquilada(models.Model):
         blank=True,
         help_text="Empresa que alquila la máquina"
     )
+    fecha_compra = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Si la máquina se compró, fecha desde la cual deja de tener costo de alquiler. "
+                  "El análisis de rentabilidad solo imputa costo a los servicios anteriores a esta fecha."
+    )
     activa = models.BooleanField(default=True)
 
     # Timestamps

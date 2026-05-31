@@ -24,6 +24,7 @@ export default function MaquinaForm({
     descripcion: '',
     costo_diario: 0,
     proveedor: '',
+    fecha_compra: null,
     activa: true,
   })
 
@@ -37,6 +38,7 @@ export default function MaquinaForm({
         descripcion: maquina.descripcion,
         costo_diario: maquina.costo_diario,
         proveedor: maquina.proveedor,
+        fecha_compra: maquina.fecha_compra ?? null,
         activa: maquina.activa,
       })
     }
@@ -49,8 +51,8 @@ export default function MaquinaForm({
       newErrors.nombre = 'El nombre es requerido'
     }
 
-    if (!formData.costo_diario || formData.costo_diario <= 0) {
-      newErrors.costo_diario = 'El costo diario debe ser mayor a 0'
+    if (formData.costo_diario === undefined || formData.costo_diario === null || formData.costo_diario < 0) {
+      newErrors.costo_diario = 'El costo diario no puede ser negativo'
     }
 
     setErrors(newErrors)
@@ -73,7 +75,14 @@ export default function MaquinaForm({
 
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : type === 'checkbox' ? checked : value,
+      [name]:
+        type === 'number'
+          ? parseFloat(value) || 0
+          : type === 'checkbox'
+          ? checked
+          : type === 'date'
+          ? value || null
+          : value,
     }))
 
     if (errors[name as keyof MaquinaAlquilada]) {
@@ -139,6 +148,22 @@ export default function MaquinaForm({
             fullWidth
             placeholder="Ej: MedEquip SA, Estética Tech"
           />
+
+          <div>
+            <Input
+              label="Fecha de compra (opcional)"
+              type="date"
+              name="fecha_compra"
+              value={formData.fecha_compra ?? ''}
+              onChange={handleChange}
+              fullWidth
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Si compraste la máquina, indicá desde qué fecha dejó de tener costo de alquiler.
+              El análisis de rentabilidad solo imputará costo a los servicios anteriores a esa fecha
+              (los meses previos se mantienen sin cambios).
+            </p>
+          </div>
 
           <div className="flex items-center">
             <input

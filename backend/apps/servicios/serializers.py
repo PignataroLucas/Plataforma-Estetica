@@ -16,6 +16,7 @@ class MaquinaAlquiladaSerializer(serializers.ModelSerializer):
             'descripcion',
             'costo_diario',
             'proveedor',
+            'fecha_compra',
             'activa',
             'creado_en',
             'actualizado_en',

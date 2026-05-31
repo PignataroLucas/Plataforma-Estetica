@@ -319,7 +319,8 @@ class AnalyticsCalculator:
             'service__id',
             'service__nombre',
             'service__maquina_alquilada__id',
-            'service__maquina_alquilada__costo_diario'
+            'service__maquina_alquilada__costo_diario',
+            'service__maquina_alquilada__fecha_compra'
         ).annotate(
             quantity=Count('id'),
             revenue=Sum('amount')
@@ -333,9 +334,15 @@ class AnalyticsCalculator:
             # Calcular costo si usa máquina alquilada (días únicos con transacción del servicio)
             cost = 0
             if item['service__maquina_alquilada__id']:
-                days_used = tx_qs.filter(
-                    service__id=item['service__id']
-                ).dates('date', 'day').count()
+                days_qs = tx_qs.filter(service__id=item['service__id'])
+
+                # Si la máquina se compró, deja de tener costo de alquiler a partir
+                # de esa fecha: solo se imputa costo a los servicios anteriores.
+                fecha_compra = item['service__maquina_alquilada__fecha_compra']
+                if fecha_compra:
+                    days_qs = days_qs.filter(date__lt=fecha_compra)
+
+                days_used = days_qs.dates('date', 'day').count()
 
                 daily_cost = float(item['service__maquina_alquilada__costo_diario'] or 0)
                 cost = daily_cost * days_used

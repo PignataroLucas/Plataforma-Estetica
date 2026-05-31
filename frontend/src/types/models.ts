@@ -216,6 +216,7 @@ export interface MaquinaAlquilada {
   descripcion: string
   costo_diario: number
   proveedor: string
+  fecha_compra?: string | null
   activa: boolean
   creado_en: string
   actualizado_en: string
