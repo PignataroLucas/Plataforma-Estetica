@@ -8,12 +8,35 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db.models import Sum, Count, Q, F
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from apps.turnos.models import Turno
 from apps.finanzas.models import Transaction
 from apps.clientes.models import Cliente
 from apps.inventario.models import Producto
+
+
+def _proximo_cumpleanos(fecha_nac, hoy):
+    """
+    Calcula datos del próximo cumpleaños de un cliente.
+
+    Devuelve (dias_para_cumple, edad_a_cumplir, cumple_hoy).
+    Maneja el 29/02: en años no bisiestos se toma el 28/02.
+    """
+    def _cumple_en(anio):
+        try:
+            return date(anio, fecha_nac.month, fecha_nac.day)
+        except ValueError:
+            # 29/02 en año no bisiesto -> 28/02
+            return date(anio, fecha_nac.month, 28)
+
+    proximo = _cumple_en(hoy.year)
+    if proximo < hoy:
+        proximo = _cumple_en(hoy.year + 1)
+
+    dias_para_cumple = (proximo - hoy).days
+    edad_a_cumplir = proximo.year - fecha_nac.year
+    return dias_para_cumple, edad_a_cumplir, dias_para_cumple == 0
 
 
 class DashboardHomeView(APIView):
@@ -192,11 +215,46 @@ class DashboardHomeView(APIView):
                 'count': citas_sin_confirmar
             })
 
+        # ========== CUMPLEAÑOS PRÓXIMOS (solo Admin/Manager) ==========
+        # Clientes que cumplen años dentro de los próximos 7 días (incluye hoy).
+        # Se incluye el LTV para resaltar clientes valiosos sin abrir el detalle.
+        cumpleanos = []
+        if can_view_financials:
+            from apps.analytics.utils import AnalyticsCalculator
+
+            VENTANA_DIAS = 7
+            clientes_con_cumple = Cliente.objects.filter(
+                centro_estetica=sucursal.centro_estetica,
+                activo=True,
+                fecha_nacimiento__isnull=False
+            )
+
+            for cliente in clientes_con_cumple:
+                dias, edad, cumple_hoy = _proximo_cumpleanos(
+                    cliente.fecha_nacimiento, today
+                )
+                if dias <= VENTANA_DIAS:
+                    cumpleanos.append({
+                        'cliente_id': cliente.id,
+                        'nombre_completo': cliente.nombre_completo,
+                        'telefono': cliente.telefono,
+                        'fecha_nacimiento': cliente.fecha_nacimiento.isoformat(),
+                        'dia_mes': cliente.fecha_nacimiento.strftime('%d/%m'),
+                        'dias_para_cumple': dias,
+                        'cumple_hoy': cumple_hoy,
+                        'edad_a_cumplir': edad,
+                        'lifetime_value': AnalyticsCalculator.get_client_lifetime_value(cliente.id),
+                    })
+
+            # Más cercanos primero; a igualdad de días, el más valioso arriba
+            cumpleanos.sort(key=lambda c: (c['dias_para_cumple'], -c['lifetime_value']))
+
         # ========== RESPONSE ==========
         return Response({
             'fecha': today.strftime('%Y-%m-%d'),
             'can_view_financials': can_view_financials,
             'user_role': user_role,
+            'cumpleanos': cumpleanos,
             'citas_hoy': {
                 'total': turnos_hoy.count(),
                 'pendientes': citas_pendientes,

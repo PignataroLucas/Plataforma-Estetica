@@ -3,6 +3,7 @@ import KPICards from '../components/dashboard/KPICards';
 import AlertasPanel from '../components/dashboard/AlertasPanel';
 import ProximasCitas from '../components/dashboard/ProximasCitas';
 import AccesosRapidos from '../components/dashboard/AccesosRapidos';
+import CumpleanosPanel from '../components/dashboard/CumpleanosPanel';
 
 export default function DashboardPage() {
   const { dashboardData, stats, loading, error, refetch } = useDashboard();
@@ -83,6 +84,13 @@ export default function DashboardPage() {
             <AlertasPanel alertas={dashboardData?.alertas || []} />
           </div>
         </div>
+
+        {/* Próximos Cumpleaños - Solo para Admin/Manager */}
+        {dashboardData?.can_view_financials && (
+          <div className="mb-8">
+            <CumpleanosPanel cumpleanos={dashboardData?.cumpleanos || []} />
+          </div>
+        )}
 
         {/* Accesos Rápidos */}
         <div className="mb-8">

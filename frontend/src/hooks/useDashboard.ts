@@ -18,6 +18,18 @@ export interface Alerta {
   count: number;
 }
 
+export interface Cumpleanos {
+  cliente_id: number;
+  nombre_completo: string;
+  telefono: string;
+  fecha_nacimiento: string;
+  dia_mes: string;
+  dias_para_cumple: number;
+  cumple_hoy: boolean;
+  edad_a_cumplir: number;
+  lifetime_value: number;
+}
+
 export interface DashboardHomeData {
   fecha: string;
   can_view_financials: boolean;
@@ -43,6 +55,7 @@ export interface DashboardHomeData {
   };
   clientes_atendidos_hoy: number;
   alertas: Alerta[];
+  cumpleanos: Cumpleanos[];
 }
 
 export interface DashboardStats {
