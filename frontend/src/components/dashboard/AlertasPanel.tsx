@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { Alerta } from '../../hooks/useDashboard';
+import AlertaDetalleModal from './AlertaDetalleModal';
 
 interface AlertasPanelProps {
   alertas: Alerta[];
 }
 
 export default function AlertasPanel({ alertas }: AlertasPanelProps) {
+  const [alertaSeleccionada, setAlertaSeleccionada] = useState<Alerta | null>(null);
+
   if (alertas.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -22,6 +26,7 @@ export default function AlertasPanel({ alertas }: AlertasPanelProps) {
       case 'error':
         return {
           bg: 'bg-red-50',
+          hover: 'hover:bg-red-100',
           border: 'border-red-200',
           icon: 'text-red-600',
           iconBg: 'bg-red-100',
@@ -31,6 +36,7 @@ export default function AlertasPanel({ alertas }: AlertasPanelProps) {
       case 'warning':
         return {
           bg: 'bg-yellow-50',
+          hover: 'hover:bg-yellow-100',
           border: 'border-yellow-200',
           icon: 'text-yellow-600',
           iconBg: 'bg-yellow-100',
@@ -41,6 +47,7 @@ export default function AlertasPanel({ alertas }: AlertasPanelProps) {
       default:
         return {
           bg: 'bg-blue-50',
+          hover: 'hover:bg-blue-100',
           border: 'border-blue-200',
           icon: 'text-blue-600',
           iconBg: 'bg-blue-100',
@@ -59,9 +66,11 @@ export default function AlertasPanel({ alertas }: AlertasPanelProps) {
         {alertas.map((alerta, index) => {
           const styles = getSeverityStyles(alerta.severidad);
           return (
-            <div
+            <button
               key={index}
-              className={`${styles.bg} ${styles.border} border rounded-lg p-4 flex items-start gap-3`}
+              type="button"
+              onClick={() => setAlertaSeleccionada(alerta)}
+              className={`${styles.bg} ${styles.hover} ${styles.border} border rounded-lg p-4 flex items-start gap-3 w-full text-left transition-colors cursor-pointer`}
             >
               <div className={`${styles.iconBg} rounded-full w-10 h-10 flex items-center justify-center flex-shrink-0`}>
                 <span className="text-xl">{styles.emoji}</span>
@@ -72,15 +81,32 @@ export default function AlertasPanel({ alertas }: AlertasPanelProps) {
                 </h4>
                 <p className="text-sm text-gray-700">{alerta.mensaje}</p>
               </div>
-              {alerta.count > 0 && (
-                <div className={`${styles.iconBg} ${styles.icon} px-3 py-1 rounded-full text-sm font-semibold`}>
-                  {alerta.count}
-                </div>
-              )}
-            </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {alerta.count > 0 && (
+                  <div className={`${styles.iconBg} ${styles.icon} px-3 py-1 rounded-full text-sm font-semibold`}>
+                    {alerta.count}
+                  </div>
+                )}
+                <svg
+                  className={`h-5 w-5 ${styles.icon}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </button>
           );
         })}
       </div>
+
+      {alertaSeleccionada && (
+        <AlertaDetalleModal
+          alerta={alertaSeleccionada}
+          onClose={() => setAlertaSeleccionada(null)}
+        />
+      )}
     </div>
   );
 }

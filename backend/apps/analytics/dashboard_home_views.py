@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
-from django.db.models import Sum, Count, Q, F
+from django.db.models import Sum, Count, Max, Q, F
 from datetime import date, datetime, timedelta
 
 from apps.turnos.models import Turno
@@ -332,3 +332,134 @@ class DashboardStatsView(APIView):
             'productos_criticos': productos_criticos,
             'ocupacion_hoy': round(ocupacion_porcentaje, 1)
         })
+
+
+class DashboardAlertaDetailView(APIView):
+    """
+    GET /api/dashboard/alertas/<tipo>/
+
+    Detalle de una alerta del dashboard para mostrar en el popup.
+    Tipos soportados: stock_bajo, clientes_riesgo, pagos_pendientes, citas_pendientes
+
+    Cada queryset replica exactamente el filtro usado en DashboardHomeView
+    para que el detalle coincida con el count de la alerta.
+    """
+    permission_classes = [IsAuthenticated]
+
+    # Máximo de clientes inactivos devueltos (puede ser una lista muy larga)
+    MAX_CLIENTES_RIESGO = 100
+
+    def get(self, request, tipo):
+        sucursal = request.user.sucursal
+        today = timezone.now().date()
+        now = timezone.now()
+        user_role = request.user.rol
+        can_view_financials = user_role in ['ADMIN', 'MANAGER']
+
+        if tipo == 'citas_pendientes':
+            turnos = Turno.objects.filter(
+                sucursal=sucursal,
+                fecha_hora_inicio__date=today,
+                fecha_hora_inicio__gte=now,
+                estado='PENDIENTE'
+            )
+            if user_role == 'EMPLEADO':
+                turnos = turnos.filter(profesional=request.user)
+
+            turnos = turnos.select_related(
+                'cliente', 'servicio', 'profesional'
+            ).order_by('fecha_hora_inicio')
+
+            items = [{
+                'id': turno.id,
+                'hora': timezone.localtime(turno.fecha_hora_inicio).strftime('%H:%M'),
+                'cliente': turno.cliente.nombre_completo,
+                'telefono': turno.cliente.telefono,
+                'servicio': turno.servicio.nombre if turno.servicio else 'Sin servicio',
+                'profesional': turno.profesional.get_full_name() if turno.profesional else 'Sin asignar',
+            } for turno in turnos]
+
+            return Response({'tipo': tipo, 'count': len(items), 'items': items})
+
+        # El resto de las alertas son financieras: solo Admin/Manager
+        if not can_view_financials:
+            return Response(
+                {'detail': 'No tiene permisos para ver el detalle de esta alerta'},
+                status=403
+            )
+
+        if tipo == 'stock_bajo':
+            productos = Producto.objects.filter(
+                sucursal=sucursal,
+                activo=True,
+                stock_actual__lte=F('stock_minimo')
+            ).select_related('categoria').order_by('stock_actual', 'nombre')
+
+            items = [{
+                'id': producto.id,
+                'nombre': producto.nombre,
+                'sku': producto.sku,
+                'categoria': producto.categoria.nombre if producto.categoria else None,
+                'stock_actual': float(producto.stock_actual),
+                'stock_minimo': float(producto.stock_minimo),
+                'unidad_medida': producto.unidad_medida,
+            } for producto in productos]
+
+            return Response({'tipo': tipo, 'count': len(items), 'items': items})
+
+        if tipo == 'pagos_pendientes':
+            turnos = Turno.objects.filter(
+                sucursal=sucursal,
+                estado='COMPLETADO',
+                estado_pago='PENDIENTE'
+            ).select_related(
+                'cliente', 'servicio', 'profesional'
+            ).order_by('-fecha_hora_inicio')
+
+            items = [{
+                'id': turno.id,
+                'fecha': timezone.localtime(turno.fecha_hora_inicio).strftime('%d/%m/%Y %H:%M'),
+                'cliente': turno.cliente.nombre_completo,
+                'telefono': turno.cliente.telefono,
+                'servicio': turno.servicio.nombre if turno.servicio else 'Sin servicio',
+                'profesional': turno.profesional.get_full_name() if turno.profesional else 'Sin asignar',
+                'monto_total': float(turno.monto_total or 0),
+            } for turno in turnos]
+
+            return Response({'tipo': tipo, 'count': len(items), 'items': items})
+
+        if tipo == 'clientes_riesgo':
+            hace_60_dias = today - timedelta(days=60)
+            # "ultima_visita_completada" y no "ultima_visita": el modelo Cliente
+            # ya tiene un campo con ese nombre y la anotación no puede pisarlo
+            clientes = Cliente.objects.filter(
+                centro_estetica=sucursal.centro_estetica
+            ).annotate(
+                visitas_recientes=Count('turnos', filter=Q(
+                    turnos__sucursal=sucursal,
+                    turnos__estado='COMPLETADO',
+                    turnos__fecha_hora_inicio__date__gte=hace_60_dias
+                )),
+                ultima_visita_completada=Max('turnos__fecha_hora_inicio', filter=Q(
+                    turnos__sucursal=sucursal,
+                    turnos__estado='COMPLETADO'
+                ))
+            ).filter(visitas_recientes=0).order_by(
+                F('ultima_visita_completada').desc(nulls_last=True)
+            )
+
+            total = clientes.count()
+            items = []
+            for cliente in clientes[:self.MAX_CLIENTES_RIESGO]:
+                ultima_visita = cliente.ultima_visita_completada
+                items.append({
+                    'id': cliente.id,
+                    'nombre_completo': cliente.nombre_completo,
+                    'telefono': cliente.telefono,
+                    'ultima_visita': timezone.localtime(ultima_visita).strftime('%d/%m/%Y') if ultima_visita else None,
+                    'dias_sin_visita': (today - timezone.localtime(ultima_visita).date()).days if ultima_visita else None,
+                })
+
+            return Response({'tipo': tipo, 'count': total, 'items': items})
+
+        return Response({'detail': f'Tipo de alerta desconocido: {tipo}'}, status=404)
