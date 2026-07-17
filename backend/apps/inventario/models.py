@@ -184,6 +184,36 @@ class Producto(models.Model):
         help_text="Precio de venta durante la oferta (opcional)"
     )
 
+    # Recompra predictiva (app mobile cliente)
+    # Estos datos alimentan el motor de recompra: fecha_push = fecha_compra + duracion_estimada_dias - 7
+    duracion_estimada_dias = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Días estimados que dura una unidad con uso normal (para recompra predictiva)"
+    )
+    pao_meses = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Period After Opening: meses de validez una vez abierto"
+    )
+    contenido_ml = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Contenido neto en ml/gr (opcional, para estimar duración)"
+    )
+    frecuencia_uso = models.CharField(
+        max_length=15,
+        blank=True,
+        choices=[
+            ('DIARIO', 'Diario'),
+            ('SEMANAL', 'Semanal'),
+            ('OCASIONAL', 'Ocasional'),
+        ],
+        help_text="Frecuencia de uso típica del producto"
+    )
+
     # Configuración
     activo = models.BooleanField(default=True)
     foto = models.ImageField(upload_to='productos/', null=True, blank=True)

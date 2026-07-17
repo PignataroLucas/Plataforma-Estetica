@@ -30,6 +30,12 @@ urlpatterns = [
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
+    # API pública sin autenticación (info centro, catálogo público)
+    path('api/public/', include('apps.public_api.urls')),
+
+    # API app mobile de clientes (auth separada)
+    path('api/client/', include('apps.client_api.urls')),
+
     # App URLs (to be created)
     path('api/clientes/', include('apps.clientes.urls')),
     path('api/turnos/', include('apps.turnos.urls')),

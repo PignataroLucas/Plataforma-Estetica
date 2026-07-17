@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'apps.mi_caja',  # Sistema de punto de venta para empleados
     'apps.notificaciones',
     'apps.analytics',
+    'apps.client_api',  # API para la app mobile de clientes
+    'apps.public_api',  # API pública sin autenticación (info centro, catálogo)
 ]
 
 MIDDLEWARE = [
@@ -128,7 +130,8 @@ CORS_ALLOW_CREDENTIALS = True
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Auth de staff endurecida: rechaza tokens de la app mobile (token_use='cliente')
+        'apps.empleados.authentication.StaffJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -140,6 +143,11 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'cliente_auth': '20/min',
+        'cliente_registro': '10/hour',
+        'public_api': '100/hour',
+    },
 }
 
 # JWT Configuration
