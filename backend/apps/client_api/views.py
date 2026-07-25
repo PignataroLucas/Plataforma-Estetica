@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -14,6 +17,17 @@ from apps.clientes.models import (
     UsuarioCliente,
     VinculacionCliente,
 )
+from apps.servicios.models import Servicio
+from apps.turnos.models import Turno
+from apps.turnos.services import (
+    DIAS_MAXIMOS_A_FUTURO,
+    ESTADOS_QUE_OCUPAN,
+    HORAS_MINIMAS_CANCELACION,
+    TurnoNoDisponible,
+    puede_cancelar,
+    reservar_turno,
+    slots_agregados,
+)
 
 from .authentication import ClienteJWTAuthentication
 from .serializers import (
@@ -24,9 +38,43 @@ from .serializers import (
     PlanAppSerializer,
     PushTokenSerializer,
     RegistroSerializer,
+    ReservaSerializer,
     RutinaAppSerializer,
+    TurnoAppSerializer,
 )
 from .tokens import tokens_para_usuario_cliente
+
+# Cantidad de turnos pasados que devuelve el historial de la app.
+LIMITE_HISTORICO = 30
+
+
+class ClienteScopeMixin:
+    """
+    Base de los endpoints autenticados de la app.
+
+    El scope SIEMPRE sale de ``request.user.vinculaciones``: la ficha ``Cliente``
+    nunca se toma de un id de la URL o del body. Con ``?centro=<id>`` se elige la
+    vinculación de ese centro (cuentas multi-centro); sin el parámetro, la primera.
+    """
+    authentication_classes = [ClienteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_vinculaciones(self, request):
+        vinculaciones = request.user.vinculaciones.select_related('cliente__centro_estetica')
+        centro_id = request.query_params.get('centro')
+        if centro_id:
+            vinculaciones = vinculaciones.filter(cliente__centro_estetica_id=centro_id)
+        return vinculaciones
+
+    def get_vinculacion(self, request):
+        return self.get_vinculaciones(request).first()
+
+    @staticmethod
+    def sin_vinculacion():
+        return Response(
+            {'detail': 'No hay una cuenta vinculada para este centro'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
 
 class RegistroView(APIView):
@@ -135,10 +183,8 @@ class ClienteTokenRefreshView(TokenRefreshView):
     throttle_scope = 'cliente_auth'
 
 
-class PerfilView(APIView):
+class PerfilView(ClienteScopeMixin, APIView):
     """GET/PATCH /api/client/perfil/ — perfil de la cuenta autenticada."""
-    authentication_classes = [ClienteJWTAuthentication]
-    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return UsuarioCliente.objects.prefetch_related(
@@ -157,31 +203,13 @@ class PerfilView(APIView):
         return Response(PerfilSerializer(usuario).data)
 
 
-class MiRutinaView(APIView):
-    """
-    GET /api/client/mi-rutina/ — rutina activa + plan del cliente vinculado.
-
-    Scope de seguridad: solo lee la ficha ``Cliente`` a través de las
-    vinculaciones del usuario autenticado, nunca por un id de la URL. Con
-    ``?centro=<id>`` elige la vinculación de ese centro (para cuentas M2M);
-    sin el parámetro usa la primera.
-    """
-    authentication_classes = [ClienteJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+class MiRutinaView(ClienteScopeMixin, APIView):
+    """GET /api/client/mi-rutina/ — rutina activa + plan del cliente vinculado."""
 
     def get(self, request):
-        vinculaciones = request.user.vinculaciones.select_related('cliente__centro_estetica')
-        centro_id = request.query_params.get('centro')
-        if centro_id:
-            vinc = vinculaciones.filter(cliente__centro_estetica_id=centro_id).first()
-        else:
-            vinc = vinculaciones.first()
-
+        vinc = self.get_vinculacion(request)
         if vinc is None:
-            return Response(
-                {'detail': 'No hay una cuenta vinculada para este centro'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return self.sin_vinculacion()
 
         cliente = vinc.cliente
         rutina = (
@@ -209,10 +237,8 @@ class MiRutinaView(APIView):
         })
 
 
-class PushRegisterView(APIView):
+class PushRegisterView(ClienteScopeMixin, APIView):
     """POST /api/client/push/register/ — guarda el Expo push token."""
-    authentication_classes = [ClienteJWTAuthentication]
-    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = PushTokenSerializer(data=request.data)
@@ -220,3 +246,172 @@ class PushRegisterView(APIView):
         request.user.push_token = serializer.validated_data['push_token']
         request.user.save(update_fields=['push_token'])
         return Response({'status': 'ok'})
+
+
+# ------------------------------------------------------------------ #
+# Turnos — listado, disponibilidad, reserva y cancelación
+# ------------------------------------------------------------------ #
+
+class TurnosView(ClienteScopeMixin, APIView):
+    """
+    GET  /api/client/turnos/ — turnos del cliente (próximos + historial).
+    POST /api/client/turnos/ — reserva un turno.
+    """
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'cliente_reserva'
+
+    def get_throttles(self):
+        # El listado no se limita; el límite aplica solo a la reserva.
+        return super().get_throttles() if self.request.method == 'POST' else []
+
+    def get(self, request):
+        cliente_ids = list(self.get_vinculaciones(request).values_list('cliente_id', flat=True))
+        if not cliente_ids:
+            return self.sin_vinculacion()
+
+        turnos = Turno.objects.filter(cliente_id__in=cliente_ids).select_related(
+            'servicio', 'profesional', 'sucursal__centro_estetica'
+        )
+        ahora = timezone.now()
+
+        vigentes = Q(fecha_hora_inicio__gte=ahora) & Q(estado__in=ESTADOS_QUE_OCUPAN)
+        proximos = turnos.filter(vigentes).order_by('fecha_hora_inicio')
+        historicos = turnos.exclude(vigentes).order_by('-fecha_hora_inicio')[:LIMITE_HISTORICO]
+
+        return Response({
+            'proximos': TurnoAppSerializer(proximos, many=True).data,
+            'historicos': TurnoAppSerializer(historicos, many=True).data,
+        })
+
+    def post(self, request):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        serializer = ReservaSerializer(
+            data=request.data,
+            context={'centro_id': vinc.cliente.centro_estetica_id},
+        )
+        serializer.is_valid(raise_exception=True)
+        datos = serializer.validated_data
+
+        try:
+            turno = reservar_turno(
+                cliente=vinc.cliente,
+                servicio=datos['servicio'],
+                inicio=datos['fecha_hora_inicio'],
+                notas=datos.get('notas', ''),
+                estado=Turno.Estado.PENDIENTE,
+            )
+        except TurnoNoDisponible as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(TurnoAppSerializer(turno).data, status=status.HTTP_201_CREATED)
+
+
+class DisponibilidadView(ClienteScopeMixin, APIView):
+    """
+    GET /api/client/turnos/disponibilidad/?servicio=<id>&fecha=YYYY-MM-DD
+
+    Horarios libres para reservar ese servicio ese día, combinando la agenda de
+    todos los profesionales de la sucursal. El cliente elige la hora; el sistema
+    resuelve con qué profesional (no se expone la agenda individual).
+    """
+
+    def get(self, request):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        fecha_str = request.query_params.get('fecha')
+        servicio_id = request.query_params.get('servicio')
+        if not fecha_str or not servicio_id:
+            return Response(
+                {'detail': 'Se requieren los parámetros "servicio" y "fecha"'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'detail': 'Formato de fecha inválido. Usá YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        hoy = timezone.localdate()
+        if fecha < hoy or (fecha - hoy).days > DIAS_MAXIMOS_A_FUTURO:
+            return Response({'fecha': fecha_str, 'slots': []})
+
+        try:
+            servicio = Servicio.objects.select_related('sucursal').get(
+                pk=servicio_id,
+                activo=True,
+                sucursal__centro_estetica_id=vinc.cliente.centro_estetica_id,
+            )
+        except (Servicio.DoesNotExist, ValueError):
+            return Response(
+                {'detail': 'Ese tratamiento no está disponible en tu centro'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        slots = slots_agregados(servicio, fecha, no_antes_de=timezone.now())
+
+        return Response({
+            'fecha': fecha_str,
+            'servicio': {
+                'id': servicio.id,
+                'nombre': servicio.nombre,
+                'duracion_minutos': servicio.duracion_minutos,
+                # str: mismo formato que los DecimalField de DRF (no float)
+                'precio': str(servicio.precio),
+            },
+            'slots': [
+                {
+                    'inicio': slot['inicio'],
+                    'fin': slot['fin'],
+                    'hora': timezone.localtime(slot['inicio']).strftime('%H:%M'),
+                    'profesional_nombre': (
+                        slot['profesional'].get_full_name().strip() or None
+                    ),
+                }
+                for slot in slots
+            ],
+        })
+
+
+class CancelarTurnoView(ClienteScopeMixin, APIView):
+    """POST /api/client/turnos/<pk>/cancelar/ — cancela un turno propio."""
+
+    def post(self, request, pk):
+        cliente_ids = list(self.get_vinculaciones(request).values_list('cliente_id', flat=True))
+        turno = (
+            Turno.objects
+            .filter(pk=pk, cliente_id__in=cliente_ids)
+            .select_related('servicio', 'profesional', 'sucursal__centro_estetica')
+            .first()
+        )
+        if turno is None:
+            return Response({'detail': 'Turno no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        if turno.estado not in ESTADOS_QUE_OCUPAN:
+            return Response(
+                {'detail': 'Este turno ya no se puede cancelar'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not puede_cancelar(turno):
+            return Response(
+                {
+                    'detail': (
+                        f'Los turnos se cancelan hasta {HORAS_MINIMAS_CANCELACION} horas antes. '
+                        'Comunicate con el centro para reprogramarlo.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        turno.estado = Turno.Estado.CANCELADO
+        turno.save()
+
+        return Response(TurnoAppSerializer(turno).data)

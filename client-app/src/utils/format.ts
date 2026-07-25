@@ -8,12 +8,58 @@ export function formatPrecio(precio: string | number): string {
 
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const DIAS_LARGOS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const MESES_LARGOS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
 
 /** Formatea una fecha ISO a "Vie 1 Ago · 14:30 hs" (hora local del dispositivo). */
 export function formatFechaTurno(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
+  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${formatHora(iso)}`;
+}
+
+/** "14:30 hs" */
+export function formatHora(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
   const hh = d.getHours().toString().padStart(2, '0');
   const mm = d.getMinutes().toString().padStart(2, '0');
-  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${hh}:${mm} hs`;
+  return `${hh}:${mm} hs`;
+}
+
+/** "Martes 28 de julio" */
+export function formatFechaLarga(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${DIAS_LARGOS[d.getDay()]} ${d.getDate()} de ${MESES_LARGOS[d.getMonth()]}`;
+}
+
+/** "28 Jul 2026" — compacto, para el historial. */
+export function formatFechaCorta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/**
+ * Fecha en formato YYYY-MM-DD según la zona del dispositivo.
+ * No usar `toISOString()`: convierte a UTC y en Argentina (-03) adelanta el día
+ * a partir de las 21:00.
+ */
+export function fechaISOLocal(fecha: Date): string {
+  const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
+  const dia = fecha.getDate().toString().padStart(2, '0');
+  return `${fecha.getFullYear()}-${mes}-${dia}`;
+}
+
+/** Etiquetas de un día para el selector de fechas: { diaSemana: 'Mar', numero: '28', mes: 'Jul' } */
+export function etiquetasDeDia(fecha: Date) {
+  return {
+    diaSemana: DIAS[fecha.getDay()],
+    numero: fecha.getDate().toString(),
+    mes: MESES[fecha.getMonth()],
+  };
 }

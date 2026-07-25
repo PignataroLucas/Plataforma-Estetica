@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, ScrollView, View, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
+import { ActivityIndicator, Pressable, ScrollView, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoryGrid } from '@/components/home/CategoryGrid';
@@ -10,6 +11,7 @@ import { AppText } from '@/components/ui/AppText';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { getServicios } from '@/services/public';
 import { getMiRutina } from '@/services/rutina';
+import { getMisTurnos } from '@/services/turnos';
 import { useAuthStore } from '@/stores/auth';
 import { colors, fonts, radius, spacing } from '@/theme/ame';
 import { formatFechaTurno, formatPrecio } from '@/utils/format';
@@ -29,9 +31,16 @@ export default function Inicio() {
     queryFn: () => getMiRutina(),
   });
 
+  const turnosQuery = useQuery({
+    queryKey: ['mis-turnos'],
+    queryFn: () => getMisTurnos(),
+  });
+
   const plan = miRutinaQuery.data?.plan ?? null;
   const rutina = miRutinaQuery.data?.rutina ?? null;
   const servicios = serviciosQuery.data?.results ?? [];
+  // El turno real manda; el próximo turno del plan es el fallback que carga el staff.
+  const proximoTurno = turnosQuery.data?.proximos[0] ?? null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -53,7 +62,15 @@ export default function Inicio() {
         showsVerticalScrollIndicator={false}>
         <SearchBar />
 
-        {plan?.proximo_turno ? (
+        {proximoTurno ? (
+          <Pressable onPress={() => router.push('/turnos')} accessibilityRole="button">
+            <ProximoTurnoCard
+              servicio={proximoTurno.servicio_nombre}
+              fecha={formatFechaTurno(proximoTurno.fecha_hora_inicio)}
+              profesional={proximoTurno.profesional_nombre ?? undefined}
+            />
+          </Pressable>
+        ) : plan?.proximo_turno ? (
           <ProximoTurnoCard
             servicio={plan.tratamiento_sugerido || 'Tu próximo turno'}
             fecha={formatFechaTurno(plan.proximo_turno)}

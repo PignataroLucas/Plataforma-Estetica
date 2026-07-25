@@ -1,4 +1,5 @@
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -16,6 +17,9 @@ from apps.clientes.models import (
 from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica
 from apps.public_api.serializers import ProductoPublicoSerializer
+from apps.servicios.models import Servicio
+from apps.turnos.models import Turno
+from apps.turnos.services import DIAS_MAXIMOS_A_FUTURO, puede_cancelar
 
 from .tokens import CLIENTE_TOKEN_USE
 
@@ -185,3 +189,80 @@ class PlanAppSerializer(serializers.ModelSerializer):
             'id', 'tratamiento_sugerido', 'frecuencia',
             'sesiones_estimadas', 'indicaciones', 'proximo_turno', 'actualizado_en',
         ]
+
+
+# ------------------------------------------------------------------ #
+# Turnos — vista del cliente (curada: nada de comisiones ni auditoría)
+# ------------------------------------------------------------------ #
+
+class TurnoAppSerializer(serializers.ModelSerializer):
+    """
+    Turno tal como lo ve el cliente en la app.
+
+    Deliberadamente NO reusa los serializers del staff: no expone ``creado_por``,
+    la ficha clínica del cliente ni los datos internos del servicio (comisión,
+    máquina alquilada, costos).
+    """
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    estado_pago_display = serializers.CharField(source='get_estado_pago_display', read_only=True)
+    servicio_nombre = serializers.CharField(source='servicio.nombre', read_only=True)
+    duracion_minutos = serializers.IntegerField(source='servicio.duracion_minutos', read_only=True)
+    profesional_nombre = serializers.SerializerMethodField()
+    sucursal_nombre = serializers.CharField(source='sucursal.nombre', read_only=True)
+    sucursal_direccion = serializers.CharField(source='sucursal.direccion', read_only=True)
+    centro_nombre = serializers.CharField(source='sucursal.centro_estetica.nombre', read_only=True)
+    puede_cancelar = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Turno
+        fields = [
+            'id', 'fecha_hora_inicio', 'fecha_hora_fin',
+            'estado', 'estado_display', 'estado_pago', 'estado_pago_display',
+            'servicio', 'servicio_nombre', 'duracion_minutos',
+            'profesional_nombre',
+            'sucursal_nombre', 'sucursal_direccion', 'centro_nombre',
+            'monto_total', 'notas', 'puede_cancelar',
+        ]
+
+    def get_profesional_nombre(self, obj):
+        # Solo el nombre real; nunca el username interno del empleado.
+        if not obj.profesional:
+            return None
+        return obj.profesional.get_full_name().strip() or None
+
+    def get_puede_cancelar(self, obj):
+        return puede_cancelar(obj)
+
+
+class ReservaSerializer(serializers.Serializer):
+    """
+    Entrada de ``POST /api/client/turnos/``.
+
+    El servicio se valida contra el centro donde el usuario está vinculado (via
+    ``context['centro_id']``), así una cuenta no puede reservar en otro centro.
+    """
+    servicio = serializers.IntegerField()
+    fecha_hora_inicio = serializers.DateTimeField()
+    notas = serializers.CharField(
+        required=False, allow_blank=True, max_length=500, default=''
+    )
+
+    def validate_servicio(self, value):
+        try:
+            return Servicio.objects.select_related('sucursal').get(
+                pk=value,
+                activo=True,
+                sucursal__centro_estetica_id=self.context['centro_id'],
+            )
+        except Servicio.DoesNotExist:
+            raise serializers.ValidationError('Ese tratamiento no está disponible en tu centro')
+
+    def validate_fecha_hora_inicio(self, value):
+        ahora = timezone.now()
+        if value <= ahora:
+            raise serializers.ValidationError('Elegí un horario futuro')
+        if (value - ahora).days > DIAS_MAXIMOS_A_FUTURO:
+            raise serializers.ValidationError(
+                f'Solo se puede reservar hasta {DIAS_MAXIMOS_A_FUTURO} días a futuro'
+            )
+        return value

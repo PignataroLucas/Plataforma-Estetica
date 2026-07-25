@@ -144,6 +144,68 @@ export interface MiRutina {
   plan: PlanApp | null;
 }
 
+/* ------------------------------------------------------------------ *
+ * Turnos — listado, disponibilidad y reserva
+ * ------------------------------------------------------------------ */
+
+export type EstadoTurno = 'PENDIENTE' | 'CONFIRMADO' | 'COMPLETADO' | 'CANCELADO' | 'NO_SHOW';
+export type EstadoPagoTurno = 'PENDIENTE' | 'CON_SENA' | 'PAGADO';
+
+/** Turno como lo devuelve client_api (serializer curado, sin datos internos). */
+export interface TurnoApp {
+  id: number;
+  fecha_hora_inicio: string;
+  fecha_hora_fin: string;
+  estado: EstadoTurno;
+  estado_display: string;
+  estado_pago: EstadoPagoTurno;
+  estado_pago_display: string;
+  servicio: number;
+  servicio_nombre: string;
+  duracion_minutos: number;
+  profesional_nombre: string | null;
+  sucursal_nombre: string;
+  sucursal_direccion: string;
+  centro_nombre: string;
+  monto_total: string;
+  notas: string;
+  /** El backend decide si está a tiempo de cancelarlo (24 hs de antelación). */
+  puede_cancelar: boolean;
+}
+
+/** Respuesta de GET /api/client/turnos/. */
+export interface MisTurnos {
+  proximos: TurnoApp[];
+  historicos: TurnoApp[];
+}
+
+/** Un horario libre; `inicio` es el ISO que se manda tal cual al reservar. */
+export interface SlotDisponible {
+  inicio: string;
+  fin: string;
+  hora: string;
+  profesional_nombre: string | null;
+}
+
+/** Respuesta de GET /api/client/turnos/disponibilidad/. */
+export interface Disponibilidad {
+  fecha: string;
+  servicio?: {
+    id: number;
+    nombre: string;
+    duracion_minutos: number;
+    precio: string;
+  };
+  slots: SlotDisponible[];
+}
+
+/** Cuerpo de POST /api/client/turnos/. */
+export interface ReservaPayload {
+  servicio: number;
+  fecha_hora_inicio: string;
+  notas?: string;
+}
+
 /** Cuerpo de POST /api/client/auth/registro/. */
 export interface RegistroPayload {
   email: string;

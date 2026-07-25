@@ -1,12 +1,15 @@
 from django.urls import path
 
 from .views import (
+    CancelarTurnoView,
     ClienteTokenRefreshView,
+    DisponibilidadView,
     LoginView,
     MiRutinaView,
     PerfilView,
     PushRegisterView,
     RegistroView,
+    TurnosView,
 )
 
 urlpatterns = [
@@ -15,5 +18,8 @@ urlpatterns = [
     path('auth/refresh/', ClienteTokenRefreshView.as_view(), name='client-refresh'),
     path('perfil/', PerfilView.as_view(), name='client-perfil'),
     path('mi-rutina/', MiRutinaView.as_view(), name='client-mi-rutina'),
+    path('turnos/', TurnosView.as_view(), name='client-turnos'),
+    path('turnos/disponibilidad/', DisponibilidadView.as_view(), name='client-disponibilidad'),
+    path('turnos/<int:pk>/cancelar/', CancelarTurnoView.as_view(), name='client-cancelar-turno'),
     path('push/register/', PushRegisterView.as_view(), name='client-push-register'),
 ]

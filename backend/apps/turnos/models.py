@@ -89,7 +89,9 @@ class Turno(models.Model):
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='turnos_creados'
+        blank=True,
+        related_name='turnos_creados',
+        help_text="Empleado que cargó el turno. Vacío si lo reservó el cliente desde la app"
     )
 
     class Meta:

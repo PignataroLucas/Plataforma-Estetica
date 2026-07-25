@@ -95,10 +95,14 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         - Turnos ya agendados
         - Duración del servicio
         """
-        from datetime import datetime, timedelta, time
-        from django.utils import timezone
+        from datetime import datetime
         from apps.servicios.models import Servicio
-        from apps.turnos.models import Turno
+        from apps.turnos.services import (
+            calcular_slots,
+            horario_laboral,
+            nombre_dia,
+            trabaja_el_dia,
+        )
 
         fecha_str = request.query_params.get('fecha')
         servicio_id = request.query_params.get('servicio_id')
@@ -127,67 +131,25 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
         profesional = self.get_object()
 
-        if not profesional.horario_inicio or not profesional.horario_fin:
-            horario_inicio = time(8, 0)
-            horario_fin = time(22, 0)
-        else:
-            horario_inicio = profesional.horario_inicio
-            horario_fin = profesional.horario_fin
-
-        dias_semana = {
-            0: 'lunes', 1: 'martes', 2: 'miercoles', 3: 'jueves',
-            4: 'viernes', 5: 'sabado', 6: 'domingo'
-        }
-        dia_semana = dias_semana[fecha.weekday()]
-
-        if profesional.dias_laborales and dia_semana not in profesional.dias_laborales:
+        if not trabaja_el_dia(profesional, fecha):
             return Response({
                 'disponible': False,
-                'mensaje': f'El profesional no trabaja los {dia_semana}s',
+                'mensaje': f'El profesional no trabaja los {nombre_dia(fecha)}s',
                 'slots': []
             })
 
-        turnos_existentes = Turno.objects.filter(
-            profesional=profesional,
-            fecha_hora_inicio__date=fecha,
-            estado__in=['PENDIENTE', 'CONFIRMADO']
-        ).order_by('fecha_hora_inicio')
+        horario_inicio, horario_fin = horario_laboral(profesional)
 
-        duracion_servicio = servicio.duracion_minutos
-        intervalo = profesional.intervalo_minutos
-
-        slots_disponibles = []
-
-        hora_actual_naive = datetime.combine(fecha, horario_inicio)
-        hora_fin_naive = datetime.combine(fecha, horario_fin)
-
-        hora_actual = timezone.make_aware(hora_actual_naive)
-        hora_fin = timezone.make_aware(hora_fin_naive)
-
-        while hora_actual + timedelta(minutes=duracion_servicio) <= hora_fin:
-            slot_fin = hora_actual + timedelta(minutes=duracion_servicio)
-
-            tiene_conflicto = False
-            turno_conflictivo = None
-            for turno in turnos_existentes:
-                turno_inicio = turno.fecha_hora_inicio
-                turno_fin = turno.fecha_hora_fin
-
-                if (hora_actual < turno_fin and slot_fin > turno_inicio):
-                    tiene_conflicto = True
-                    turno_conflictivo = turno
-                    break
-
-            if not tiene_conflicto:
-                slots_disponibles.append({
-                    'hora': hora_actual.strftime('%H:%M'),
-                    'hora_fin': slot_fin.strftime('%H:%M'),
-                    'disponible': True
-                })
-                hora_actual += timedelta(minutes=intervalo)
-            else:
-                fin_turno_local = turno_conflictivo.fecha_hora_fin.astimezone(hora_actual.tzinfo)
-                hora_actual = fin_turno_local
+        # El cálculo vive en apps.turnos.services: misma lógica que usa la app
+        # del cliente para reservar (una sola fuente de verdad).
+        slots_disponibles = [
+            {
+                'hora': slot['inicio'].strftime('%H:%M'),
+                'hora_fin': slot['fin'].strftime('%H:%M'),
+                'disponible': True,
+            }
+            for slot in calcular_slots(profesional, servicio, fecha)
+        ]
 
         return Response({
             'disponible': True,
@@ -199,7 +161,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             'servicio': {
                 'id': servicio.id,
                 'nombre': servicio.nombre,
-                'duracion_minutos': duracion_servicio
+                'duracion_minutos': servicio.duracion_minutos
             },
             'horario_laboral': {
                 'inicio': horario_inicio.strftime('%H:%M'),

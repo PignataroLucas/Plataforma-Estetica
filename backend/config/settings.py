@@ -146,6 +146,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'cliente_auth': '20/min',
         'cliente_registro': '10/hour',
+        'cliente_reserva': '20/hour',
         'public_api': '100/hour',
     },
 }
