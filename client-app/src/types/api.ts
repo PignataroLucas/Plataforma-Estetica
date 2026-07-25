@@ -58,3 +58,54 @@ export interface ProductoPublico {
   pao_meses: number | null;
   frecuencia_uso: string;
 }
+
+/* ------------------------------------------------------------------ *
+ * client_api — cuenta de la app (UsuarioCliente) y autenticación
+ * ------------------------------------------------------------------ */
+
+/** Vínculo entre la cuenta de app y una ficha de cliente de un centro. */
+export interface VinculacionResumen {
+  id: number;
+  cliente_id: number;
+  cliente_nombre: string;
+  centro_id: number;
+  centro_nombre: string;
+  metodo_vinculacion: string;
+  vinculado_en: string;
+}
+
+/** Perfil devuelto por GET /api/client/perfil/ (y anidado en el login/registro). */
+export interface Perfil {
+  id: number;
+  email: string;
+  nombre: string;
+  apellido: string;
+  email_verificado: boolean;
+  push_token: string | null;
+  creado_en: string;
+  vinculaciones: VinculacionResumen[];
+}
+
+/** Par de tokens JWT de cliente (claim token_use='cliente'). */
+export interface TokenPair {
+  access: string;
+  refresh: string;
+}
+
+/** Respuesta de login y registro: tokens + perfil de la cuenta. */
+export interface AuthResponse extends TokenPair {
+  usuario: Perfil;
+}
+
+/** Cuerpo de POST /api/client/auth/registro/. */
+export interface RegistroPayload {
+  email: string;
+  password: string;
+  /** Flujo con código de invitación (vincula a una ficha existente). */
+  codigo?: string;
+  /** Auto-registro (sin código): nombre/apellido/centro requeridos. */
+  nombre?: string;
+  apellido?: string;
+  telefono?: string;
+  centro?: number;
+}

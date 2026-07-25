@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useAuthStore } from '@/stores/auth';
 import { colors } from '@/theme/ame';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
+  const [fontsLoaded] = useFonts({
     CormorantGaramond_400Regular,
     CormorantGaramond_500Medium,
     CormorantGaramond_600SemiBold,
@@ -31,11 +32,22 @@ export default function RootLayout() {
     Inter_500Medium,
   });
 
-  useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
-  }, [loaded]);
+  const status = useAuthStore((s) => s.status);
+  const hydrate = useAuthStore((s) => s.hydrate);
 
-  if (!loaded) return null;
+  // Al arrancar, cargamos la sesión persistida y validamos el token.
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  const ready = fontsLoaded && status !== 'loading';
+
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync();
+  }, [ready]);
+
+  // Mantenemos el splash hasta tener fuentes + estado de sesión resuelto.
+  if (!ready) return null;
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -43,13 +55,29 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <View style={styles.page}>
           <View style={styles.shell}>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-            </Stack>
+            <RootNavigator authenticated={status === 'authenticated'} />
           </View>
         </View>
       </SafeAreaProvider>
     </QueryClientProvider>
+  );
+}
+
+/**
+ * Gate de navegación. `Stack.Protected` deja accesible solo el grupo cuyo guard
+ * es true; al cambiar de sesión, expo-router redirige automáticamente al grupo
+ * disponible (tabs si hay sesión, bienvenida/auth si no).
+ */
+function RootNavigator({ authenticated }: { authenticated: boolean }) {
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={authenticated}>
+        <Stack.Screen name="(tabs)" />
+      </Stack.Protected>
+      <Stack.Protected guard={!authenticated}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+    </Stack>
   );
 }
 
@@ -67,4 +95,3 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ivory,
   },
 });
-

@@ -8,10 +8,15 @@ import { TreatmentRow } from '@/components/home/TreatmentRow';
 import { AppText } from '@/components/ui/AppText';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { getServicios } from '@/services/public';
+import { useAuthStore } from '@/stores/auth';
 import { colors, fonts, radius, spacing } from '@/theme/ame';
 import { formatPrecio } from '@/utils/format';
 
 export default function Inicio() {
+  const usuario = useAuthStore((s) => s.usuario);
+  const nombre = usuario?.nombre?.trim() || 'Bienvenida';
+  const inicial = (usuario?.nombre || usuario?.email || '?').trim().charAt(0).toUpperCase();
+
   const serviciosQuery = useQuery({
     queryKey: ['servicios'],
     queryFn: () => getServicios(),
@@ -23,13 +28,13 @@ export default function Inicio() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View>
-          <AppText variant="label">Bienvenida</AppText>
+          <AppText variant="label">Hola de nuevo</AppText>
           <AppText variant="title" style={styles.name}>
-            Valentina
+            {nombre}
           </AppText>
         </View>
         <View style={styles.avatar}>
-          <AppText style={styles.avatarTxt}>V</AppText>
+          <AppText style={styles.avatarTxt}>{inicial}</AppText>
         </View>
       </View>
 

@@ -14,6 +14,8 @@ export const colors = {
   card: '#FCFAF6', // tarjetas claras
   onDark: '#EFE7DC', // texto sobre superficies oscuras (card negra / botones)
   onDarkMuted: 'rgba(239,231,220,0.6)',
+  danger: '#A9524C', // brick rosado desaturado — errores, sin romper la paleta
+  focus: 'rgba(26,23,18,0.28)', // borde de input enfocado
 } as const;
 
 export const spacing = {
