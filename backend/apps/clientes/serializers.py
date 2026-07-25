@@ -272,6 +272,31 @@ class NotaClienteSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'autor', 'creado_en', 'actualizado_en']
 
+
+class ClienteDuplicadoSerializer(serializers.ModelSerializer):
+    """Resumen de una ficha para la vista de duplicados: datos + señales para decidir cuál conservar."""
+    nombre_completo = serializers.CharField(read_only=True)
+    tiene_cuenta_app = serializers.SerializerMethodField()
+    historial_count = serializers.SerializerMethodField()
+    turnos_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Cliente
+        fields = [
+            'id', 'nombre_completo', 'nombre', 'apellido',
+            'telefono', 'email', 'creado_en', 'activo',
+            'tiene_cuenta_app', 'historial_count', 'turnos_count',
+        ]
+
+    def get_tiene_cuenta_app(self, obj):
+        return obj.vinculaciones.exists()
+
+    def get_historial_count(self, obj):
+        return obj.historial.count()
+
+    def get_turnos_count(self, obj):
+        return obj.turnos.count()
+
     def get_autor_nombre(self, obj):
         """
         Obtener el nombre del autor, usando username como fallback

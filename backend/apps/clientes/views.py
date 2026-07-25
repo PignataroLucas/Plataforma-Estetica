@@ -1,14 +1,19 @@
-from rest_framework import viewsets, filters
+from django.db import transaction
+from rest_framework import viewsets, filters, status
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, NotaCliente
 from .serializers import (
     ClienteSerializer,
+    ClienteDuplicadoSerializer,
     HistorialClienteSerializer,
     PlanTratamientoSerializer,
     RutinaCuidadoSerializer,
     NotaClienteSerializer
 )
+from .services import detectar_duplicados, fusionar_clientes
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -64,6 +69,83 @@ class ClienteViewSet(viewsets.ModelViewSet):
             serializer.save(centro_estetica=self.request.user.centro_estetica)
         else:
             serializer.save()
+
+    @action(detail=False, methods=['get'])
+    def duplicados(self, request):
+        """
+        GET /api/clientes/clientes/duplicados/
+        Grupos de fichas potencialmente duplicadas del centro del usuario.
+        """
+        centro = getattr(request.user, 'centro_estetica', None)
+        if centro is None:
+            return Response({'grupos': []})
+
+        grupos = detectar_duplicados(centro)
+        data = [
+            {
+                'clave': g['clave'],
+                'valor': g['valor'],
+                'confianza': g['confianza'],
+                'clientes': ClienteDuplicadoSerializer(g['clientes'], many=True).data,
+            }
+            for g in grupos
+        ]
+        return Response({'grupos': data})
+
+    @action(detail=False, methods=['post'])
+    def fusionar(self, request):
+        """
+        POST /api/clientes/clientes/fusionar/  {principal, duplicados:[ids]}
+        Fusiona una o más fichas duplicadas dentro de la principal. Solo opera
+        sobre fichas del centro del usuario (aislamiento por get_queryset).
+        """
+        principal_id = request.data.get('principal')
+        duplicado_ids = request.data.get('duplicados') or request.data.get('duplicado')
+        if isinstance(duplicado_ids, int):
+            duplicado_ids = [duplicado_ids]
+        if not principal_id or not duplicado_ids:
+            return Response(
+                {'detail': 'Requiere "principal" y "duplicados".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = self.get_queryset()
+        try:
+            principal = qs.get(pk=principal_id)
+        except Cliente.DoesNotExist:
+            return Response(
+                {'detail': 'Ficha principal no encontrada.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Resolver y validar TODOS los duplicados antes de tocar nada (todo o nada)
+        duplicados = []
+        for did in duplicado_ids:
+            if str(did) == str(principal.pk):
+                continue
+            try:
+                duplicados.append(qs.get(pk=did))
+            except (Cliente.DoesNotExist, ValueError, TypeError):
+                return Response(
+                    {'detail': f'Ficha {did} no encontrada.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        if not duplicados:
+            return Response(
+                {'detail': 'No hay fichas duplicadas válidas para fusionar.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                for duplicado in duplicados:
+                    fusionar_clientes(principal, duplicado)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        principal.refresh_from_db()
+        return Response(ClienteSerializer(principal).data)
 
 
 class HistorialClienteViewSet(viewsets.ModelViewSet):
