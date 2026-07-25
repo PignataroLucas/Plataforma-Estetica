@@ -353,6 +353,58 @@ class RutinaCuidado(models.Model):
         return f"{self.cliente.nombre_completo} - Rutina {self.creado_en.strftime('%d/%m/%Y')}"
 
 
+class RutinaItem(models.Model):
+    """
+    Paso estructurado de una RutinaCuidado (modelo híbrido).
+
+    ``paso`` es texto libre; ``producto`` linkea opcionalmente al catálogo (para
+    mostrar precio/foto en la app y, a futuro, comprar/recompra). ``producto_texto``
+    permite nombrar un producto que todavía no está en el catálogo.
+
+    Las rutinas viejas sin items siguen funcionando por los TextField legacy de
+    ``RutinaCuidado``; la app usa ``items`` si existen y cae al texto si no.
+    """
+    class Momento(models.TextChoices):
+        DIURNA = 'DIURNA', 'Diurna'
+        NOCTURNA = 'NOCTURNA', 'Nocturna'
+
+    rutina = models.ForeignKey(
+        RutinaCuidado,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    momento = models.CharField(max_length=10, choices=Momento.choices)
+    orden = models.PositiveIntegerField(default=0)
+    paso = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Descripción del paso (ej: Limpieza, Serum, Protector solar)",
+    )
+    producto = models.ForeignKey(
+        'inventario.Producto',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rutina_items',
+        help_text="Producto del catálogo (opcional). Habilita precio/foto/compra.",
+    )
+    producto_texto = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Nombre del producto si no está en el catálogo",
+    )
+    nota = models.CharField(max_length=300, blank=True, help_text="Indicación adicional")
+
+    class Meta:
+        verbose_name = 'Ítem de rutina'
+        verbose_name_plural = 'Ítems de rutina'
+        ordering = ['momento', 'orden', 'id']
+
+    def __str__(self):
+        etiqueta = self.paso or self.producto_texto or (self.producto.nombre if self.producto else '')
+        return f"{self.get_momento_display()} · {etiqueta}"
+
+
 class NotaCliente(models.Model):
     """
     G) Notas del paciente - Registro de notas

@@ -6,10 +6,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.clientes.models import (
     CodigoInvitacion,
+    PlanTratamiento,
+    RutinaCuidado,
+    RutinaItem,
     UsuarioCliente,
     VinculacionCliente,
 )
 from apps.empleados.models import CentroEstetica
+from apps.public_api.serializers import ProductoPublicoSerializer
 
 from .tokens import CLIENTE_TOKEN_USE
 
@@ -126,3 +130,41 @@ class ClienteTokenRefreshSerializer(TokenRefreshSerializer):
         if refresh.get('token_use') != CLIENTE_TOKEN_USE:
             raise InvalidToken('El token no corresponde a un usuario de la app')
         return super().validate(attrs)
+
+
+# ------------------------------------------------------------------ #
+# "Mi rutina" — data de la ficha, curada para el cliente
+# ------------------------------------------------------------------ #
+
+class RutinaItemAppSerializer(serializers.ModelSerializer):
+    """Paso de rutina para la app; incluye el producto del catálogo si está linkeado."""
+    producto = ProductoPublicoSerializer(read_only=True)
+
+    class Meta:
+        model = RutinaItem
+        fields = ['id', 'momento', 'orden', 'paso', 'producto', 'producto_texto', 'nota']
+
+
+class RutinaAppSerializer(serializers.ModelSerializer):
+    """Rutina de cuidado curada: items estructurados + fallback de texto legacy."""
+    items = RutinaItemAppSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = RutinaCuidado
+        fields = [
+            'id', 'activa', 'actualizado_en',
+            'rutina_diurna_pasos', 'rutina_diurna_productos',
+            'rutina_nocturna_pasos', 'rutina_nocturna_productos',
+            'items',
+        ]
+
+
+class PlanAppSerializer(serializers.ModelSerializer):
+    """Plan de tratamiento curado para el cliente (sin campos internos de auditoría)."""
+
+    class Meta:
+        model = PlanTratamiento
+        fields = [
+            'id', 'tratamiento_sugerido', 'frecuencia',
+            'sesiones_estimadas', 'indicaciones', 'proximo_turno', 'actualizado_en',
+        ]

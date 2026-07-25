@@ -4,13 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoryGrid } from '@/components/home/CategoryGrid';
 import { ProximoTurnoCard } from '@/components/home/ProximoTurnoCard';
+import { RutinaTeaser } from '@/components/home/RutinaTeaser';
 import { TreatmentRow } from '@/components/home/TreatmentRow';
 import { AppText } from '@/components/ui/AppText';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { getServicios } from '@/services/public';
+import { getMiRutina } from '@/services/rutina';
 import { useAuthStore } from '@/stores/auth';
 import { colors, fonts, radius, spacing } from '@/theme/ame';
-import { formatPrecio } from '@/utils/format';
+import { formatFechaTurno, formatPrecio } from '@/utils/format';
 
 export default function Inicio() {
   const usuario = useAuthStore((s) => s.usuario);
@@ -22,6 +24,13 @@ export default function Inicio() {
     queryFn: () => getServicios(),
   });
 
+  const miRutinaQuery = useQuery({
+    queryKey: ['mi-rutina'],
+    queryFn: () => getMiRutina(),
+  });
+
+  const plan = miRutinaQuery.data?.plan ?? null;
+  const rutina = miRutinaQuery.data?.rutina ?? null;
   const servicios = serviciosQuery.data?.results ?? [];
 
   return (
@@ -44,12 +53,14 @@ export default function Inicio() {
         showsVerticalScrollIndicator={false}>
         <SearchBar />
 
-        <ProximoTurnoCard
-          servicio="Limpieza facial profunda"
-          fecha="Mar 22 Abr — 14:30 hs"
-          profesional="Lic. Carolina M."
-          iniciales="LC"
-        />
+        {plan?.proximo_turno ? (
+          <ProximoTurnoCard
+            servicio={plan.tratamiento_sugerido || 'Tu próximo turno'}
+            fecha={formatFechaTurno(plan.proximo_turno)}
+          />
+        ) : null}
+
+        {rutina ? <RutinaTeaser rutina={rutina} /> : null}
 
         <View>
           <AppText variant="section" style={styles.sectionTitle}>

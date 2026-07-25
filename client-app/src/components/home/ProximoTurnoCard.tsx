@@ -6,8 +6,8 @@ import { colors, fonts, radius, spacing } from '@/theme/ame';
 interface Props {
   servicio: string;
   fecha: string;
-  profesional: string;
-  iniciales: string;
+  profesional?: string;
+  iniciales?: string;
 }
 
 export function ProximoTurnoCard({ servicio, fecha, profesional, iniciales }: Props) {
@@ -23,14 +23,16 @@ export function ProximoTurnoCard({ servicio, fecha, profesional, iniciales }: Pr
         {fecha}
       </AppText>
 
-      <View style={styles.proRow}>
-        <View style={styles.proAvatar}>
-          <AppText style={styles.proInitials}>{iniciales}</AppText>
+      {profesional ? (
+        <View style={styles.proRow}>
+          <View style={styles.proAvatar}>
+            <AppText style={styles.proInitials}>{iniciales ?? profesional.charAt(0)}</AppText>
+          </View>
+          <AppText variant="meta" color={colors.onDark}>
+            {profesional}
+          </AppText>
         </View>
-        <AppText variant="meta" color={colors.onDark}>
-          {profesional}
-        </AppText>
-      </View>
+      ) : null}
     </View>
   );
 }

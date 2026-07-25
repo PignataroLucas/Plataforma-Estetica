@@ -7,7 +7,13 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.clientes.models import Cliente, UsuarioCliente, VinculacionCliente
+from apps.clientes.models import (
+    Cliente,
+    PlanTratamiento,
+    RutinaCuidado,
+    UsuarioCliente,
+    VinculacionCliente,
+)
 
 from .authentication import ClienteJWTAuthentication
 from .serializers import (
@@ -15,8 +21,10 @@ from .serializers import (
     LoginSerializer,
     PerfilSerializer,
     PerfilUpdateSerializer,
+    PlanAppSerializer,
     PushTokenSerializer,
     RegistroSerializer,
+    RutinaAppSerializer,
 )
 from .tokens import tokens_para_usuario_cliente
 
@@ -140,6 +148,58 @@ class PerfilView(APIView):
         serializer.save()
         usuario = self.get_queryset().get(pk=request.user.pk)
         return Response(PerfilSerializer(usuario).data)
+
+
+class MiRutinaView(APIView):
+    """
+    GET /api/client/mi-rutina/ — rutina activa + plan del cliente vinculado.
+
+    Scope de seguridad: solo lee la ficha ``Cliente`` a través de las
+    vinculaciones del usuario autenticado, nunca por un id de la URL. Con
+    ``?centro=<id>`` elige la vinculación de ese centro (para cuentas M2M);
+    sin el parámetro usa la primera.
+    """
+    authentication_classes = [ClienteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        vinculaciones = request.user.vinculaciones.select_related('cliente__centro_estetica')
+        centro_id = request.query_params.get('centro')
+        if centro_id:
+            vinc = vinculaciones.filter(cliente__centro_estetica_id=centro_id).first()
+        else:
+            vinc = vinculaciones.first()
+
+        if vinc is None:
+            return Response(
+                {'detail': 'No hay una cuenta vinculada para este centro'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        cliente = vinc.cliente
+        rutina = (
+            RutinaCuidado.objects
+            .filter(cliente=cliente, activa=True)
+            .prefetch_related('items__producto__categoria')
+            .order_by('-creado_en')
+            .first()
+        )
+        plan = (
+            PlanTratamiento.objects
+            .filter(cliente=cliente)
+            .order_by('-creado_en')
+            .first()
+        )
+
+        return Response({
+            'centro': {
+                'id': cliente.centro_estetica_id,
+                'nombre': cliente.centro_estetica.nombre,
+            },
+            'cliente': {'id': cliente.id, 'nombre': cliente.nombre_completo},
+            'rutina': RutinaAppSerializer(rutina).data if rutina else None,
+            'plan': PlanAppSerializer(plan).data if plan else None,
+        })
 
 
 class PushRegisterView(APIView):

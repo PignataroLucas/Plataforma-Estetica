@@ -73,6 +73,7 @@ function RootNavigator({ authenticated }: { authenticated: boolean }) {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={authenticated}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="mi-rutina" options={{ animation: 'slide_from_right' }} />
       </Stack.Protected>
       <Stack.Protected guard={!authenticated}>
         <Stack.Screen name="(auth)" />

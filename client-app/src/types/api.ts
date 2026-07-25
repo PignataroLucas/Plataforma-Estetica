@@ -97,6 +97,53 @@ export interface AuthResponse extends TokenPair {
   usuario: Perfil;
 }
 
+/* ------------------------------------------------------------------ *
+ * "Mi rutina" — rutina de cuidado + plan del cliente vinculado
+ * ------------------------------------------------------------------ */
+
+export type MomentoRutina = 'DIURNA' | 'NOCTURNA';
+
+/** Un paso de la rutina; `producto` viene del catálogo si el staff lo linkeó. */
+export interface RutinaItem {
+  id: number;
+  momento: MomentoRutina;
+  orden: number;
+  paso: string;
+  producto: ProductoPublico | null;
+  producto_texto: string;
+  nota: string;
+}
+
+export interface RutinaApp {
+  id: number;
+  activa: boolean;
+  actualizado_en: string;
+  // Fallback de texto libre para rutinas viejas sin items estructurados
+  rutina_diurna_pasos: string;
+  rutina_diurna_productos: string;
+  rutina_nocturna_pasos: string;
+  rutina_nocturna_productos: string;
+  items: RutinaItem[];
+}
+
+export interface PlanApp {
+  id: number;
+  tratamiento_sugerido: string;
+  frecuencia: string;
+  sesiones_estimadas: number | null;
+  indicaciones: string;
+  proximo_turno: string | null;
+  actualizado_en: string;
+}
+
+/** Respuesta de GET /api/client/mi-rutina/. */
+export interface MiRutina {
+  centro: { id: number; nombre: string };
+  cliente: { id: number; nombre: string };
+  rutina: RutinaApp | null;
+  plan: PlanApp | null;
+}
+
 /** Cuerpo de POST /api/client/auth/registro/. */
 export interface RegistroPayload {
   email: string;
