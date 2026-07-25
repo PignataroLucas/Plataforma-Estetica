@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, NotaCliente
+from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, RutinaItem, NotaCliente
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -166,13 +166,27 @@ class PlanTratamientoSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class RutinaItemStaffSerializer(serializers.ModelSerializer):
+    """Paso estructurado de la rutina, editable por el staff (producto opcional)."""
+    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
+
+    class Meta:
+        model = RutinaItem
+        fields = [
+            'id', 'momento', 'orden', 'paso',
+            'producto', 'producto_nombre', 'producto_texto', 'nota',
+        ]
+        extra_kwargs = {'producto': {'required': False, 'allow_null': True}}
+
+
 class RutinaCuidadoSerializer(serializers.ModelSerializer):
     """
     Serializer para RutinaCuidado (Sección F)
-    Rutina de cuidado recomendada (diurna y nocturna)
+    Rutina de cuidado recomendada (diurna y nocturna), con items estructurados.
     """
     cliente_nombre = serializers.CharField(source='cliente.nombre_completo', read_only=True)
     creado_por_nombre = serializers.SerializerMethodField()
+    items = RutinaItemStaffSerializer(many=True, required=False)
 
     class Meta:
         model = RutinaCuidado
@@ -184,6 +198,7 @@ class RutinaCuidadoSerializer(serializers.ModelSerializer):
             'rutina_diurna_productos',
             'rutina_nocturna_pasos',
             'rutina_nocturna_productos',
+            'items',
             'activa',
             'creado_por',
             'creado_por_nombre',
@@ -201,14 +216,35 @@ class RutinaCuidadoSerializer(serializers.ModelSerializer):
             return full_name.strip() if full_name.strip() else obj.creado_por.username
         return None
 
+    def _sync_items(self, rutina, items_data):
+        """Reemplaza los items de la rutina (replace-all)."""
+        rutina.items.all().delete()
+        RutinaItem.objects.bulk_create([
+            RutinaItem(rutina=rutina, **item) for item in items_data
+        ])
+
     def create(self, validated_data):
-        """
-        Asignar automáticamente el usuario que crea la rutina
-        """
+        """Crea la rutina, sus items y asigna el usuario creador."""
+        items_data = validated_data.pop('items', [])
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
             validated_data['creado_por'] = request.user
-        return super().create(validated_data)
+        rutina = RutinaCuidado.objects.create(**validated_data)
+        self._sync_items(rutina, items_data)
+        return rutina
+
+    def update(self, instance, validated_data):
+        """
+        Actualiza la rutina; solo reemplaza items si vienen en el payload
+        (un PATCH sin 'items' —ej: togglear ``activa``— los preserva).
+        """
+        items_data = validated_data.pop('items', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if items_data is not None:
+            self._sync_items(instance, items_data)
+        return instance
 
 
 class NotaClienteSerializer(serializers.ModelSerializer):

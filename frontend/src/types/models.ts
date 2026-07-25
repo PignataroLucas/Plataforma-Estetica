@@ -155,6 +155,19 @@ export interface PlanTratamiento {
   actualizado_en: string
 }
 
+export type MomentoRutina = 'DIURNA' | 'NOCTURNA'
+
+export interface RutinaItem {
+  id?: number
+  momento: MomentoRutina
+  orden: number
+  paso: string
+  producto?: number | null
+  producto_nombre?: string
+  producto_texto?: string
+  nota?: string
+}
+
 export interface RutinaCuidado {
   id: number
   cliente: number
@@ -163,6 +176,7 @@ export interface RutinaCuidado {
   rutina_diurna_productos?: string
   rutina_nocturna_pasos?: string
   rutina_nocturna_productos?: string
+  items?: RutinaItem[]
   activa: boolean
   creado_por?: number
   creado_por_nombre?: string

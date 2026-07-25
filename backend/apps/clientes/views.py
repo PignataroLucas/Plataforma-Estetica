@@ -155,7 +155,7 @@ class RutinaCuidadoViewSet(viewsets.ModelViewSet):
         if hasattr(user, 'centro_estetica') and user.centro_estetica:
             return RutinaCuidado.objects.filter(
                 cliente__centro_estetica=user.centro_estetica
-            ).select_related('cliente', 'creado_por')
+            ).select_related('cliente', 'creado_por').prefetch_related('items__producto')
         return RutinaCuidado.objects.none()
 
 
