@@ -14,6 +14,7 @@ import {
 } from '@/components/ui'
 import ClientesList from '@/components/clientes/ClientesList'
 import ClienteForm from '@/components/clientes/ClienteForm'
+import DuplicadosModal from '@/components/clientes/DuplicadosModal'
 
 /**
  * ClientesPage - Container Component (Patrón Container/Presenter)
@@ -50,6 +51,9 @@ export default function ClientesPage() {
   // Estado del modal de confirmación de eliminación
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [clienteToDelete, setClienteToDelete] = useState<Cliente | null>(null)
+
+  // Estado del modal de duplicados
+  const [isDuplicadosOpen, setIsDuplicadosOpen] = useState(false)
 
   // Cargar clientes al montar el componente
   useEffect(() => {
@@ -174,18 +178,31 @@ export default function ClientesPage() {
               </div>
             </form>
 
-            {/* Botón Crear */}
-            <Button
-              variant="primary"
-              onClick={handleOpenCreateModal}
-              leftIcon={
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              }
-            >
-              Nuevo Cliente
-            </Button>
+            {/* Acciones */}
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsDuplicadosOpen(true)}
+                leftIcon={
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                }
+              >
+                Duplicados
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleOpenCreateModal}
+                leftIcon={
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                }
+              >
+                Nuevo Cliente
+              </Button>
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -263,6 +280,13 @@ export default function ClientesPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Modal de Duplicados */}
+      <DuplicadosModal
+        isOpen={isDuplicadosOpen}
+        onClose={() => setIsDuplicadosOpen(false)}
+        onMerged={fetchClientes}
+      />
     </div>
   )
 }

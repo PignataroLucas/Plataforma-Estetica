@@ -63,6 +63,13 @@ class RegistroView(APIView):
                     usuario.nombre = cliente.nombre
                     usuario.apellido = cliente.apellido
                     usuario.save(update_fields=['nombre', 'apellido'])
+            elif data.get('_ficha_match') is not None:
+                # El guard detectó una ficha existente (teléfono + email) → vincular
+                VinculacionCliente.objects.create(
+                    usuario_cliente=usuario,
+                    cliente=data['_ficha_match'],
+                    metodo_vinculacion=VinculacionCliente.Metodo.AUTO_MATCH,
+                )
             else:
                 centro = data['_centro']
                 cliente = Cliente.objects.create(

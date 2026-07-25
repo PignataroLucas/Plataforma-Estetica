@@ -560,6 +560,7 @@ class VinculacionCliente(models.Model):
         CODIGO_INVITACION = 'CODIGO_INVITACION', 'Código de invitación'
         INVITACION_STAFF = 'INVITACION_STAFF', 'Invitación manual por staff'
         REGISTRO_NUEVO = 'REGISTRO_NUEVO', 'Registro como cliente nuevo'
+        AUTO_MATCH = 'AUTO_MATCH', 'Match automático al registrarse'
         MERGE_MANUAL = 'MERGE_MANUAL', 'Consolidación manual'
 
     usuario_cliente = models.ForeignKey(

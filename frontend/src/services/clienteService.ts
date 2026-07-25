@@ -1,5 +1,5 @@
 import api from './api'
-import type { Cliente, PlanTratamiento, RutinaCuidado, NotaCliente, PaginatedResponse } from '@/types/models'
+import type { Cliente, PlanTratamiento, RutinaCuidado, NotaCliente, PaginatedResponse, DuplicadoGrupo } from '@/types/models'
 
 /**
  * Cliente Services - API calls for patient tracking system
@@ -29,6 +29,19 @@ export const updateCliente = async (id: number, data: Partial<Cliente>) => {
 
 export const deleteCliente = async (id: number) => {
   await api.delete(`/clientes/clientes/${id}/`)
+}
+
+// ==================== DUPLICADOS ====================
+
+export const getDuplicados = async (): Promise<{ grupos: DuplicadoGrupo[] }> => {
+  const response = await api.get<{ grupos: DuplicadoGrupo[] }>('/clientes/clientes/duplicados/')
+  return response.data
+}
+
+/** Fusiona una o más fichas duplicadas dentro de la principal. */
+export const fusionarClientes = async (principal: number, duplicados: number[]) => {
+  const response = await api.post('/clientes/clientes/fusionar/', { principal, duplicados })
+  return response.data
 }
 
 // ==================== PLANES DE TRATAMIENTO ====================

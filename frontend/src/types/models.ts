@@ -184,6 +184,28 @@ export interface RutinaCuidado {
   actualizado_en: string
 }
 
+// Detector de duplicados de fichas
+export interface DuplicadoCliente {
+  id: number
+  nombre_completo: string
+  nombre: string
+  apellido: string
+  telefono: string
+  email: string
+  creado_en: string
+  activo: boolean
+  tiene_cuenta_app: boolean
+  historial_count: number
+  turnos_count: number
+}
+
+export interface DuplicadoGrupo {
+  clave: 'telefono' | 'email'
+  valor: string
+  confianza: 'ALTA' | 'MEDIA'
+  clientes: DuplicadoCliente[]
+}
+
 export enum TipoNota {
   GENERAL = 'GENERAL',
   RECORDATORIO = 'RECORDATORIO',

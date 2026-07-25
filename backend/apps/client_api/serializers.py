@@ -5,6 +5,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.clientes.models import (
+    Cliente,
     CodigoInvitacion,
     PlanTratamiento,
     RutinaCuidado,
@@ -12,6 +13,7 @@ from apps.clientes.models import (
     UsuarioCliente,
     VinculacionCliente,
 )
+from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica
 from apps.public_api.serializers import ProductoPublicoSerializer
 
@@ -103,6 +105,21 @@ class RegistroSerializer(serializers.Serializer):
                 )
 
             attrs['_centro'] = centro
+
+            # Guard de duplicados: si ya existe una ficha del centro con el MISMO
+            # teléfono normalizado + email, vinculamos a esa ficha en vez de crear
+            # una nueva. Requerimos AMBOS a propósito: con solo el teléfono no
+            # auto-vinculamos (familiares comparten número / evitar que alguien
+            # reclame la ficha de otro) — ese caso lo levanta el detector del CRM.
+            tel_norm = normalizar_telefono(attrs.get('telefono', ''))
+            if tel_norm and attrs.get('email'):
+                ficha = Cliente.objects.filter(
+                    centro_estetica=centro,
+                    telefono_normalizado=tel_norm,
+                    email__iexact=attrs['email'],
+                ).first()
+                if ficha is not None:
+                    attrs['_ficha_match'] = ficha
 
         return attrs
 
