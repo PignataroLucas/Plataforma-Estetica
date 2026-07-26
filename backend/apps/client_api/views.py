@@ -24,6 +24,8 @@ from apps.turnos.services import (
     ESTADOS_QUE_OCUPAN,
     HORAS_MINIMAS_CANCELACION,
     TurnoNoDisponible,
+    motivo_fecha_no_reservable,
+    primera_fecha_reservable,
     puede_cancelar,
     reservar_turno,
     slots_agregados,
@@ -40,6 +42,7 @@ from .serializers import (
     RegistroSerializer,
     ReservaSerializer,
     RutinaAppSerializer,
+    ServicioReservableSerializer,
     TurnoAppSerializer,
 )
 from .tokens import tokens_para_usuario_cliente
@@ -355,6 +358,12 @@ class DisponibilidadView(ClienteScopeMixin, APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Política de reserva de la app (día permitido, anticipación mínima).
+        # Se responde 200 con el motivo para que el calendario lo pueda explicar.
+        motivo = motivo_fecha_no_reservable(servicio, fecha)
+        if motivo:
+            return Response({'fecha': fecha_str, 'slots': [], 'motivo': motivo})
+
         slots = slots_agregados(servicio, fecha, no_antes_de=timezone.now())
 
         return Response({
@@ -377,6 +386,38 @@ class DisponibilidadView(ClienteScopeMixin, APIView):
                 }
                 for slot in slots
             ],
+        })
+
+
+class ServiciosReservablesView(ClienteScopeMixin, APIView):
+    """
+    GET /api/client/turnos/servicios/ — tratamientos que el cliente puede reservar.
+
+    Es un subconjunto del catálogo público: solo los que el centro marcó como
+    ``reservable_por_cliente``. El resto se sigue mostrando en el catálogo, pero
+    se coordina directamente con el centro.
+    """
+
+    def get(self, request):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        servicios = (
+            Servicio.objects
+            .filter(
+                sucursal__centro_estetica_id=vinc.cliente.centro_estetica_id,
+                activo=True,
+                reservable_por_cliente=True,
+            )
+            .select_related('categoria', 'sucursal')
+            .order_by('nombre')
+        )
+
+        return Response({
+            # La app arma el calendario desde acá y no repite la regla.
+            'primera_fecha': primera_fecha_reservable(),
+            'results': ServicioReservableSerializer(servicios, many=True).data,
         })
 
 

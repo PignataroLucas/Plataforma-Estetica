@@ -41,6 +41,14 @@ Write-Host 'OK  Emulador listo.' -ForegroundColor Green
 & $adb reverse tcp:8000 tcp:8000 | Out-Null
 Write-Host 'OK  adb reverse tcp:8000 (backend conectado).' -ForegroundColor Green
 
+# 3.5) Limpieza para que abra LIMPIO (esto es lo que evita el "no me abre la app"):
+#      - liberar el puerto 8081 por si quedo un Metro viejo colgado
+#      - cerrar Expo Go para que 'expo start --android' lo reabra desde cero
+Get-NetTCPConnection -LocalPort 8081 -State Listen -ErrorAction SilentlyContinue |
+    ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+& $adb shell am force-stop host.exp.exponent | Out-Null
+Write-Host 'OK  Puerto 8081 libre y Expo Go reiniciado.' -ForegroundColor Green
+
 # 4) Arrancar la app. Esta ventana queda ocupada con Expo/Metro (dejala abierta).
 Set-Location (Join-Path $PSScriptRoot '..')
 Write-Host '->  Iniciando Expo... (deja esta ventana abierta; Ctrl+C para frenar)' -ForegroundColor Cyan

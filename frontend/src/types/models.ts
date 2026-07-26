@@ -310,10 +310,25 @@ export interface Servicio {
   requiere_profesional: boolean
   requiere_equipamiento: string
   activo: boolean
+  /** ¿El cliente puede reservarlo desde la app? El staff siempre puede agendarlo. */
+  reservable_por_cliente: boolean
+  /** Días propios para reservar desde la app (ej: ['viernes','sabado']). Vacío = lunes a jueves. */
+  dias_reserva: string[]
   color: string
   creado_en: string
   actualizado_en: string
 }
+
+/** Días válidos para `Servicio.dias_reserva` (deben coincidir con el backend). */
+export const DIAS_SEMANA = [
+  { valor: 'lunes', label: 'Lun' },
+  { valor: 'martes', label: 'Mar' },
+  { valor: 'miercoles', label: 'Mié' },
+  { valor: 'jueves', label: 'Jue' },
+  { valor: 'viernes', label: 'Vie' },
+  { valor: 'sabado', label: 'Sáb' },
+  { valor: 'domingo', label: 'Dom' },
+] as const
 
 export enum EstadoTurno {
   PENDIENTE = 'PENDIENTE',

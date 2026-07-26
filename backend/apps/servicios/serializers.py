@@ -58,6 +58,8 @@ class ServicioSerializer(serializers.ModelSerializer):
             'requiere_profesional',
             'requiere_equipamiento',
             'activo',
+            'reservable_por_cliente',
+            'dias_reserva',
             'color',
             'color_display',
             'creado_en',

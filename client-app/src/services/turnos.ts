@@ -4,11 +4,25 @@
  * Todo el scope lo resuelve el backend a partir del token: nunca se manda un
  * id de cliente. `centroId` solo elige la vinculación en cuentas multi-centro.
  */
-import type { Disponibilidad, MisTurnos, ReservaPayload, TurnoApp } from '@/types/api';
+import type {
+  Disponibilidad,
+  MisTurnos,
+  ReservaPayload,
+  ServiciosReservables,
+  TurnoApp,
+} from '@/types/api';
 
 import { authGet, authPost } from './http';
 
 const centroQuery = (centroId?: number) => (centroId ? `?centro=${centroId}` : '');
+
+/**
+ * GET /api/client/turnos/servicios/ — tratamientos reservables desde la app.
+ * Es un subconjunto del catálogo: el centro marca cuáles se pueden reservar solo.
+ */
+export function getServiciosReservables(centroId?: number): Promise<ServiciosReservables> {
+  return authGet<ServiciosReservables>(`/client/turnos/servicios/${centroQuery(centroId)}`);
+}
 
 /** GET /api/client/turnos/ — próximos + historial. */
 export function getMisTurnos(centroId?: number): Promise<MisTurnos> {

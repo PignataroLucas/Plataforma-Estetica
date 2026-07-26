@@ -16,10 +16,15 @@ from apps.clientes.models import (
 )
 from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica
-from apps.public_api.serializers import ProductoPublicoSerializer
+from apps.public_api.serializers import ProductoPublicoSerializer, ServicioPublicoSerializer
 from apps.servicios.models import Servicio
 from apps.turnos.models import Turno
-from apps.turnos.services import DIAS_MAXIMOS_A_FUTURO, puede_cancelar
+from apps.turnos.services import (
+    DIAS_MAXIMOS_A_FUTURO,
+    dias_reserva_de,
+    motivo_fecha_no_reservable,
+    puede_cancelar,
+)
 
 from .tokens import CLIENTE_TOKEN_USE
 
@@ -234,6 +239,22 @@ class TurnoAppSerializer(serializers.ModelSerializer):
         return puede_cancelar(obj)
 
 
+class ServicioReservableSerializer(ServicioPublicoSerializer):
+    """
+    Tratamiento que el cliente puede reservar desde la app.
+
+    Agrega ``dias_reserva`` YA RESUELTO (los propios del servicio o los generales)
+    para que la app no tenga que reimplementar la regla al pintar el calendario.
+    """
+    dias_reserva = serializers.SerializerMethodField()
+
+    class Meta(ServicioPublicoSerializer.Meta):
+        fields = ServicioPublicoSerializer.Meta.fields + ['dias_reserva']
+
+    def get_dias_reserva(self, obj):
+        return dias_reserva_de(obj)
+
+
 class ReservaSerializer(serializers.Serializer):
     """
     Entrada de ``POST /api/client/turnos/``.
@@ -266,3 +287,17 @@ class ReservaSerializer(serializers.Serializer):
                 f'Solo se puede reservar hasta {DIAS_MAXIMOS_A_FUTURO} días a futuro'
             )
         return value
+
+    def validate(self, attrs):
+        """
+        Política de reserva desde la app: servicio habilitado, con la anticipación
+        mínima y en un día permitido. Se valida acá y no solo en el calendario,
+        porque el POST puede llegar con cualquier fecha.
+        """
+        servicio = attrs.get('servicio')
+        inicio = attrs.get('fecha_hora_inicio')
+        if servicio and inicio:
+            motivo = motivo_fecha_no_reservable(servicio, timezone.localtime(inicio).date())
+            if motivo:
+                raise serializers.ValidationError({'fecha_hora_inicio': motivo})
+        return attrs

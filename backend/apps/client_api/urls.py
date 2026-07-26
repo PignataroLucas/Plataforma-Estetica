@@ -9,6 +9,7 @@ from .views import (
     PerfilView,
     PushRegisterView,
     RegistroView,
+    ServiciosReservablesView,
     TurnosView,
 )
 
@@ -19,6 +20,7 @@ urlpatterns = [
     path('perfil/', PerfilView.as_view(), name='client-perfil'),
     path('mi-rutina/', MiRutinaView.as_view(), name='client-mi-rutina'),
     path('turnos/', TurnosView.as_view(), name='client-turnos'),
+    path('turnos/servicios/', ServiciosReservablesView.as_view(), name='client-servicios-reservables'),
     path('turnos/disponibilidad/', DisponibilidadView.as_view(), name='client-disponibilidad'),
     path('turnos/<int:pk>/cancelar/', CancelarTurnoView.as_view(), name='client-cancelar-turno'),
     path('push/register/', PushRegisterView.as_view(), name='client-push-register'),

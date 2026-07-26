@@ -27,12 +27,34 @@ HORAS_MINIMAS_CANCELACION = 24
 # Ventana que el cliente puede consultar y reservar desde la app.
 DIAS_MAXIMOS_A_FUTURO = 90
 
+# ---------------------------------------------------------------- #
+# Política de reserva desde la app (NO aplica al staff en el CRM)
+# ---------------------------------------------------------------- #
+
+# Días en los que el cliente puede reservar por defecto. Un servicio puede
+# pisarlos con su propio ``dias_reserva`` (ej: una máquina que solo está los
+# viernes). Cuando haga falta que cada centro elija sus días, esto pasa a ser
+# un campo de CentroEstetica y se lee desde acá.
+DIAS_RESERVA_APP = ['lunes', 'martes', 'miercoles', 'jueves']
+
+# Anticipación mínima en días: 1 = desde mañana (no se reserva el mismo día,
+# porque el centro necesita preparar/pedir el servicio).
+DIAS_MINIMOS_ANTICIPACION = 1
+
 # Estados que ocupan la agenda (los demás liberan el horario).
 ESTADOS_QUE_OCUPAN = [Turno.Estado.PENDIENTE, Turno.Estado.CONFIRMADO]
 
 DIAS_SEMANA = {
     0: 'lunes', 1: 'martes', 2: 'miercoles', 3: 'jueves',
     4: 'viernes', 5: 'sabado', 6: 'domingo',
+}
+
+# Los nombres internos van sin tilde (así están guardados en dias_laborales y
+# dias_reserva); estos son para los mensajes que ve el cliente.
+DIAS_DISPLAY = {
+    'lunes': 'lunes', 'martes': 'martes', 'miercoles': 'miércoles',
+    'jueves': 'jueves', 'viernes': 'viernes', 'sabado': 'sábados',
+    'domingo': 'domingos',
 }
 
 
@@ -42,6 +64,48 @@ class TurnoNoDisponible(Exception):
 
 def nombre_dia(fecha):
     return DIAS_SEMANA[fecha.weekday()]
+
+
+def dias_reserva_de(servicio):
+    """
+    Días en que el cliente puede reservar este servicio desde la app.
+
+    Los días propios del servicio REEMPLAZAN a los generales (no se suman).
+    """
+    return list(servicio.dias_reserva) if servicio.dias_reserva else list(DIAS_RESERVA_APP)
+
+
+def primera_fecha_reservable(hoy=None):
+    """Primer día que el cliente puede elegir en la app (por defecto, mañana)."""
+    hoy = hoy or timezone.localdate()
+    return hoy + timedelta(days=DIAS_MINIMOS_ANTICIPACION)
+
+
+def motivo_fecha_no_reservable(servicio, fecha, *, hoy=None):
+    """
+    Devuelve el motivo por el que el cliente NO puede reservar ese día, o None
+    si la fecha es válida. Se usa igual para filtrar el calendario y para
+    rechazar el POST de reserva, así la app y el backend nunca discrepan.
+    """
+    if not servicio.reservable_por_cliente:
+        return 'Este tratamiento se reserva directamente con el centro'
+
+    if fecha < primera_fecha_reservable(hoy):
+        return 'Los turnos se reservan con al menos un día de anticipación'
+
+    dias = dias_reserva_de(servicio)
+    if nombre_dia(fecha) not in dias:
+        return f'Este tratamiento se reserva los {_listado_de_dias(dias)}'
+
+    return None
+
+
+def _listado_de_dias(dias):
+    """['lunes','martes','jueves'] → 'lunes, martes y jueves' (con tildes)."""
+    nombres = [DIAS_DISPLAY.get(d, d) for d in DIAS_SEMANA.values() if d in dias]
+    if len(nombres) <= 1:
+        return ''.join(nombres)
+    return f"{', '.join(nombres[:-1])} y {nombres[-1]}"
 
 
 def horario_laboral(profesional):

@@ -1,5 +1,5 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react'
-import { Servicio, MaquinaAlquilada, PaginatedResponse } from '@/types/models'
+import { Servicio, MaquinaAlquilada, PaginatedResponse, DIAS_SEMANA } from '@/types/models'
 import { Button, Input } from '@/components/ui'
 import api from '@/services/api'
 
@@ -33,6 +33,8 @@ export default function ServicioForm({
     duracion_minutos: 0,
     precio: 0,
     maquina_alquilada: undefined,
+    reservable_por_cliente: false,
+    dias_reserva: [],
   })
 
   const [errors, setErrors] = useState<Partial<Record<keyof Servicio, string>>>({})
@@ -67,6 +69,8 @@ export default function ServicioForm({
         duracion_minutos: servicio.duracion_minutos,
         precio: servicio.precio,
         maquina_alquilada: servicio.maquina_alquilada,
+        reservable_por_cliente: servicio.reservable_por_cliente ?? false,
+        dias_reserva: servicio.dias_reserva ?? [],
       })
     }
   }, [servicio])
@@ -124,6 +128,35 @@ export default function ServicioForm({
         [name]: undefined,
       }))
     }
+  }
+
+  /**
+   * Handler del check "reservable desde la app".
+   * Al desactivarlo limpiamos los días propios: si mañana se vuelve a activar,
+   * arranca con la regla general en vez de arrastrar una configuración vieja.
+   */
+  const handleReservableChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked
+    setFormData(prev => ({
+      ...prev,
+      reservable_por_cliente: checked,
+      dias_reserva: checked ? prev.dias_reserva ?? [] : [],
+    }))
+  }
+
+  /**
+   * Agrega o saca un día de la lista de días propios del servicio
+   */
+  const toggleDiaReserva = (dia: string) => {
+    setFormData(prev => {
+      const actuales = prev.dias_reserva ?? []
+      return {
+        ...prev,
+        dias_reserva: actuales.includes(dia)
+          ? actuales.filter(d => d !== dia)
+          : [...actuales, dia],
+      }
+    })
   }
 
   /**
@@ -206,6 +239,62 @@ export default function ServicioForm({
             <p className="mt-1 text-xs text-gray-500">
               Selecciona si este servicio requiere una máquina alquilada. El costo se cobrará una vez por día.
             </p>
+          </div>
+
+          {/* Reserva desde la app del cliente */}
+          <div className="border-t border-gray-200 pt-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                name="reservable_por_cliente"
+                checked={formData.reservable_por_cliente ?? false}
+                onChange={handleReservableChange}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm">
+                <span className="font-medium text-gray-900">
+                  El cliente puede reservarlo desde la app
+                </span>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Activalo solo para los servicios que el centro puede preparar de un día
+                  para el otro. Desde el CRM lo podés agendar siempre, sin importar esta opción.
+                </span>
+              </span>
+            </label>
+
+            {formData.reservable_por_cliente && (
+              <div className="mt-3 ml-7">
+                <p className="text-sm font-medium text-gray-700 mb-1">Días para reservar</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Si no elegís ninguno, se usan los días generales de la app (lunes a jueves).
+                  Los días que elijas acá <strong>reemplazan</strong> esa regla.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {DIAS_SEMANA.map(dia => {
+                    const activo = (formData.dias_reserva ?? []).includes(dia.valor)
+                    return (
+                      <button
+                        key={dia.valor}
+                        type="button"
+                        onClick={() => toggleDiaReserva(dia.valor)}
+                        className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                          activo
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {dia.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {(formData.dias_reserva ?? []).length === 0 && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Usando los días generales: lunes a jueves.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Aviso sobre análisis de profit */}

@@ -55,6 +55,36 @@ export function fechaISOLocal(fecha: Date): string {
   return `${fecha.getFullYear()}-${mes}-${dia}`;
 }
 
+/**
+ * Parsea 'YYYY-MM-DD' como fecha LOCAL.
+ * `new Date('2026-07-27')` la interpreta como medianoche UTC, que en Argentina
+ * (-03) cae el día anterior a las 21:00 — y el calendario mostraría un día de menos.
+ */
+export function parseFechaISOLocal(iso: string): Date {
+  const [anio, mes, dia] = iso.split('-').map(Number);
+  return new Date(anio, mes - 1, dia);
+}
+
+/**
+ * Nombre del día como lo maneja el backend ('lunes', 'martes', ...).
+ * OJO con el índice: `getDay()` arranca en domingo, mientras que el `weekday()`
+ * de Python arranca en lunes. Este array está indexado por `getDay()`.
+ */
+const DIAS_BACKEND = [
+  'domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado',
+];
+
+export function nombreDiaBackend(fecha: Date): string {
+  return DIAS_BACKEND[fecha.getDay()];
+}
+
+/** Días habilitados en formato corto y en orden de semana: "Lun · Mar · Mié · Jue". */
+export function formatDiasReserva(dias: string[]): string {
+  return DIAS_BACKEND.map((nombre, i) => (dias.includes(nombre) ? DIAS[i] : null))
+    .filter(Boolean)
+    .join(' · ');
+}
+
 /** Etiquetas de un día para el selector de fechas: { diaSemana: 'Mar', numero: '28', mes: 'Jul' } */
 export function etiquetasDeDia(fecha: Date) {
   return {

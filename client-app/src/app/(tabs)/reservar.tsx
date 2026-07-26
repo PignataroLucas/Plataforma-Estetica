@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -21,14 +21,22 @@ import { Card } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
 import { ApiError } from '@/services/api';
-import { getServicios } from '@/services/public';
-import { getDisponibilidad, reservarTurno } from '@/services/turnos';
+import { getDisponibilidad, getServiciosReservables, reservarTurno } from '@/services/turnos';
 import { colors, radius, spacing } from '@/theme/ame';
-import type { ServicioPublico, SlotDisponible, TurnoApp } from '@/types/api';
-import { fechaISOLocal, formatFechaLarga, formatPrecio } from '@/utils/format';
+import type { ServicioReservable, SlotDisponible, TurnoApp } from '@/types/api';
+import {
+  fechaISOLocal,
+  formatDiasReserva,
+  formatFechaLarga,
+  formatPrecio,
+  nombreDiaBackend,
+  parseFechaISOLocal,
+} from '@/utils/format';
 
-/** Ventana de días que se pueden reservar desde la app. */
+/** Cantidad de días reservables que ofrece el selector. */
 const DIAS_A_MOSTRAR = 30;
+/** Tope de días a recorrer buscando fechas válidas (evita loops si algo viene mal). */
+const VENTANA_MAXIMA = 90;
 
 type Paso = 1 | 2 | 3;
 
@@ -37,31 +45,53 @@ export default function ReservarScreen() {
   const queryClient = useQueryClient();
 
   const [paso, setPaso] = useState<Paso>(1);
-  const [servicio, setServicio] = useState<ServicioPublico | null>(null);
-  const [fecha, setFecha] = useState(() => fechaISOLocal(new Date()));
+  const [servicio, setServicio] = useState<ServicioReservable | null>(null);
+  const [fecha, setFecha] = useState('');
   const [slot, setSlot] = useState<SlotDisponible | null>(null);
   const [notas, setNotas] = useState('');
   const [reservado, setReservado] = useState<TurnoApp | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const dias = useMemo(() => {
-    const hoy = new Date();
-    return Array.from({ length: DIAS_A_MOSTRAR }, (_, i) => {
-      const dia = new Date(hoy);
-      dia.setDate(hoy.getDate() + i);
-      return dia;
-    });
-  }, []);
-
   const serviciosQuery = useQuery({
-    queryKey: ['servicios', centroId],
-    queryFn: () => getServicios(centroId),
+    queryKey: ['servicios-reservables', centroId],
+    queryFn: () => getServiciosReservables(centroId),
   });
+
+  const primeraFecha = serviciosQuery.data?.primera_fecha;
+
+  /**
+   * Días que se pueden elegir: desde la primera fecha reservable que informa el
+   * backend (nunca hoy) y solo los días habilitados para ESE servicio. Se muestran
+   * únicamente los válidos, en vez de pintar días deshabilitados.
+   */
+  const dias = useMemo(() => {
+    if (!servicio || !primeraFecha) return [];
+    const permitidos = new Set(servicio.dias_reserva);
+    const cursor = parseFechaISOLocal(primeraFecha);
+    const validos: Date[] = [];
+
+    for (let i = 0; i < VENTANA_MAXIMA && validos.length < DIAS_A_MOSTRAR; i += 1) {
+      const dia = new Date(cursor);
+      dia.setDate(cursor.getDate() + i);
+      if (permitidos.has(nombreDiaBackend(dia))) validos.push(dia);
+    }
+    return validos;
+  }, [servicio, primeraFecha]);
+
+  // Al cambiar de servicio, la fecha elegida puede no ser válida para el nuevo.
+  useEffect(() => {
+    if (dias.length === 0) return;
+    const disponibles = dias.map(fechaISOLocal);
+    if (!disponibles.includes(fecha)) {
+      setFecha(disponibles[0]);
+      setSlot(null);
+    }
+  }, [dias, fecha]);
 
   const disponibilidad = useQuery({
     queryKey: ['disponibilidad', servicio?.id, fecha],
     queryFn: () => getDisponibilidad(servicio!.id, fecha),
-    enabled: servicio !== null,
+    enabled: servicio !== null && fecha !== '',
   });
 
   const reserva = useMutation({
@@ -86,9 +116,10 @@ export default function ReservarScreen() {
     },
   });
 
-  const elegirServicio = (elegido: ServicioPublico) => {
+  const elegirServicio = (elegido: ServicioReservable) => {
     setServicio(elegido);
     setSlot(null);
+    setFecha('');
     setError(null);
     setPaso(2);
   };
@@ -114,7 +145,7 @@ export default function ReservarScreen() {
     setSlot(null);
     setNotas('');
     setError(null);
-    setFecha(fechaISOLocal(new Date()));
+    setFecha('');
     setPaso(1);
   };
 
@@ -183,7 +214,10 @@ export default function ReservarScreen() {
             <View style={styles.bloques}>
               <ResumenServicio servicio={servicio} />
               <View style={styles.bloque}>
-                <AppText variant="section">Día</AppText>
+                <View style={styles.bloqueHead}>
+                  <AppText variant="section">Día</AppText>
+                  <AppText variant="meta">{formatDiasReserva(servicio.dias_reserva)}</AppText>
+                </View>
                 <DateStrip dias={dias} seleccionada={fecha} onSeleccionar={elegirFecha} />
               </View>
               <View style={styles.bloque}>
@@ -192,6 +226,7 @@ export default function ReservarScreen() {
                   cargando={disponibilidad.isPending || disponibilidad.isFetching}
                   error={disponibilidad.isError}
                   slots={disponibilidad.data?.slots ?? []}
+                  motivo={disponibilidad.data?.motivo}
                   seleccionado={slot?.inicio ?? null}
                   onSeleccionar={setSlot}
                   onReintentar={disponibilidad.refetch}
@@ -276,8 +311,8 @@ function PasoServicios({
 }: {
   cargando: boolean;
   error: boolean;
-  servicios: ServicioPublico[];
-  onElegir: (servicio: ServicioPublico) => void;
+  servicios: ServicioReservable[];
+  onElegir: (servicio: ServicioReservable) => void;
   onReintentar: () => void;
 }) {
   if (cargando) {
@@ -293,7 +328,18 @@ function PasoServicios({
     );
   }
   if (servicios.length === 0) {
-    return <AppText variant="meta">Todavía no hay tratamientos disponibles.</AppText>;
+    return (
+      <View style={styles.vacioServicios}>
+        <Feather name="calendar" size={24} color={colors.taupe} />
+        <AppText variant="cardTitle" style={styles.vacioTitulo}>
+          Reservá con el centro
+        </AppText>
+        <AppText variant="meta" style={styles.vacioTxt}>
+          Por ahora los turnos de este centro se coordinan directamente. Escribiles y con
+          gusto te agendan.
+        </AppText>
+      </View>
+    );
   }
 
   return (
@@ -325,6 +371,7 @@ function Horarios({
   cargando,
   error,
   slots,
+  motivo,
   seleccionado,
   onSeleccionar,
   onReintentar,
@@ -332,6 +379,7 @@ function Horarios({
   cargando: boolean;
   error: boolean;
   slots: SlotDisponible[];
+  motivo?: string;
   seleccionado: string | null;
   onSeleccionar: (slot: SlotDisponible) => void;
   onReintentar: () => void;
@@ -349,14 +397,14 @@ function Horarios({
   if (slots.length === 0) {
     return (
       <AppText variant="meta" style={styles.sinSlots}>
-        No hay horarios disponibles este día. Probá con otra fecha.
+        {motivo ?? 'No hay horarios disponibles este día. Probá con otra fecha.'}
       </AppText>
     );
   }
   return <SlotGrid slots={slots} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />;
 }
 
-function ResumenServicio({ servicio }: { servicio: ServicioPublico }) {
+function ResumenServicio({ servicio }: { servicio: ServicioReservable }) {
   return (
     <View style={styles.chipServicio}>
       <Feather name="droplet" size={14} color={colors.ink} />
@@ -429,6 +477,10 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   bloques: { gap: spacing.xl },
   bloque: { gap: spacing.md },
+  bloqueHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  vacioServicios: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
+  vacioTitulo: { marginTop: spacing.sm },
+  vacioTxt: { textAlign: 'center', lineHeight: 17 },
   lista: { gap: spacing.md },
   loader: { alignSelf: 'flex-start', marginTop: spacing.sm },
 

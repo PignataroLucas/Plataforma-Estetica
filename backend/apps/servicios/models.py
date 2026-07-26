@@ -221,6 +221,22 @@ class Servicio(models.Model):
         help_text="Color para calendario (hereda de categoría si existe)"
     )
 
+    # Reserva desde la app del cliente
+    reservable_por_cliente = models.BooleanField(
+        default=False,
+        help_text="¿El cliente puede reservar este servicio desde la app? "
+                  "Se activa a mano: solo los servicios que el centro puede preparar "
+                  "de un día para el otro. El staff siempre puede agendarlo desde el CRM."
+    )
+    dias_reserva = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Días en que el cliente puede reservar ESTE servicio desde la app "
+                  "(ej: ['viernes', 'sabado']). Vacío = usa los días generales de la app "
+                  "(ver DIAS_RESERVA_APP en apps.turnos.services). Reemplaza la regla "
+                  "general, no la complementa."
+    )
+
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)

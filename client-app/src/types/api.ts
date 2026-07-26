@@ -197,6 +197,24 @@ export interface Disponibilidad {
     precio: string;
   };
   slots: SlotDisponible[];
+  /** Por qué no hay horarios ese día (día no habilitado, muy pronto, etc.). */
+  motivo?: string;
+}
+
+/**
+ * Tratamiento que el cliente puede reservar desde la app.
+ * `dias_reserva` viene YA resuelto por el backend (los propios del servicio o
+ * los generales), así que la app no reimplementa la regla.
+ */
+export interface ServicioReservable extends ServicioPublico {
+  dias_reserva: string[];
+}
+
+/** Respuesta de GET /api/client/turnos/servicios/. */
+export interface ServiciosReservables {
+  /** Primer día reservable (YYYY-MM-DD): hoy no se puede. */
+  primera_fecha: string;
+  results: ServicioReservable[];
 }
 
 /** Cuerpo de POST /api/client/turnos/. */
