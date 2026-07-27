@@ -15,6 +15,7 @@ import {
   registro as registroReq,
 } from '@/services/auth';
 import { configureHttpAuth } from '@/services/http';
+import { limpiarCacheDeDatos } from '@/services/queryClient';
 import { deleteItem, getItem, setItem } from '@/services/storage';
 import type { AuthResponse, Perfil, RegistroPayload, TokenPair } from '@/types/api';
 
@@ -80,6 +81,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setSession: async (auth) => {
+    // Arranca una identidad nueva: nada de lo cacheado antes le corresponde.
+    limpiarCacheDeDatos();
     await Promise.all([setItem(ACCESS_KEY, auth.access), setItem(REFRESH_KEY, auth.refresh)]);
     set({
       status: 'authenticated',
@@ -97,8 +100,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUsuario: (usuario) => set({ usuario }),
 
   logout: async () => {
-    await Promise.all([deleteItem(ACCESS_KEY), deleteItem(REFRESH_KEY)]);
+    // ORDEN IMPORTANTE: primero se corta la sesión (esto desmonta las pantallas
+    // y deja el access en null), después se limpia el cache. Al revés queda una
+    // ventana —el await a SecureStore— con las pantallas vivas y el token válido,
+    // donde un refetch volvería a cachear datos de la cuenta que se está yendo.
     set({ status: 'unauthenticated', access: null, refresh: null, usuario: null });
+    limpiarCacheDeDatos();
+    await Promise.all([deleteItem(ACCESS_KEY), deleteItem(REFRESH_KEY)]);
   },
 }));
 
