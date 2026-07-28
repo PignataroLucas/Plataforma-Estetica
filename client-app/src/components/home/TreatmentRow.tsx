@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { View, StyleSheet } from 'react-native';
+import { Pressable, View, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { colors, radius, spacing } from '@/theme/ame';
@@ -11,11 +11,13 @@ interface Props {
   meta: string;
   precio: string;
   icon?: FeatherName;
+  /** Con `onPress` la fila abre la ficha del tratamiento. */
+  onPress?: () => void;
 }
 
-export function TreatmentRow({ nombre, meta, precio, icon = 'droplet' }: Props) {
-  return (
-    <View style={styles.row}>
+export function TreatmentRow({ nombre, meta, precio, icon = 'droplet', onPress }: Props) {
+  const contenido = (
+    <>
       <View style={styles.pic}>
         <Feather name={icon} size={16} color={colors.ink} />
       </View>
@@ -28,7 +30,19 @@ export function TreatmentRow({ nombre, meta, precio, icon = 'droplet' }: Props) 
         </AppText>
       </View>
       <AppText variant="price">{precio}</AppText>
-    </View>
+      {onPress ? <Feather name="chevron-right" size={16} color={colors.muted} /> : null}
+    </>
+  );
+
+  if (!onPress) return <View style={styles.row}>{contenido}</View>;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.row, pressed && styles.presionada]}>
+      {contenido}
+    </Pressable>
   );
 }
 
@@ -52,6 +66,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  presionada: { backgroundColor: colors.cream },
   info: { flex: 1, minWidth: 0 },
   nombre: { fontSize: 16, lineHeight: 18 },
 });

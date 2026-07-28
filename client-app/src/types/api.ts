@@ -24,6 +24,8 @@ export interface CentroPublico {
   provincia: string;
   pais: string;
   telefono: string;
+  /** Teléfono en E.164 para el link de WhatsApp. Vacío si no es válido. */
+  telefono_whatsapp: string;
   email: string;
   logo: string | null;
   sucursales: SucursalPublica[];
@@ -32,7 +34,14 @@ export interface CentroPublico {
 export interface ServicioPublico {
   id: number;
   nombre: string;
+  /** "Qué es" el tratamiento: el texto principal de la ficha. */
   descripcion: string;
+  /** Beneficios en texto libre; el centro escribe uno por línea. */
+  beneficios: string;
+  /** Link externo (Instagram, YouTube, TikTok). Vacío = sin video. */
+  video_url: string;
+  /** Define el CTA de la ficha: reservar o consultar con el centro. */
+  reservable_por_cliente: boolean;
   duracion_minutos: number;
   precio: string; // DRF serializa DecimalField como string
   categoria_nombre: string | null;

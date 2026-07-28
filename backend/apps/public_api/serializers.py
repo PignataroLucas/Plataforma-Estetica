@@ -6,6 +6,7 @@ proveedores, códigos internos, stock exacto).
 """
 from rest_framework import serializers
 
+from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica, Sucursal
 from apps.inventario.models import Producto
 from apps.servicios.models import Servicio
@@ -19,17 +20,26 @@ class SucursalPublicaSerializer(serializers.ModelSerializer):
 
 class CentroPublicoSerializer(serializers.ModelSerializer):
     sucursales = serializers.SerializerMethodField()
+    telefono_whatsapp = serializers.SerializerMethodField()
 
     class Meta:
         model = CentroEstetica
         fields = [
             'id', 'nombre', 'direccion', 'ciudad', 'provincia', 'pais',
-            'telefono', 'email', 'logo', 'sucursales',
+            'telefono', 'telefono_whatsapp', 'email', 'logo', 'sucursales',
         ]
 
     def get_sucursales(self, obj):
         activas = obj.sucursales.filter(activa=True)
         return SucursalPublicaSerializer(activas, many=True).data
+
+    def get_telefono_whatsapp(self, obj):
+        """
+        Teléfono en E.164 para armar el link de WhatsApp desde la app.
+        Vacío si el centro no cargó teléfono o si no es un número válido:
+        preferimos no ofrecer el botón antes que abrir un chat con un desconocido.
+        """
+        return normalizar_telefono(obj.telefono)
 
 
 class ServicioPublicoSerializer(serializers.ModelSerializer):
@@ -42,6 +52,8 @@ class ServicioPublicoSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nombre', 'descripcion', 'duracion_minutos', 'precio',
             'categoria_nombre', 'color', 'sucursal', 'sucursal_nombre',
+            # Ficha del tratamiento (app mobile)
+            'beneficios', 'video_url', 'reservable_por_cliente',
         ]
 
     def get_categoria_nombre(self, obj):

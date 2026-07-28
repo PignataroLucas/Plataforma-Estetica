@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -43,6 +43,8 @@ type Paso = 1 | 2 | 3;
 export default function ReservarScreen() {
   const { centroId, centroNombre } = useCentroActivo();
   const queryClient = useQueryClient();
+  // La ficha del tratamiento entra acá con el servicio ya elegido.
+  const { servicio: servicioParam } = useLocalSearchParams<{ servicio?: string }>();
 
   const [paso, setPaso] = useState<Paso>(1);
   const [servicio, setServicio] = useState<ServicioReservable | null>(null);
@@ -58,6 +60,25 @@ export default function ReservarScreen() {
   });
 
   const primeraFecha = serviciosQuery.data?.primera_fecha;
+
+  /**
+   * Preselección desde la ficha. Se consume una sola vez: si después el usuario
+   * vuelve al paso 1 a cambiar de tratamiento, el parámetro no lo arrastra de nuevo.
+   * Si el id no está entre los reservables, se ignora y arranca en el paso 1.
+   */
+  const paramConsumido = useRef(false);
+  useEffect(() => {
+    if (paramConsumido.current || !servicioParam) return;
+    const resultados = serviciosQuery.data?.results;
+    if (!resultados) return;
+
+    paramConsumido.current = true;
+    const elegido = resultados.find((s) => s.id === Number(servicioParam));
+    if (elegido) {
+      setServicio(elegido);
+      setPaso(2);
+    }
+  }, [servicioParam, serviciosQuery.data]);
 
   /**
    * Días que se pueden elegir: desde la primera fecha reservable que informa el

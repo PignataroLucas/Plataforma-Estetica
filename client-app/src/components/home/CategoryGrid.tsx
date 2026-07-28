@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { View, Pressable, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
@@ -6,27 +7,46 @@ import { colors, radius, spacing } from '@/theme/ame';
 
 type FeatherName = keyof typeof Feather.glyphMap;
 
-interface Categoria {
-  label: string;
-  icon: FeatherName;
-  bg: string;
+interface Props {
+  /** Categorías reales del catálogo del centro. */
+  categorias: string[];
 }
 
-const CATEGORIAS: Categoria[] = [
-  { label: 'Facial', icon: 'user', bg: colors.blush },
-  { label: 'Corporal', icon: 'droplet', bg: colors.cream },
-  { label: 'Láser', icon: 'zap', bg: '#EFE7DC' },
-  { label: 'Spa & relax', icon: 'star', bg: colors.taupe },
+/** Fondos que se van alternando: la grilla no depende de cuántas categorías haya. */
+const FONDOS = [colors.blush, colors.cream, '#EFE7DC', colors.taupe];
+
+/**
+ * Ícono por palabra clave. Es cosmético: si el centro nombra sus categorías de
+ * otra forma, cae en el ícono neutro y la grilla sigue funcionando igual.
+ */
+const ICONOS: { patron: RegExp; icon: FeatherName }[] = [
+  { patron: /facial|rostro|piel/i, icon: 'user' },
+  { patron: /corporal|cuerpo|reduc/i, icon: 'droplet' },
+  { patron: /laser|láser|depilaci/i, icon: 'zap' },
+  { patron: /spa|relax|masaje/i, icon: 'star' },
+  { patron: /uñas|manos|pies|pedicur|manicur/i, icon: 'feather' },
 ];
 
-export function CategoryGrid() {
+function iconoDe(nombre: string): FeatherName {
+  return ICONOS.find((i) => i.patron.test(nombre))?.icon ?? 'circle';
+}
+
+export function CategoryGrid({ categorias }: Props) {
   return (
     <View style={styles.grid}>
-      {CATEGORIAS.map((c) => (
-        <Pressable key={c.label} style={[styles.cell, { backgroundColor: c.bg }]}>
-          <Feather name={c.icon} size={22} color={colors.ink} />
-          <AppText variant="body" style={styles.label}>
-            {c.label}
+      {categorias.map((nombre, i) => (
+        <Pressable
+          key={nombre}
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: '/servicios', params: { categoria: nombre } })}
+          style={({ pressed }) => [
+            styles.cell,
+            { backgroundColor: FONDOS[i % FONDOS.length] },
+            pressed && styles.presionada,
+          ]}>
+          <Feather name={iconoDe(nombre)} size={22} color={colors.ink} />
+          <AppText variant="body" style={styles.label} numberOfLines={1}>
+            {nombre}
           </AppText>
         </Pressable>
       ))}
@@ -50,5 +70,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
+  presionada: { opacity: 0.75 },
   label: { fontSize: 12 },
 });

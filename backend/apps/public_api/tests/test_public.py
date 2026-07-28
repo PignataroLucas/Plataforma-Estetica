@@ -86,6 +86,46 @@ class PublicApiTests(APITestCase):
         self.assertNotIn('Servicio viejo', nombres)   # inactivo excluido
         self.assertNotIn('Masaje B', nombres)          # otro centro excluido
 
+    def test_servicios_no_filtran_datos_internos(self):
+        resp = self.client.get(reverse('public-centro-servicios', args=[self.centro_a.id]))
+        serv = resp.data['results'][0]
+        for campo in ['comision_porcentaje', 'costo_maquina_diario', 'ganancia_por_servicio',
+                      'profit_porcentaje', 'maquina_alquilada', 'codigo']:
+            self.assertNotIn(campo, serv)
+
+    # ---------- Ficha del servicio ----------
+
+    def test_ficha_devuelve_contenido_cargado_por_el_centro(self):
+        self.serv_activo.descripcion = 'Limpieza profunda en cabina.'
+        self.serv_activo.beneficios = 'Piel luminosa\nMenos poros visibles'
+        self.serv_activo.video_url = 'https://www.instagram.com/reel/abc/'
+        self.serv_activo.reservable_por_cliente = True
+        self.serv_activo.save()
+
+        resp = self.client.get(
+            reverse('public-centro-servicio-detalle', args=[self.centro_a.id, self.serv_activo.id])
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['nombre'], 'Limpieza facial')
+        self.assertEqual(resp.data['descripcion'], 'Limpieza profunda en cabina.')
+        self.assertEqual(resp.data['beneficios'], 'Piel luminosa\nMenos poros visibles')
+        self.assertEqual(resp.data['video_url'], 'https://www.instagram.com/reel/abc/')
+        # La app decide con esto si muestra "Reservar" o "Consultar con el centro"
+        self.assertTrue(resp.data['reservable_por_cliente'])
+
+    def test_ficha_de_servicio_inactivo_404(self):
+        resp = self.client.get(
+            reverse('public-centro-servicio-detalle', args=[self.centro_a.id, self.serv_inactivo.id])
+        )
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_ficha_de_otro_centro_404(self):
+        # El id existe, pero no en el centro pedido: no se puede espiar el catálogo ajeno
+        resp = self.client.get(
+            reverse('public-centro-servicio-detalle', args=[self.centro_a.id, self.serv_centro_b.id])
+        )
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
     # ---------- Productos ----------
 
     def test_productos_solo_reventa_activos(self):

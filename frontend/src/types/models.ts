@@ -299,7 +299,12 @@ export interface Servicio {
   maquina_alquilada?: number
   maquina_nombre?: string
   nombre: string
+  /** "Qué es" el tratamiento. Se muestra en la ficha de la app del cliente. */
   descripcion: string
+  /** Qué gana el cliente. Texto libre, se muestra en la ficha de la app. */
+  beneficios: string
+  /** Link al video del tratamiento (Instagram, YouTube, TikTok). */
+  video_url: string
   codigo: string
   duracion_minutos: number
   precio: number

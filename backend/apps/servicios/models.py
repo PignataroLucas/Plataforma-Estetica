@@ -191,6 +191,20 @@ class Servicio(models.Model):
     descripcion = models.TextField(blank=True)
     codigo = models.CharField(max_length=50, blank=True, help_text="Código interno del servicio")
 
+    # Ficha del tratamiento en la app del cliente.
+    # Texto libre a propósito: recién con las primeras fichas escritas se va a saber
+    # qué estructura hace falta. `descripcion` es el "qué es".
+    beneficios = models.TextField(
+        blank=True,
+        help_text="Qué gana el cliente con el tratamiento. Se muestra en la ficha de la app."
+    )
+    video_url = models.URLField(
+        max_length=500,
+        blank=True,
+        help_text="Link al video del tratamiento (Instagram, YouTube, TikTok). "
+                  "Se abre desde la ficha de la app."
+    )
+
     # Duración y precio
     duracion_minutos = models.PositiveIntegerField(
         help_text="Duración en minutos del servicio"

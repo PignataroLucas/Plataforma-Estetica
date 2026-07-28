@@ -208,7 +208,9 @@ class ListadoTurnosTests(TurnosAppTestBase):
 
 class DisponibilidadTests(TurnosAppTestBase):
     def _get_slots(self, fecha=None, servicio=None):
-        fecha = fecha or (timezone.localdate() + timedelta(days=3))
+        # hoy+3 puede caer viernes/sábado/domingo, que no son días reservables:
+        # ahí la respuesta trae 0 slots y el test fallaba según el día de la semana.
+        fecha = fecha or timezone.localtime(_proximo_dia_habil()).date()
         servicio = servicio or self.servicio
         return self.client.get(reverse('client-disponibilidad'), {
             'servicio': servicio.id,

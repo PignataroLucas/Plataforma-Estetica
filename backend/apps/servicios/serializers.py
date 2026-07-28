@@ -48,6 +48,8 @@ class ServicioSerializer(serializers.ModelSerializer):
             'maquina_nombre',
             'nombre',
             'descripcion',
+            'beneficios',
+            'video_url',
             'codigo',
             'duracion_minutos',
             'precio',

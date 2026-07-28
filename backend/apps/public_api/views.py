@@ -48,6 +48,24 @@ class ServiciosPublicosView(PublicoBase, ListAPIView):
         )
 
 
+class ServicioPublicoDetalleView(PublicoBase, RetrieveAPIView):
+    """
+    GET /api/public/centros/<id>/servicios/<pk>/ — ficha de un tratamiento.
+
+    Mismo scope que el listado: solo servicios activos del centro pedido, así un
+    id de otro centro (o un servicio dado de baja) devuelve 404 en vez de filtrar.
+    """
+    serializer_class = ServicioPublicoSerializer
+
+    def get_queryset(self):
+        centro = self.get_centro()
+        return (
+            Servicio.objects
+            .filter(sucursal__centro_estetica=centro, activo=True)
+            .select_related('categoria', 'sucursal')
+        )
+
+
 class ProductosPublicosView(PublicoBase, ListAPIView):
     """GET /api/public/centros/<id>/productos/ — solo productos de REVENTA activos."""
     serializer_class = ProductoPublicoSerializer

@@ -11,6 +11,41 @@ import api from '@/services/api'
  * - OCP: Extensible via props
  */
 
+interface TextareaProps {
+  id: string
+  name: string
+  label: string
+  value: string
+  onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void
+  rows?: number
+  placeholder?: string
+  helper?: string
+}
+
+/**
+ * El Input de ui/ solo renderiza <input>. Los textos largos de la ficha necesitan
+ * varias líneas, así que va este textarea con el mismo look del resto del form.
+ */
+function Textarea({ id, name, label, value, onChange, rows = 4, placeholder, helper }: TextareaProps) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        name={name}
+        value={value}
+        onChange={onChange}
+        rows={rows}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+      />
+      {helper && <p className="mt-1 text-xs text-gray-500">{helper}</p>}
+    </div>
+  )
+}
+
 interface ServicioFormProps {
   servicio?: Servicio | null
   onSubmit: (data: Partial<Servicio>) => Promise<void>
@@ -35,6 +70,9 @@ export default function ServicioForm({
     maquina_alquilada: undefined,
     reservable_por_cliente: false,
     dias_reserva: [],
+    descripcion: '',
+    beneficios: '',
+    video_url: '',
   })
 
   const [errors, setErrors] = useState<Partial<Record<keyof Servicio, string>>>({})
@@ -71,6 +109,9 @@ export default function ServicioForm({
         maquina_alquilada: servicio.maquina_alquilada,
         reservable_por_cliente: servicio.reservable_por_cliente ?? false,
         dias_reserva: servicio.dias_reserva ?? [],
+        descripcion: servicio.descripcion ?? '',
+        beneficios: servicio.beneficios ?? '',
+        video_url: servicio.video_url ?? '',
       })
     }
   }, [servicio])
@@ -93,6 +134,12 @@ export default function ServicioForm({
       newErrors.precio = 'El precio debe ser mayor a 0'
     }
 
+    // El backend valida la URL igual (URLField); acá evitamos el viaje de ida y vuelta.
+    const video = formData.video_url?.trim()
+    if (video && !/^https?:\/\/.+\..+/i.test(video)) {
+      newErrors.video_url = 'Pegá el link completo, empezando con https://'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -113,7 +160,9 @@ export default function ServicioForm({
   /**
    * Handler de cambios en inputs (SRP)
    */
-  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     const { name, value, type } = e.target
 
     setFormData(prev => ({
@@ -311,6 +360,52 @@ export default function ServicioForm({
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Ficha para la app del cliente */}
+      <div className="border-t border-gray-200 pt-6">
+        <h3 className="text-lg font-semibold text-gray-900">Ficha para la app</h3>
+        <p className="mt-1 mb-4 text-sm text-gray-500">
+          Lo que la clienta ve cuando toca el tratamiento en la app. Si dejás algo vacío,
+          esa parte no se muestra.
+        </p>
+        <div className="space-y-4">
+          <Textarea
+            id="descripcion"
+            name="descripcion"
+            label="Qué es"
+            value={formData.descripcion ?? ''}
+            onChange={handleChange}
+            rows={4}
+            placeholder="Contale en qué consiste el tratamiento, cómo es la sesión, qué se siente."
+            helper="Es el texto principal de la ficha."
+          />
+
+          <Textarea
+            id="beneficios"
+            name="beneficios"
+            label="Beneficios"
+            value={formData.beneficios ?? ''}
+            onChange={handleChange}
+            rows={4}
+            placeholder={'Un beneficio por línea. Ej:\nRedefine el óvalo facial\nMejora la textura de la piel'}
+            helper="Escribí uno por línea: en la app se muestran como lista."
+          />
+
+          <Input
+            label="Link del video (opcional)"
+            name="video_url"
+            type="url"
+            value={formData.video_url ?? ''}
+            onChange={handleChange}
+            error={errors.video_url}
+            fullWidth
+            placeholder="https://www.instagram.com/reel/..."
+          />
+          <p className="-mt-3 text-xs text-gray-500">
+            Pegá el link del posteo de Instagram, YouTube o TikTok. Se abre desde la ficha.
+          </p>
         </div>
       </div>
 
