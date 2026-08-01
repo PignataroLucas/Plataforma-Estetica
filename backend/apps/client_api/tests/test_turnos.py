@@ -5,7 +5,7 @@ Cubren el invariante central: el scope sale SIEMPRE de las vinculaciones del
 usuario autenticado, nunca de un id del request. Y la reserva no puede pisar un
 turno existente ni salirse de la agenda del profesional.
 """
-from datetime import time, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 from django.core.cache import cache
@@ -23,6 +23,7 @@ from apps.turnos.models import Turno
 from apps.turnos.services import (
     DIAS_MAXIMOS_A_FUTURO,
     DIAS_RESERVA_APP,
+    DIAS_SEMANA,
     nombre_dia,
 )
 
@@ -106,6 +107,16 @@ class TurnosAppTestBase(APITestCase):
             sucursal=self.sucursal_a, nombre='Solo fines de semana',
             duracion_minutos=60, precio=Decimal('40000'),
             reservable_por_cliente=True, dias_reserva=['viernes', 'sabado'],
+        )
+        # Fechas puntuales: la máquina viene un día suelto. Los días de la semana
+        # están todos habilitados a propósito, para probar que igual no se usan.
+        self.fecha_puntual = timezone.localdate() + timedelta(days=10)
+        self.servicio_fecha_puntual = Servicio.objects.create(
+            sucursal=self.sucursal_a, nombre='Máquina invitada',
+            duracion_minutos=60, precio=Decimal('60000'),
+            reservable_por_cliente=True,
+            dias_reserva=list(DIAS_SEMANA.values()),
+            fechas_reserva=[self.fecha_puntual.isoformat()],
         )
 
         self.cliente_a = Cliente.objects.create(
@@ -449,6 +460,93 @@ class PoliticaDeReservaTests(TurnosAppTestBase):
         viernes = _proximo_dia_habil(dias_permitidos=['viernes', 'sabado'])
         resp_ok = self._reservar(self.servicio_finde, viernes)
         self.assertEqual(resp_ok.status_code, status.HTTP_201_CREATED)
+
+    # --- fechas puntuales ---
+
+    def _a_las_diez(self, fecha):
+        return timezone.make_aware(timezone.datetime.combine(fecha, time(10, 0)))
+
+    def test_catalogo_devuelve_las_fechas_concretas_de_cada_servicio(self):
+        self._auth(self.user_a)
+        resp = self.client.get(reverse('client-servicios-reservables'))
+        por_nombre = {s['nombre']: s for s in resp.data['results']}
+
+        puntual = por_nombre['Máquina invitada']
+        self.assertEqual(puntual['modo_reserva'], 'fechas')
+        self.assertEqual(puntual['fechas_disponibles'], [self.fecha_puntual.isoformat()])
+
+        # El servicio normal sigue por patrón semanal, pero también trae fechas ya
+        # resueltas: la app arma el calendario igual en los dos modos.
+        normal = por_nombre['Limpieza facial']
+        self.assertEqual(normal['modo_reserva'], 'dias')
+        self.assertTrue(normal['fechas_disponibles'])
+        self.assertTrue(
+            all(
+                nombre_dia(date.fromisoformat(f)) in DIAS_RESERVA_APP
+                for f in normal['fechas_disponibles']
+            )
+        )
+
+    def test_las_fechas_puntuales_reemplazan_a_los_dias_de_la_semana(self):
+        """El servicio tiene los 7 días habilitados, pero solo vale la fecha cargada."""
+        self._auth(self.user_a)
+
+        otro_dia = self._a_las_diez(self.fecha_puntual + timedelta(days=1))
+        resp_mal = self._reservar(self.servicio_fecha_puntual, otro_dia)
+        self.assertEqual(resp_mal.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Turno.objects.exists())
+
+        resp_ok = self._reservar(self.servicio_fecha_puntual, self._a_las_diez(self.fecha_puntual))
+        self.assertEqual(resp_ok.status_code, status.HTTP_201_CREATED)
+
+    def test_fechas_puntuales_ya_pasadas_no_se_ofrecen(self):
+        self.servicio_fecha_puntual.fechas_reserva = [
+            (timezone.localdate() - timedelta(days=1)).isoformat(),
+            self.fecha_puntual.isoformat(),
+        ]
+        self.servicio_fecha_puntual.save()
+
+        self._auth(self.user_a)
+        resp = self.client.get(reverse('client-servicios-reservables'))
+        por_nombre = {s['nombre']: s for s in resp.data['results']}
+
+        self.assertEqual(
+            por_nombre['Máquina invitada']['fechas_disponibles'],
+            [self.fecha_puntual.isoformat()],
+        )
+
+    def test_fechas_mal_cargadas_no_rompen_el_calendario(self):
+        """El campo es un JSON libre: una fecha inválida se ignora, no explota."""
+        self.servicio_fecha_puntual.fechas_reserva = ['no-es-una-fecha', self.fecha_puntual.isoformat()]
+        self.servicio_fecha_puntual.save()
+
+        self._auth(self.user_a)
+        resp = self.client.get(reverse('client-servicios-reservables'))
+        por_nombre = {s['nombre']: s for s in resp.data['results']}
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            por_nombre['Máquina invitada']['fechas_disponibles'],
+            [self.fecha_puntual.isoformat()],
+        )
+
+    def test_disponibilidad_fuera_de_la_fecha_puntual_explica_el_motivo(self):
+        self._auth(self.user_a)
+        resp = self._slots(
+            self.servicio_fecha_puntual, self._a_las_diez(self.fecha_puntual + timedelta(days=1))
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['slots'], [])
+        self.assertIn('fechas puntuales', resp.data['motivo'])
+
+    def test_disponibilidad_en_la_fecha_puntual_trae_horarios(self):
+        self._auth(self.user_a)
+        resp = self._slots(self.servicio_fecha_puntual, self._a_las_diez(self.fecha_puntual))
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertNotIn('motivo', resp.data)
+        self.assertTrue(resp.data['slots'])
 
     def test_el_staff_no_queda_limitado_por_la_politica_de_la_app(self):
         """Las reglas son de la app: el CRM puede agendar cualquier día y servicio."""

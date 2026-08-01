@@ -10,6 +10,7 @@ from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica, Sucursal
 from apps.inventario.models import Producto
 from apps.servicios.models import Servicio
+from apps.turnos.services import fechas_reservables, modo_reserva_de
 
 
 class SucursalPublicaSerializer(serializers.ModelSerializer):
@@ -46,6 +47,8 @@ class ServicioPublicoSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.SerializerMethodField()
     color = serializers.CharField(source='color_display', read_only=True)
     sucursal_nombre = serializers.CharField(source='sucursal.nombre', read_only=True)
+    modo_reserva = serializers.SerializerMethodField()
+    fechas_disponibles = serializers.SerializerMethodField()
 
     class Meta:
         model = Servicio
@@ -54,10 +57,23 @@ class ServicioPublicoSerializer(serializers.ModelSerializer):
             'categoria_nombre', 'color', 'sucursal', 'sucursal_nombre',
             # Ficha del tratamiento (app mobile)
             'beneficios', 'video_url', 'reservable_por_cliente',
+            'modo_reserva', 'fechas_disponibles',
         ]
 
     def get_categoria_nombre(self, obj):
         return obj.categoria.nombre if obj.categoria else None
+
+    def get_modo_reserva(self, obj):
+        """'fechas' (fechas puntuales cargadas) o 'dias' (patrón semanal)."""
+        return modo_reserva_de(obj)
+
+    def get_fechas_disponibles(self, obj):
+        """
+        Fechas concretas ya resueltas (YYYY-MM-DD), en los dos modos. La ficha las
+        muestra como "próximas fechas" y el flujo de reserva arma el calendario
+        con esto, sin repetir la regla del lado del cliente.
+        """
+        return [fecha.isoformat() for fecha in fechas_reservables(obj)]
 
 
 class ProductoPublicoSerializer(serializers.ModelSerializer):

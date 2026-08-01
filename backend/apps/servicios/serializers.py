@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from rest_framework import serializers
 from .models import Servicio, CategoriaServicio, MaquinaAlquilada, AlquilerMaquina
 from django.utils import timezone
@@ -62,6 +64,7 @@ class ServicioSerializer(serializers.ModelSerializer):
             'activo',
             'reservable_por_cliente',
             'dias_reserva',
+            'fechas_reserva',
             'color',
             'color_display',
             'creado_en',
@@ -78,6 +81,27 @@ class ServicioSerializer(serializers.ModelSerializer):
             'profit_porcentaje',
             'maquina_nombre'
         ]
+
+    def validate_fechas_reserva(self, value):
+        """
+        Normaliza las fechas puntuales a ISO ordenado y sin repetidos.
+
+        Es un JSONField: sin validación entra cualquier cosa y la app se queda con
+        fechas que no puede parsear. Se valida acá y no en el modelo porque este es
+        el único camino por el que el centro las carga.
+        """
+        if not isinstance(value, list):
+            raise serializers.ValidationError('Debe ser una lista de fechas (YYYY-MM-DD).')
+
+        fechas = set()
+        for item in value:
+            try:
+                fechas.add(datetime.strptime(str(item), '%Y-%m-%d').date())
+            except ValueError:
+                raise serializers.ValidationError(
+                    f'Fecha inválida: "{item}". El formato es YYYY-MM-DD.'
+                )
+        return [fecha.isoformat() for fecha in sorted(fechas)]
 
 
 class CategoriaServicioSerializer(serializers.ModelSerializer):

@@ -11,7 +11,10 @@ import { useCentroActivo } from '@/hooks/useCentroActivo';
 import { getCentroInfo, getServicio } from '@/services/public';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { ServicioPublico } from '@/types/api';
-import { formatPrecio } from '@/utils/format';
+import { formatFechaChip, formatPrecio } from '@/utils/format';
+
+/** Cuántas fechas puntuales se muestran en la ficha antes del "+N más". */
+const MAX_FECHAS_FICHA = 4;
 
 /**
  * Ficha del tratamiento: lo que el centro escribe en el CRM (qué es, beneficios,
@@ -74,6 +77,10 @@ function Ficha({ servicio }: { servicio: ServicioPublico }) {
     <>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Hero servicio={servicio} />
+
+        {servicio.reservable_por_cliente && servicio.modo_reserva === 'fechas' ? (
+          <ProximasFechas fechas={servicio.fechas_disponibles} />
+        ) : null}
 
         {servicio.video_url ? <VideoRow url={servicio.video_url} /> : null}
 
@@ -141,6 +148,49 @@ function Hero({ servicio }: { servicio: ServicioPublico }) {
   );
 }
 
+/**
+ * Tratamientos sin patrón semanal (la máquina viene fechas sueltas): la clienta
+ * ve las fechas acá, antes de entrar al flujo de reserva y encontrarse con un
+ * calendario casi vacío.
+ */
+function ProximasFechas({ fechas }: { fechas: string[] }) {
+  if (fechas.length === 0) {
+    return (
+      <View style={styles.seccion}>
+        <AppText variant="section">Próximas fechas</AppText>
+        <AppText variant="meta" style={styles.parrafoCorto}>
+          Todavía no hay fechas abiertas para este tratamiento. Consultanos y te
+          avisamos apenas se agenda la próxima.
+        </AppText>
+      </View>
+    );
+  }
+
+  const visibles = fechas.slice(0, MAX_FECHAS_FICHA);
+  const restantes = fechas.length - visibles.length;
+
+  return (
+    <View style={styles.seccion}>
+      <AppText variant="section">Próximas fechas</AppText>
+      <View style={styles.fechas}>
+        {visibles.map((iso) => (
+          <View key={iso} style={styles.fechaChip}>
+            <Feather name="calendar" size={12} color={colors.ink} />
+            <AppText variant="meta" color={colors.ink}>
+              {formatFechaChip(iso)}
+            </AppText>
+          </View>
+        ))}
+        {restantes > 0 ? (
+          <AppText variant="meta" style={styles.fechasMas}>
+            +{restantes} más
+          </AppText>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function VideoRow({ url }: { url: string }) {
   return (
     <Pressable
@@ -162,18 +212,23 @@ function VideoRow({ url }: { url: string }) {
 }
 
 /**
- * "Reservar" solo si el centro habilitó el servicio para la app. Si no, el camino
- * es hablar con el centro: mostramos WhatsApp cuando el teléfono es válido.
+ * "Reservar" solo si el centro habilitó el servicio para la app Y quedan fechas
+ * por delante — un tratamiento de fechas puntuales que ya pasaron no tiene nada
+ * que ofrecer, así que mejor mandar a hablar con el centro que a un calendario
+ * vacío. Si no, el camino es WhatsApp cuando el teléfono es válido.
  */
 function Cta({ servicio }: { servicio: ServicioPublico }) {
   const { centroId } = useCentroActivo();
+  const puedeReservar =
+    servicio.reservable_por_cliente && servicio.fechas_disponibles.length > 0;
+
   const { data: centro } = useQuery({
     queryKey: ['centro-info', centroId],
     queryFn: () => getCentroInfo(centroId),
-    enabled: !servicio.reservable_por_cliente,
+    enabled: !puedeReservar,
   });
 
-  if (servicio.reservable_por_cliente) {
+  if (puedeReservar) {
     return (
       <Button
         label="Reservar"
@@ -279,6 +334,20 @@ const styles = StyleSheet.create({
 
   seccion: { gap: spacing.md },
   parrafo: { lineHeight: 22 },
+  parrafoCorto: { lineHeight: 18 },
+
+  fechas: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  fechaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.cream,
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+  },
+  fechasMas: { paddingHorizontal: spacing.xs },
+
   beneficios: { gap: spacing.md },
   beneficio: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   bullet: {

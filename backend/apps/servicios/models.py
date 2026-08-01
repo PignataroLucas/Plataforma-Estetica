@@ -250,6 +250,14 @@ class Servicio(models.Model):
                   "(ver DIAS_RESERVA_APP en apps.turnos.services). Reemplaza la regla "
                   "general, no la complementa."
     )
+    fechas_reserva = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Fechas puntuales (YYYY-MM-DD) en que se reserva ESTE servicio, para "
+                  "cuando no hay un patrón semanal: la máquina viene el viernes 20 y "
+                  "listo. Si hay fechas cargadas REEMPLAZAN a dias_reserva — el servicio "
+                  "se reserva solo esos días exactos."
+    )
 
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)

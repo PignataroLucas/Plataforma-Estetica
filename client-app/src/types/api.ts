@@ -42,6 +42,16 @@ export interface ServicioPublico {
   video_url: string;
   /** Define el CTA de la ficha: reservar o consultar con el centro. */
   reservable_por_cliente: boolean;
+  /**
+   * Cómo se define la disponibilidad: `'fechas'` = fechas puntuales cargadas a mano
+   * (la máquina viene el viernes 20), `'dias'` = patrón semanal.
+   */
+  modo_reserva: 'dias' | 'fechas';
+  /**
+   * Fechas concretas reservables ('YYYY-MM-DD'), ya resueltas por el backend en
+   * los dos modos y dentro de la ventana permitida. Vacío = no hay fechas.
+   */
+  fechas_disponibles: string[];
   duracion_minutos: number;
   precio: string; // DRF serializa DecimalField como string
   categoria_nombre: string | null;
@@ -213,7 +223,8 @@ export interface Disponibilidad {
 /**
  * Tratamiento que el cliente puede reservar desde la app.
  * `dias_reserva` viene YA resuelto por el backend (los propios del servicio o
- * los generales), así que la app no reimplementa la regla.
+ * los generales), así que la app no reimplementa la regla. Solo aplica cuando
+ * `modo_reserva === 'dias'`; el calendario se arma con `fechas_disponibles`.
  */
 export interface ServicioReservable extends ServicioPublico {
   dias_reserva: string[];

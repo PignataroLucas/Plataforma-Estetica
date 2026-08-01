@@ -319,6 +319,11 @@ export interface Servicio {
   reservable_por_cliente: boolean
   /** Días propios para reservar desde la app (ej: ['viernes','sabado']). Vacío = lunes a jueves. */
   dias_reserva: string[]
+  /**
+   * Fechas puntuales ('YYYY-MM-DD') para servicios sin patrón semanal.
+   * Si hay alguna cargada, REEMPLAZA a `dias_reserva`: solo se reserva esos días.
+   */
+  fechas_reserva: string[]
   color: string
   creado_en: string
   actualizado_en: string

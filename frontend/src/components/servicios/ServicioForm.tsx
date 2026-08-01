@@ -1,6 +1,7 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react'
 import { Servicio, MaquinaAlquilada, PaginatedResponse, DIAS_SEMANA } from '@/types/models'
 import { Button, Input } from '@/components/ui'
+import CalendarioFechas from '@/components/servicios/CalendarioFechas'
 import api from '@/services/api'
 
 /**
@@ -70,6 +71,7 @@ export default function ServicioForm({
     maquina_alquilada: undefined,
     reservable_por_cliente: false,
     dias_reserva: [],
+    fechas_reserva: [],
     descripcion: '',
     beneficios: '',
     video_url: '',
@@ -109,6 +111,7 @@ export default function ServicioForm({
         maquina_alquilada: servicio.maquina_alquilada,
         reservable_por_cliente: servicio.reservable_por_cliente ?? false,
         dias_reserva: servicio.dias_reserva ?? [],
+        fechas_reserva: servicio.fechas_reserva ?? [],
         descripcion: servicio.descripcion ?? '',
         beneficios: servicio.beneficios ?? '',
         video_url: servicio.video_url ?? '',
@@ -181,7 +184,7 @@ export default function ServicioForm({
 
   /**
    * Handler del check "reservable desde la app".
-   * Al desactivarlo limpiamos los días propios: si mañana se vuelve a activar,
+   * Al desactivarlo limpiamos días y fechas propias: si mañana se vuelve a activar,
    * arranca con la regla general en vez de arrastrar una configuración vieja.
    */
   const handleReservableChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -190,6 +193,7 @@ export default function ServicioForm({
       ...prev,
       reservable_por_cliente: checked,
       dias_reserva: checked ? prev.dias_reserva ?? [] : [],
+      fechas_reserva: checked ? prev.fechas_reserva ?? [] : [],
     }))
   }
 
@@ -218,6 +222,14 @@ export default function ServicioForm({
       maquina_alquilada: value ? parseInt(value) : undefined,
     }))
   }
+
+  /**
+   * Con al menos una fecha puntual cargada, el servicio pasa a modo "solo estas
+   * fechas" y los días de la semana quedan sin efecto (misma regla que el backend
+   * en `motivo_fecha_no_reservable`). Se refleja en la UI para que no queden días
+   * marcados que no hacen nada.
+   */
+  const porFechas = (formData.fechas_reserva ?? []).length > 0
 
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
@@ -312,36 +324,68 @@ export default function ServicioForm({
             </label>
 
             {formData.reservable_por_cliente && (
-              <div className="mt-3 ml-7">
-                <p className="text-sm font-medium text-gray-700 mb-1">Días para reservar</p>
-                <p className="text-xs text-gray-500 mb-2">
-                  Si no elegís ninguno, se usan los días generales de la app (lunes a jueves).
-                  Los días que elijas acá <strong>reemplazan</strong> esa regla.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {DIAS_SEMANA.map(dia => {
-                    const activo = (formData.dias_reserva ?? []).includes(dia.valor)
-                    return (
-                      <button
-                        key={dia.valor}
-                        type="button"
-                        onClick={() => toggleDiaReserva(dia.valor)}
-                        className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                          activo
-                            ? 'bg-blue-600 border-blue-600 text-white'
-                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        {dia.label}
-                      </button>
-                    )
-                  })}
-                </div>
-                {(formData.dias_reserva ?? []).length === 0 && (
-                  <p className="mt-2 text-xs text-gray-500">
-                    Usando los días generales: lunes a jueves.
+              <div className="mt-4 ml-7 space-y-5">
+                {/* Modo A: patrón semanal (el caso normal) */}
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Días para reservar</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Si no elegís ninguno, se usan los días generales de la app (lunes a jueves).
+                    Los días que elijas acá <strong>reemplazan</strong> esa regla.
                   </p>
-                )}
+                  <div className={`flex flex-wrap gap-2 ${porFechas ? 'opacity-40' : ''}`}>
+                    {DIAS_SEMANA.map(dia => {
+                      const activo = (formData.dias_reserva ?? []).includes(dia.valor)
+                      return (
+                        <button
+                          key={dia.valor}
+                          type="button"
+                          disabled={porFechas}
+                          onClick={() => toggleDiaReserva(dia.valor)}
+                          className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                            activo
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                          } ${porFechas ? 'cursor-not-allowed' : ''}`}
+                        >
+                          {dia.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {!porFechas && (formData.dias_reserva ?? []).length === 0 && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Usando los días generales: lunes a jueves.
+                    </p>
+                  )}
+                </div>
+
+                {/* Modo B: fechas sueltas, para cuando no hay patrón semanal */}
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Fechas puntuales (opcional)
+                  </p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Para cuando el servicio no se hace todas las semanas: la máquina viene
+                    el viernes 20 y nada más. Marcá esas fechas en el calendario y la
+                    clienta va a ver exactamente esos días en la app.
+                  </p>
+
+                  {porFechas && (
+                    <div className="mb-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
+                      Con fechas puntuales cargadas, los días de la semana{' '}
+                      <strong>no se usan</strong>: este servicio se reserva únicamente en
+                      las fechas marcadas abajo. Sacá todas las fechas para volver al modo
+                      por días.
+                    </div>
+                  )}
+
+                  <CalendarioFechas
+                    fechas={formData.fechas_reserva ?? []}
+                    onChange={fechas =>
+                      setFormData(prev => ({ ...prev, fechas_reserva: fechas }))
+                    }
+                  />
+                </div>
               </div>
             )}
           </div>

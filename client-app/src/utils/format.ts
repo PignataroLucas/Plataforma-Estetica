@@ -85,6 +85,19 @@ export function formatDiasReserva(dias: string[]): string {
     .join(' · ');
 }
 
+/** "Vie 20 Mar" — chip compacto para las fechas puntuales de un tratamiento. */
+export function formatFechaChip(iso: string): string {
+  const d = parseFechaISOLocal(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
+}
+
+/** "Marzo 2026" — encabezado del calendario mensual. */
+export function formatMesAnio(fecha: Date): string {
+  const mes = MESES_LARGOS[fecha.getMonth()];
+  return `${mes.charAt(0).toUpperCase()}${mes.slice(1)} ${fecha.getFullYear()}`;
+}
+
 /** Etiquetas de un día para el selector de fechas: { diaSemana: 'Mar', numero: '28', mes: 'Jul' } */
 export function etiquetasDeDia(fecha: Date) {
   return {

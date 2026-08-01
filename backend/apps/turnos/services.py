@@ -31,15 +31,19 @@ DIAS_MAXIMOS_A_FUTURO = 90
 # Política de reserva desde la app (NO aplica al staff en el CRM)
 # ---------------------------------------------------------------- #
 
-# Días en los que el cliente puede reservar por defecto. Un servicio puede
-# pisarlos con su propio ``dias_reserva`` (ej: una máquina que solo está los
-# viernes). Cuando haga falta que cada centro elija sus días, esto pasa a ser
-# un campo de CentroEstetica y se lee desde acá.
+# Días en los que el cliente puede reservar por defecto. La precedencia va de más
+# específico a más general: ``fechas_reserva`` del servicio (fechas puntuales) →
+# ``dias_reserva`` del servicio (patrón semanal propio) → estos días generales.
+# Cada nivel REEMPLAZA al siguiente, no lo complementa. Cuando haga falta que cada
+# centro elija sus días, esto pasa a ser un campo de CentroEstetica y se lee acá.
 DIAS_RESERVA_APP = ['lunes', 'martes', 'miercoles', 'jueves']
 
 # Anticipación mínima en días: 1 = desde mañana (no se reserva el mismo día,
 # porque el centro necesita preparar/pedir el servicio).
 DIAS_MINIMOS_ANTICIPACION = 1
+
+# Cuántas fechas concretas se le ofrecen al cliente en el calendario de la app.
+FECHAS_A_OFRECER = 30
 
 # Estados que ocupan la agenda (los demás liberan el horario).
 ESTADOS_QUE_OCUPAN = [Turno.Estado.PENDIENTE, Turno.Estado.CONFIRMADO]
@@ -68,17 +72,78 @@ def nombre_dia(fecha):
 
 def dias_reserva_de(servicio):
     """
-    Días en que el cliente puede reservar este servicio desde la app.
+    Días de la semana en que el cliente puede reservar este servicio desde la app.
 
-    Los días propios del servicio REEMPLAZAN a los generales (no se suman).
+    Los días propios del servicio REEMPLAZAN a los generales (no se suman). Ojo:
+    si el servicio tiene ``fechas_reserva``, esto no se usa — ver ``modo_reserva_de``.
     """
     return list(servicio.dias_reserva) if servicio.dias_reserva else list(DIAS_RESERVA_APP)
+
+
+def fechas_reserva_de(servicio):
+    """
+    Fechas puntuales del servicio, parseadas, ordenadas y sin repetidos.
+
+    Las entradas inválidas se descartan en silencio: es un JSONField y una fecha
+    mal cargada no puede dejar el calendario de la app sin responder.
+    """
+    fechas = set()
+    for valor in servicio.fechas_reserva or []:
+        try:
+            fechas.add(datetime.strptime(str(valor), '%Y-%m-%d').date())
+        except ValueError:
+            continue
+    return sorted(fechas)
+
+
+def modo_reserva_de(servicio):
+    """
+    Cómo se define la disponibilidad de este servicio:
+
+    - ``'fechas'``: fechas puntuales cargadas a mano (la máquina viene el viernes 20).
+    - ``'dias'``: patrón semanal (propio del servicio o el general de la app).
+
+    Las fechas puntuales GANAN sobre los días de la semana. Es a propósito: quien
+    carga "viernes 20" quiere ese día y ninguno más, y si se sumaran a los días
+    generales el servicio quedaría reservable de lunes a jueves sin haberlo pedido.
+    """
+    return 'fechas' if fechas_reserva_de(servicio) else 'dias'
 
 
 def primera_fecha_reservable(hoy=None):
     """Primer día que el cliente puede elegir en la app (por defecto, mañana)."""
     hoy = hoy or timezone.localdate()
     return hoy + timedelta(days=DIAS_MINIMOS_ANTICIPACION)
+
+
+def fechas_reservables(servicio, *, hoy=None, limite=FECHAS_A_OFRECER):
+    """
+    Fechas concretas que el cliente puede elegir para este servicio.
+
+    Resuelve acá las dos configuraciones (fechas puntuales o días de la semana)
+    para que la app pinte el calendario con una lista lista para usar en vez de
+    reimplementar la regla. Siempre dentro de la ventana reservable: nunca antes
+    de ``primera_fecha_reservable`` ni más allá de ``DIAS_MAXIMOS_A_FUTURO``.
+    """
+    if not servicio.reservable_por_cliente:
+        return []
+
+    hoy = hoy or timezone.localdate()
+    desde = primera_fecha_reservable(hoy)
+    hasta = hoy + timedelta(days=DIAS_MAXIMOS_A_FUTURO)
+
+    puntuales = fechas_reserva_de(servicio)
+    if puntuales:
+        return [fecha for fecha in puntuales if desde <= fecha <= hasta][:limite]
+
+    dias = dias_reserva_de(servicio)
+    fechas = []
+    cursor = desde
+    while cursor <= hasta and len(fechas) < limite:
+        if nombre_dia(cursor) in dias:
+            fechas.append(cursor)
+        cursor += timedelta(days=1)
+    return fechas
 
 
 def motivo_fecha_no_reservable(servicio, fecha, *, hoy=None):
@@ -92,6 +157,13 @@ def motivo_fecha_no_reservable(servicio, fecha, *, hoy=None):
 
     if fecha < primera_fecha_reservable(hoy):
         return 'Los turnos se reservan con al menos un día de anticipación'
+
+    # Fechas puntuales primero: cuando existen, reemplazan al patrón semanal.
+    puntuales = fechas_reserva_de(servicio)
+    if puntuales:
+        if fecha not in puntuales:
+            return 'Este tratamiento tiene fechas puntuales: elegí una de las disponibles'
+        return None
 
     dias = dias_reserva_de(servicio)
     if nombre_dia(fecha) not in dias:

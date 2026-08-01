@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DateStrip } from '@/components/reservar/DateStrip';
+import { MonthCalendar } from '@/components/reservar/MonthCalendar';
 import { SlotGrid } from '@/components/reservar/SlotGrid';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -29,14 +30,8 @@ import {
   formatDiasReserva,
   formatFechaLarga,
   formatPrecio,
-  nombreDiaBackend,
   parseFechaISOLocal,
 } from '@/utils/format';
-
-/** Cantidad de días reservables que ofrece el selector. */
-const DIAS_A_MOSTRAR = 30;
-/** Tope de días a recorrer buscando fechas válidas (evita loops si algo viene mal). */
-const VENTANA_MAXIMA = 90;
 
 type Paso = 1 | 2 | 3;
 
@@ -59,8 +54,6 @@ export default function ReservarScreen() {
     queryFn: () => getServiciosReservables(centroId),
   });
 
-  const primeraFecha = serviciosQuery.data?.primera_fecha;
-
   /**
    * Preselección desde la ficha. Se consume una sola vez: si después el usuario
    * vuelve al paso 1 a cambiar de tratamiento, el parámetro no lo arrastra de nuevo.
@@ -81,32 +74,23 @@ export default function ReservarScreen() {
   }, [servicioParam, serviciosQuery.data]);
 
   /**
-   * Días que se pueden elegir: desde la primera fecha reservable que informa el
-   * backend (nunca hoy) y solo los días habilitados para ESE servicio. Se muestran
-   * únicamente los válidos, en vez de pintar días deshabilitados.
+   * Fechas que se pueden elegir. El backend ya resolvió la política completa
+   * (fechas puntuales o patrón semanal, anticipación mínima y ventana a futuro) y
+   * devuelve la lista concreta, así que acá solo se parsea. Antes esto se calculaba
+   * en la app y eran dos implementaciones de la misma regla.
    */
-  const dias = useMemo(() => {
-    if (!servicio || !primeraFecha) return [];
-    const permitidos = new Set(servicio.dias_reserva);
-    const cursor = parseFechaISOLocal(primeraFecha);
-    const validos: Date[] = [];
-
-    for (let i = 0; i < VENTANA_MAXIMA && validos.length < DIAS_A_MOSTRAR; i += 1) {
-      const dia = new Date(cursor);
-      dia.setDate(cursor.getDate() + i);
-      if (permitidos.has(nombreDiaBackend(dia))) validos.push(dia);
-    }
-    return validos;
-  }, [servicio, primeraFecha]);
+  const dias = useMemo(
+    () => (servicio?.fechas_disponibles ?? []).map(parseFechaISOLocal),
+    [servicio],
+  );
 
   // Al cambiar de servicio, la fecha elegida puede no ser válida para el nuevo.
+  // Si el nuevo no tiene fechas (ej: se le pasaron todas), queda sin elegir.
   useEffect(() => {
-    if (dias.length === 0) return;
     const disponibles = dias.map(fechaISOLocal);
-    if (!disponibles.includes(fecha)) {
-      setFecha(disponibles[0]);
-      setSlot(null);
-    }
+    if (disponibles.includes(fecha)) return;
+    setFecha(disponibles[0] ?? '');
+    setSlot(null);
   }, [dias, fecha]);
 
   const disponibilidad = useQuery({
@@ -237,22 +221,33 @@ export default function ReservarScreen() {
               <View style={styles.bloque}>
                 <View style={styles.bloqueHead}>
                   <AppText variant="section">Día</AppText>
-                  <AppText variant="meta">{formatDiasReserva(servicio.dias_reserva)}</AppText>
+                  <AppText variant="meta">
+                    {servicio.modo_reserva === 'fechas'
+                      ? 'Fechas puntuales'
+                      : formatDiasReserva(servicio.dias_reserva)}
+                  </AppText>
                 </View>
-                <DateStrip dias={dias} seleccionada={fecha} onSeleccionar={elegirFecha} />
-              </View>
-              <View style={styles.bloque}>
-                <AppText variant="section">Horario</AppText>
-                <Horarios
-                  cargando={disponibilidad.isPending || disponibilidad.isFetching}
-                  error={disponibilidad.isError}
-                  slots={disponibilidad.data?.slots ?? []}
-                  motivo={disponibilidad.data?.motivo}
-                  seleccionado={slot?.inicio ?? null}
-                  onSeleccionar={setSlot}
-                  onReintentar={disponibilidad.refetch}
+                <SelectorDeFecha
+                  servicio={servicio}
+                  dias={dias}
+                  seleccionada={fecha}
+                  onSeleccionar={elegirFecha}
                 />
               </View>
+              {fecha ? (
+                <View style={styles.bloque}>
+                  <AppText variant="section">Horario</AppText>
+                  <Horarios
+                    cargando={disponibilidad.isPending || disponibilidad.isFetching}
+                    error={disponibilidad.isError}
+                    slots={disponibilidad.data?.slots ?? []}
+                    motivo={disponibilidad.data?.motivo}
+                    seleccionado={slot?.inicio ?? null}
+                    onSeleccionar={setSlot}
+                    onReintentar={disponibilidad.refetch}
+                  />
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -386,6 +381,46 @@ function PasoServicios({
       ))}
     </View>
   );
+}
+
+/**
+ * Tira horizontal para el patrón semanal (siempre hay varios días seguidos) y
+ * calendario mensual para las fechas puntuales: para ubicar "el viernes 20" hay
+ * que ver el mes, una tira de dos días sueltos no se entiende.
+ */
+function SelectorDeFecha({
+  servicio,
+  dias,
+  seleccionada,
+  onSeleccionar,
+}: {
+  servicio: ServicioReservable;
+  dias: Date[];
+  seleccionada: string;
+  onSeleccionar: (fecha: string) => void;
+}) {
+  if (dias.length === 0) {
+    return (
+      <AppText variant="meta" style={styles.sinSlots}>
+        Por ahora no hay fechas disponibles para este tratamiento. Escribinos y lo
+        coordinamos con vos.
+      </AppText>
+    );
+  }
+
+  if (servicio.modo_reserva === 'fechas') {
+    return (
+      // key: al cambiar de tratamiento el calendario vuelve al primer mes con fechas.
+      <MonthCalendar
+        key={servicio.id}
+        fechas={dias}
+        seleccionada={seleccionada}
+        onSeleccionar={onSeleccionar}
+      />
+    );
+  }
+
+  return <DateStrip dias={dias} seleccionada={seleccionada} onSeleccionar={onSeleccionar} />;
 }
 
 function Horarios({

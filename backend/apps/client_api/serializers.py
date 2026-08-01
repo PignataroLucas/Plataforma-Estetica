@@ -244,7 +244,9 @@ class ServicioReservableSerializer(ServicioPublicoSerializer):
     Tratamiento que el cliente puede reservar desde la app.
 
     Agrega ``dias_reserva`` YA RESUELTO (los propios del servicio o los generales)
-    para que la app no tenga que reimplementar la regla al pintar el calendario.
+    para poder mostrar "Lun · Mar · Mié · Jue" sin reimplementar la regla. Las
+    fechas concretas del calendario vienen del padre (``fechas_disponibles``), que
+    ya contempla los dos modos; ``dias_reserva`` solo aplica al modo ``'dias'``.
     """
     dias_reserva = serializers.SerializerMethodField()
 
