@@ -104,10 +104,59 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             if precio_credito and precio_credito < precio_costo:
                 errors['precio_credito'] = "El precio de crédito debe ser mayor o igual al precio de costo"
 
+        # Validate SKU uniqueness within the branch
+        sku_error = self._validate_sku_uniqueness(data)
+        if sku_error:
+            errors['sku'] = sku_error
+
         if errors:
             raise serializers.ValidationError(errors)
 
         return data
+
+    def _validate_sku_uniqueness(self, data):
+        """
+        Check the SKU is not already used in the branch.
+
+        The database enforces this through `unique_sku_per_sucursal`, but Django
+        does not validate UniqueConstraints that use expressions (this one
+        compares uppercased), and DRF does not call full_clean(). Without this
+        check a duplicate SKU would surface as an IntegrityError, so a typo
+        would return a 500 instead of a field error.
+
+        The SKU is the join key against Conto, so duplicates are worth blocking
+        clearly rather than tolerating.
+        """
+        if 'sku' not in data:
+            return None
+
+        sku = (data.get('sku') or '').strip()
+        if not sku:
+            # Empty SKUs are excluded from the constraint: many may coexist.
+            return None
+
+        if self.instance:
+            branch = self.instance.sucursal
+        else:
+            # The serializer can be used without a request (scripts, nested
+            # usage), so this must not assume the context is populated.
+            request = self.context.get('request')
+            branch = getattr(getattr(request, 'user', None), 'sucursal', None)
+
+        if not branch:
+            return None
+
+        clash = Producto.objects.filter(sucursal=branch, sku__iexact=sku)
+        if self.instance:
+            clash = clash.exclude(pk=self.instance.pk)
+
+        existing = clash.first()
+        if existing:
+            return (
+                f"El código '{sku}' ya lo usa el producto \"{existing.nombre}\" "
+                f"en esta sucursal"
+            )
+        return None
 
     def validate_stock_minimo(self, value):
         """Validar que el stock mínimo sea positivo"""
