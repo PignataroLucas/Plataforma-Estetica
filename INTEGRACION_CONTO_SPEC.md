@@ -199,19 +199,35 @@ Si la nota de crédito llega antes que la venta que referencia, queda en `PENDIN
 
 Si un voucher ya procesado vuelve cancelado, se revierten sus `Transaction` y la `ContoSale` pasa a `SKIPPED`, conservando el payload. Acá sí se revierte en vez de compensar: una cancelación es total por definición.
 
-## 6.1 — Tareas programadas
+## 6.1 — Cómo se dispara la sincronización
 
-En [config/celery.py](backend/config/celery.py):
+**Celery no está deployado en producción** y nunca se configuró. Por eso la lógica vive en clases planas en `sync.py` y hay dos formas de invocarla, que hacen exactamente lo mismo:
 
-| Task | Frecuencia | Qué hace |
+**Comando** — no necesita broker ni worker. Es la vía prevista para producción:
+
+```bash
+python manage.py sincronizar_conto --que ventas   # o stock, o todo
+```
+
+Termina con código de salida distinto de cero si algo falló, para que un scheduler lo reporte en vez de informar una corrida exitosa que no importó nada.
+
+**Tasks de Celery** ([tasks.py](backend/apps/integraciones/tasks.py)) — quedan definidas y registradas en el beat schedule para el día que Celery se deploye. Hoy no corren.
+
+| Trabajo | Frecuencia prevista | Qué hace |
 |---|---|---|
-| `import_conto_sales` | cada 15 min | Trae vouchers desde `last_sales_sync − 5 min` |
-| `sync_conto_stock` | cada 30 min | Trae el estado del catálogo |
-| `verify_conto_links` | diaria 7:30 | Reconfirma que cada integración siga resolviendo a su cuenta |
+| Ventas | cada 15 min | Trae vouchers desde `last_sales_sync − 5 min` |
+| Stock | cada 30 min | Trae el estado del catálogo |
+| Verificar vínculo | diaria | Reconfirma que cada integración siga resolviendo a su cuenta |
 
-`verify_conto_links` existe porque el tripwire por sincronización solo salta cuando hay datos para traer: una integración sin ventas recientes podría quedar apuntando a otra cuenta durante semanas sin que nadie se entere. Si detecta que el token resuelve a otra cuenta, **desactiva la integración**.
+**La verificación de vínculo está incluida en cada corrida del comando**, no en un job aparte. Antes de sincronizar, pregunta a `/api/cuenta/` y compara. Si el token resuelve a otra cuenta, **desactiva la integración y corta sin importar nada**.
 
-Las tasks distinguen dos clases de error. `ContoAuthError`, `ContoAccountMismatch`, `ContoAccountInactive` y `ContoNotLinked` **no se reintentan**: reintentar un token revocado solo demora la alerta. `ContoUnavailable` sí, con hasta 3 reintentos cada 5 minutos.
+Es una request extra por corrida y cierra un hueco: el tripwire del cliente valida `cuenta_id` en cada página de listado, pero solo cuando hay datos para devolver. Una integración sin ventas recientes podría quedar apuntando a otra cuenta indefinidamente. Con la verificación adentro del comando, un solo cron cubre todo y no hace falta un segundo schedule.
+
+Un problema de vínculo en un centro **no silencia a los demás**: se reporta, se lo saltea y se sigue con el resto.
+
+Ambas vías distinguen dos clases de error. Token revocado, cuenta cruzada o cuenta inactiva **no se reintentan**: reintentar solo demora la alerta. `ContoUnavailable` sí es transitorio, y la corrida siguiente recupera lo que falte gracias a la ventana con solapamiento.
+
+**Pendiente de decisión:** con qué scheduler se corre el comando en Railway. Ver §12.
 
 ## 6.2 — Desde cuándo importar
 
@@ -227,13 +243,22 @@ Lo mismo para el tripwire de `cuenta_id` de §3 y para vouchers en estado `ERROR
 
 ## 8 — Trabajo previo pendiente
 
-- **Diagnóstico de `Producto.sku` en producción.** El comando [diagnostico_sku](backend/apps/inventario/management/commands/diagnostico_sku.py) es de solo lectura. En la base de desarrollo hay 2 productos de demo, así que el resultado local no dice nada. Se corre desde el contenedor local apuntando a la base de producción, usando la URL pública de Postgres de Railway (la interna `.railway.internal` solo resuelve dentro de Railway):
+- ✅ **Diagnóstico de `Producto.sku` en producción.** Corrido el 2026-08-05: **13 productos en la única sucursal (Banfield), ninguno con SKU, sin colisiones y sin códigos de barras.** El comando [diagnostico_sku](backend/apps/inventario/management/commands/diagnostico_sku.py) se corre así:
 
   ```bash
-  docker-compose exec -e DATABASE_URL="<DATABASE_PUBLIC_URL de Railway>" backend python manage.py diagnostico_sku
+  docker-compose exec -e DATABASE_URL='<DATABASE_PUBLIC_URL de Railway>' backend python manage.py diagnostico_sku
   ```
 
-- **`Producto.sku` único por sucursal.** Hoy no es único ni obligatorio ([inventario/models.py:99](backend/apps/inventario/models.py:99)). Único **por sucursal**, nunca global. Depende del diagnóstico anterior.
+- ✅ **Constraint `unique_sku_per_sucursal`.** Aplicado. Es un índice único **parcial** sobre `(Upper(sku), sucursal)` que excluye los SKU vacíos. Tres decisiones:
+  - **Por sucursal, nunca global**: los SKU vienen de proveedores y marcas, así que dos centros que vendan la misma línea van a compartir códigos.
+  - **Excluye los vacíos**: los 13 productos sin código pueden convivir, así que el constraint no quedó atado a hacer el backfill primero.
+  - **Compara en mayúsculas**: coincide con la búsqueda case-insensitive que usa la integración. Si no, `abc` y `ABC` podrían coexistir y después leerse como ambiguos.
+
+  Efecto colateral bueno: la ambigüedad de SKU ahora es imposible a nivel base, no algo que haya que manejar al leer.
+
+- ⬜ **Backfill de los 13 SKU.** No bloquea nada: un producto sin SKU simplemente no matchea con Conto, y como `create_missing_products` está activo, Conto crea su propia versión al lado. La consecuencia es catálogo duplicado, no pérdida de datos ni de plata.
+
+  Ninguno de los 13 tiene código de barras tampoco, así que no hay match automático posible por ese lado. Lo eficiente es hacerlo contra el catálogo real de Conto cuando el endpoint de stock exista: traer su lista, emparejar por similitud de nombre y confirmar 13 veces. Son minutos.
 - ~~**Bloquear la edición manual de stock**~~. **Decidido: no se bloquea.** El riesgo es bajo porque el stock se sincroniza desde Conto cada 30 minutos, así que una edición manual se sobrescribe sola en la próxima corrida. No corrompe nada, solo es inútil. Lo que sí conviene en algún momento es que la UI aclare que ese número viene de Conto, para que nadie pierda tiempo editándolo.
 - **Revisar `check_low_inventory`** ([config/celery.py](backend/config/celery.py), diario 8:00). Hoy compara contra stock irreal.
 - **Unificar categorías de ingreso.** Conviven `"Productos"` ([finanzas/signals.py:25](backend/apps/finanzas/signals.py:25)) y `"Venta de Productos"` ([inventario/signals.py:138](backend/apps/inventario/signals.py:138)), lo que fragmenta los reportes.
@@ -261,7 +286,7 @@ El orden importa:
 
 | Etapa | Días | Bloqueado por Conto |
 |---|---|---|
-| Constraint de SKU por sucursal + backfill | 0,5 | Sí (diagnóstico en producción) |
+| Emparejar los 13 SKU contra el catálogo de Conto | 0,5 | Sí (endpoint de stock) |
 | Pantalla de configuración y estado, con las alertas de §7 | 1 | Sí |
 | Validación end-to-end contra la cuenta de prueba | 0,5 | Sí |
 
@@ -283,3 +308,30 @@ Todos los endpoints requieren rol `ADMIN` y están acotados al centro del usuari
 Códigos de alerta que devuelve `estado`: `SIN_VINCULAR`, `INACTIVA`, `SIN_FECHA_DE_INICIO`, `VOUCHERS_CON_ERROR`, `NUNCA_SINCRONIZADA`, `SINCRONIZACION_DETENIDA`.
 
 `SINCRONIZACION_DETENIDA` es el que implementa §7: salta si pasaron más de 2 horas sin importar ventas, cuando debería pasar cada 15 minutos.
+
+`sincronizar` **corre inline**, no encola. Sin worker de Celery no hay a dónde encolar, y agregar uno solo para esto implicaría un worker, un beat y un broker para lo que son un par de llamadas HTTP. De paso la respuesta trae el resultado real en vez de obligar a la UI a consultar el estado. Si algún día el import inicial creciera hasta chocar con el timeout de la request, para esa carga se usa el comando.
+
+---
+
+## 12 — Scheduler en producción
+
+Celery nunca se configuró en Railway, así que **sin scheduler nada dispararía la sincronización**. La integración quedaría configurada, verificada y sin traer una sola venta — un síntoma difícil de diagnosticar, porque todo diría OK.
+
+Infraestructura actual en Railway: tres servicios — Postgres, Redis y el backend. Redis está en uso como cache de los dashboards de analytics (`@cache_page` en [analytics/views.py](backend/apps/analytics/views.py), invalidado desde [servicios/views.py:17](backend/apps/servicios/views.py:17)); no se usa como broker porque no hay worker.
+
+**Elegido: cron de Railway.** Un servicio adicional del mismo repo que corre el comando cada 15 minutos, trabaja unos segundos y termina. Un worker de Celery más un beat serían dos contenedores prendidos todo el día para un par de llamadas HTTP.
+
+Configuración del servicio de cron:
+
+| Qué | Valor |
+|---|---|
+| Repo | el mismo, `Plataforma-Estetica` |
+| Start command | `python manage.py sincronizar_conto --que todo` |
+| Cron schedule | `*/15 * * * *` |
+| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
+
+**Detalle crítico:** hay que sobrescribir el start command. Por defecto el servicio usaría [entrypoint.sh](backend/entrypoint.sh), que levanta Gunicorn y nunca termina — el cron nunca cerraría.
+
+Con `--que todo` el stock se sincroniza cada 15 minutos en vez de cada 30. Es inofensivo: es una lectura de estado, idempotente. Un solo cron en lugar de dos.
+
+Migrar a Celery más adelante es configuración, no código: las tasks ya están escritas y registradas en el beat schedule. Tiene sentido el día que haya un segundo motivo, por ejemplo cuando vuelvan los recordatorios de WhatsApp.

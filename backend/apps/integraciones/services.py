@@ -244,9 +244,13 @@ class ContoScope:
         Find a product by SKU **within this integration's branch**.
 
         Returns None when the SKU is missing, unknown, or matches more than one
-        product. Ambiguity is treated as "not found" on purpose: `Producto.sku`
-        is not unique yet, and guessing would attribute income to the wrong
+        product. Guessing on ambiguity would attribute income to the wrong
         product and decrement the wrong stock.
+
+        The multiple-match case should now be unreachable: the
+        `unique_sku_per_sucursal` constraint prevents two products from sharing
+        a SKU within a branch, compared uppercased to match the lookup below.
+        The guard stays as defence in depth.
         """
         normalized = self.normalize_sku(sku)
         if not normalized:

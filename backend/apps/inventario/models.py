@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.functions import Upper
 from apps.empleados.models import Sucursal, Usuario
 
 
@@ -96,7 +97,12 @@ class Producto(models.Model):
     descripcion = models.TextField(blank=True)
     marca = models.CharField(max_length=100, blank=True)
     codigo_barras = models.CharField(max_length=50, blank=True, null=True, unique=True)
-    sku = models.CharField(max_length=50, blank=True)
+    sku = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Código del producto. Es la llave de cruce con Conto, "
+                  "así que debe ser único dentro de la sucursal"
+    )
     tipo = models.CharField(
         max_length=15,
         choices=TipoProducto.choices,
@@ -198,6 +204,25 @@ class Producto(models.Model):
         ordering = ['sucursal', 'nombre']
         indexes = [
             models.Index(fields=['sucursal', 'stock_actual']),
+        ]
+        constraints = [
+            # The SKU is the join key against Conto's catalog, so it has to be
+            # unambiguous within a branch. Three deliberate choices here:
+            #
+            # - Per branch, never global: SKUs come from suppliers and brands,
+            #   so two centers selling the same line will share codes.
+            # - Empty SKUs are excluded, so products without a code can coexist.
+            #   That decouples this constraint from backfilling the ones that
+            #   have none.
+            # - Compared uppercased, to match the case-insensitive lookup the
+            #   integration uses. Otherwise 'abc' and 'ABC' would be allowed to
+            #   coexist and then read back as ambiguous.
+            models.UniqueConstraint(
+                Upper('sku'),
+                'sucursal',
+                condition=~models.Q(sku=''),
+                name='unique_sku_per_sucursal',
+            ),
         ]
 
     def __str__(self):

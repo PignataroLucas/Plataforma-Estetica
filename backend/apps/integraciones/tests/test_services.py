@@ -266,13 +266,23 @@ class TestScopeProductIsolation:
         scope = ContoScope(integration)
         assert scope.find_product('  ser-vitc-30 ') == product
 
-    def test_ambiguous_sku_returns_none(self):
-        """`Producto.sku` is not unique yet, so duplicates must not be guessed."""
+    def test_duplicate_skus_cannot_exist_to_be_ambiguous(self):
+        """
+        Ambiguity is now prevented in the database rather than handled on read:
+        `unique_sku_per_sucursal` rejects a second product with the same SKU in
+        the branch, comparing uppercased.
+
+        `find_product` still returns None on multiple matches as defence in
+        depth. See apps/inventario/tests/test_sku_constraint.py.
+        """
+        from django.db import IntegrityError, transaction
+
         _, branch, integration = make_center('A', 'cnt_aaa')
         make_product(branch, 'DUP', name='Primero')
-        make_product(branch, 'DUP', name='Segundo')
 
-        assert ContoScope(integration).find_product('DUP') is None
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                make_product(branch, 'DUP', name='Segundo')
 
     def test_blank_sku_returns_none(self):
         _, branch, integration = make_center('A', 'cnt_aaa')

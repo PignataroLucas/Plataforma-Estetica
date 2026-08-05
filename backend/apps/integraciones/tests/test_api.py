@@ -405,22 +405,47 @@ class TestManualSync:
 
         assert response.status_code == 400
 
-    def test_it_queues_the_requested_work(self):
-        center, _, integration = make_center('A', 'cnt_aaa')
-        integration.link_verified_at = timezone.now()
-        integration.save()
+    def test_it_runs_inline_and_returns_the_result(self):
+        """
+        No Celery worker is deployed, so this runs synchronously. The upside is
+        that the response carries the outcome instead of the UI having to poll.
+        """
+        from .test_sync import make_syncable_center, product_line, voucher
+        from .test_services import make_product
+
+        center, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
         admin = make_admin(center)
 
-        with patch('apps.integraciones.tasks.import_conto_sales.delay') as sales, \
-             patch('apps.integraciones.tasks.sync_conto_stock.delay') as stock:
+        payload = {
+            'cuenta_id': 'cnt_aaa',
+            'next': None,
+            'results': [voucher(items=[product_line()])],
+        }
+        with patch('requests.Session.request') as request:
+            request.return_value = fake_response(payload=payload)
             response = api(admin).post(
-                action_url('sincronizar', integration.pk), {'que': 'todo'},
+                action_url('sincronizar', integration.pk), {'que': 'ventas'},
                 format='json'
             )
 
-        assert response.status_code == 202
-        sales.assert_called_once_with(integration_id=integration.pk)
-        stock.assert_called_once_with(integration_id=integration.pk)
+        assert response.status_code == 200
+        assert response.json()['success'] is True
+        assert '1 procesadas' in response.json()['resultados']['ventas']
+
+    def test_a_revoked_token_is_reported_not_swallowed(self):
+        center, _, integration = make_center('A', 'cnt_aaa')
+        integration.link_verified_at = timezone.now()
+        integration.import_from = timezone.now() - timezone.timedelta(days=30)
+        integration.save()
+        admin = make_admin(center)
+
+        with patch('requests.Session.request') as request:
+            request.return_value = fake_response(status=401)
+            response = api(admin).post(action_url('sincronizar', integration.pk))
+
+        assert response.status_code == 400
+        assert response.json()['success'] is False
 
     def test_an_unknown_target_is_rejected(self):
         center, _, integration = make_center('A', 'cnt_aaa')

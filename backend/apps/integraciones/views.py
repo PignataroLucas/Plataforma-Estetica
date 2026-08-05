@@ -26,7 +26,7 @@ from .serializers import (
     ContoSaleSerializer,
 )
 from .services import ContoClient, ContoError
-from .sync import SalesImporter
+from .sync import SalesImporter, StockSynchronizer
 
 logger = logging.getLogger(__name__)
 
@@ -243,10 +243,16 @@ class ContoIntegrationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def sincronizar(self, request, pk=None):
         """
-        Queue a sync now instead of waiting for the schedule.
+        Run a sync now instead of waiting for the schedule.
 
-        Dispatched asynchronously: a full first import can take a while and
-        should not hold the request open. The UI polls `estado`.
+        Runs inline rather than dispatching to a queue. There is no Celery
+        worker deployed, and adding one just for this would mean a worker, a
+        beat process and a broker for what amounts to a handful of HTTP calls.
+        Running inline also lets the response carry the actual result instead of
+        making the UI poll.
+
+        If a first import ever grows large enough to hit the request timeout,
+        use the `sincronizar_conto` management command for the initial load.
         """
         integration = self.get_object()
 
@@ -264,22 +270,19 @@ class ContoIntegrationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        from .tasks import import_conto_sales, sync_conto_stock
+        resultados = {}
+        try:
+            if what in ('stock', 'todo'):
+                resultados['stock'] = StockSynchronizer(integration).run().summary
+            if what in ('ventas', 'todo'):
+                resultados['ventas'] = SalesImporter(integration).run().summary
+        except ContoError as exc:
+            return Response(
+                {'success': False, 'error': str(exc), 'resultados': resultados},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        queued = []
-        if what in ('stock', 'todo'):
-            sync_conto_stock.delay(integration_id=integration.pk)
-            queued.append('stock')
-        if what in ('ventas', 'todo'):
-            import_conto_sales.delay(integration_id=integration.pk)
-            queued.append('ventas')
-
-        return Response(
-            {'success': True,
-             'encolado': queued,
-             'mensaje': 'Sincronización encolada. Consultá el estado en unos segundos.'},
-            status=status.HTTP_202_ACCEPTED
-        )
+        return Response({'success': True, 'resultados': resultados})
 
 
 class ContoSaleViewSet(viewsets.ReadOnlyModelViewSet):
