@@ -28,6 +28,23 @@ app.conf.beat_schedule = {
         'task': 'apps.inventario.tasks.check_low_inventory',
         'schedule': crontab(hour=8, minute=0),  # Every day at 8 AM
     },
+    # Import sales from Conto. The window overlaps the previous run and
+    # duplicates are deduplicated by voucher id, so a missed run self-corrects.
+    'import-conto-sales': {
+        'task': 'apps.integraciones.tasks.import_conto_sales',
+        'schedule': crontab(minute='*/15'),
+    },
+    # Pull catalog state (stock and cost) from Conto
+    'sync-conto-stock': {
+        'task': 'apps.integraciones.tasks.sync_conto_stock',
+        'schedule': crontab(minute='0,30'),
+    },
+    # Re-check that each integration still resolves to its linked account.
+    # The per-sync tripwire only fires when there is data to pull.
+    'verify-conto-links': {
+        'task': 'apps.integraciones.tasks.verify_conto_links',
+        'schedule': crontab(hour=7, minute=30),
+    },
 }
 
 @app.task(bind=True)
