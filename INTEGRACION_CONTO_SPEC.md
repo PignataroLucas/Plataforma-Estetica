@@ -47,7 +47,13 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 | Tests (108) | ✅ Hecho |
 | Pantalla de configuración en el frontend | ⬜ Pendiente |
 
-Del lado de Conto: el sistema de `ApiToken` y la corrección de canales históricos ya están. Los tres endpoints, no.
+Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. Falta la cuenta de prueba con la nota de crédito y la venta cancelada.
+
+> ### Bloqueante para producción: el envío y el campo `total`
+>
+> **No pasar a la Fase 3 hasta resolverlo.** Ver §15. En la prueba local, 40 de 115 vouchers tienen un `total` que no incluye la línea de ENVIO, mientras los otros 75 sí. Son 240.175 sobre 7,5M — un 3%. Según cuál de los dos números sea el correcto, podríamos estar inventando esa facturación.
+>
+> En local no importa: la base es descartable. En producción escribiría 3% de más en los libros reales.
 
 **Convención de nombres:** el código va en inglés y la UI en español, según [CODING_CONVENTIONS.md](CODING_CONVENTIONS.md). Por eso los modelos son `ContoIntegration` y `ContoSale`, con `verbose_name` y `help_text` en español.
 
@@ -175,15 +181,24 @@ Un ítem de tipo `PRODUCTO` sin SKU, o con un SKU que no resuelve, **igual regis
 
 ### 5.2 — Mapeo de medio de pago
 
-| `medio_pago` | `gateway_origen` | `Transaction.payment_method` |
-|---|---|---|
-| `transfer` | cualquiera | `BANK_TRANSFER` |
-| `card` | contiene `mercadopago` | `MERCADOPAGO` |
-| `card` | otro valor conocido | según tabla configurable |
-| `card` | `null` o desconocido | `default_payment_method` |
-| ausente | — | `default_payment_method` |
+Conto confirmó que `medio_pago` tiene **seis valores**, no dos como se había informado al principio: `transfer`, `card`, `cash`, `check`, `mercadopago`, `mercadolibre`.
 
-La tabla de gateways vive en configuración, no en código, para poder agregar valores sin deploy. **No se parsea el campo de notas** de Conto: es texto libre y se rompe en silencio.
+`gateway_origen` gana cuando se lo reconoce: es el gateway crudo que informa Tienda Nube, así que distingue Pago Nube de Mercado Pago, algo que `medio_pago` no puede cuando dice `card`.
+
+| Señal | `Transaction.payment_method` |
+|---|---|
+| `gateway_origen` contiene `mercadopago` | `MERCADOPAGO` |
+| `medio_pago = cash` | `CASH` |
+| `medio_pago = transfer` | `BANK_TRANSFER` |
+| `medio_pago = mercadopago` | `MERCADOPAGO` |
+| `medio_pago = mercadolibre` | `MERCADOPAGO` (se liquida por Mercado Pago) |
+| `medio_pago = check` | `OTHER` (no existe cheque de nuestro lado) |
+| `medio_pago = card` con gateway desconocido o nulo | `default_payment_method` |
+| ausente | `default_payment_method` |
+
+Para el canal `tiendanube` —el único que se importa por defecto— los valores reales son solo `mercadopago` o `transfer`, así que en la práctica el mapeo es exacto.
+
+**No se parsea el campo de notas** de Conto. En las ventas de concesionario el medio de pago real solo existe ahí como texto libre, y Conto decidió no exponerlo justamente para evitar ese parseo. Ese canal no se importa.
 
 ### 5.3 — Notas de crédito
 
@@ -235,6 +250,8 @@ Ambas vías distinguen dos clases de error. Token revocado, cuenta cruzada o cue
 
 **Decidido: se importa desde julio de 2026.** Se carga `import_from = 2026-07-01 00:00` (hora Argentina) al configurar la integración.
 
+Vale saber que **el histórico completo es importable**: Conto confirmó que el canal es confiable para todos los registros, así que no hay fecha de corte técnica. Si en algún momento se quiere traer todo, se mueve `import_from` hacia atrás y se limpia `last_sales_sync`.
+
 ## 7 — Falla visible
 
 Si el token se revoca o rota en Conto, la sincronización empieza a recibir 401. Eso tiene que aparecer como alerta en la pantalla de estado, no simplemente dejar de traer datos. Una integración que muere en silencio se descubre en el cierre de mes con semanas de ventas faltando — es el modo de falla más caro y el más fácil de prevenir.
@@ -275,12 +292,25 @@ El orden importa:
 
    Chequea los tres endpoints y reporta cada requisito. Pide el token por consola para que no quede en el historial. Mientras haya `FALLA`, no tiene sentido seguir.
 
-2. Correr **"Corregir canales"** en Conto. Las ventas históricas quedaron marcadas como `presencial` aunque vinieran de Tienda Nube; si se importa antes, el histórico entra clasificado mal. Es idempotente, se puede repetir.
-3. Cargar la integración en Django admin con `base_url`, token e `import_from`.
-4. Verificar la vinculación y confirmar el nombre de cuenta que devuelve Conto.
-5. Activar con `channels_to_import = ['tiendanube']`.
-6. Primera corrida de stock, revisar los SKU que no matchean.
-7. Primera corrida de ventas sobre una ventana corta antes de ampliar `import_from` al histórico completo.
+2. Cargar la integración en Django admin con la `base_url`, el token e `import_from`.
+3. Verificar la vinculación y confirmar el nombre de cuenta que devuelve Conto.
+4. Activar con `channels_to_import = ['tiendanube']`.
+5. Primera corrida de stock, revisar los SKU que no matchean.
+6. Primera corrida de ventas sobre una ventana corta antes de ampliar `import_from`.
+
+**La corrección de canales históricos ya no hace falta.** Estaba como paso previo obligatorio, pero Conto confirmó que el importador de Tienda Nube siempre asignó el canal bien, y que la API además lo deriva del prefijo del número de comprobante (`TN-`, `ML-`, `CC-`), recurriendo al campo solo cuando no hay prefijo. El canal es confiable para todo el histórico.
+
+**Datos de conexión confirmados:**
+
+| Qué | Valor |
+|---|---|
+| `base_url` | `https://conto-production.up.railway.app` |
+| Red privada | No aplica: Conto corre en un proyecto de Railway distinto, y el networking privado solo funciona dentro de un mismo proyecto |
+| Rate limit | 60 requests por minuto, por token |
+
+El rate limit no es un problema: una corrida completa son 3 requests más una por página de resultados.
+
+Del lado de Conto el token se guarda hasheado con SHA-256, cualquier método que no sea GET se rechaza con 403, el alcance por empresa se resuelve en el origen y es revocable individualmente con registro de último uso.
 
 ## 10 — Estimación restante
 
@@ -301,7 +331,7 @@ Todos los endpoints requieren rol `ADMIN` y están acotados al centro del usuari
 | `GET/POST/PATCH /api/integraciones/conto/` | Configuración. `center` sale del usuario, `token` es write-only |
 | `POST /api/integraciones/conto/{id}/verificar/` | Pregunta a Conto de qué cuenta es el token y lo guarda |
 | `GET /api/integraciones/conto/{id}/estado/` | Contadores, últimos errores y alertas |
-| `POST /api/integraciones/conto/{id}/sincronizar/` | Encola un sync ahora (`ventas`, `stock` o `todo`) |
+| `POST /api/integraciones/conto/{id}/sincronizar/` | Corre un sync ahora (`ventas`, `stock` o `todo`) |
 | `GET /api/integraciones/conto-ventas/` | Vouchers importados. Filtrable por `status`, `type`, `channel` |
 | `POST /api/integraciones/conto-ventas/{id}/reprocesar/` | Reprocesa desde el payload guardado, sin consultar Conto |
 
@@ -335,3 +365,73 @@ Configuración del servicio de cron:
 Con `--que todo` el stock se sincroniza cada 15 minutos en vez de cada 30. Es inofensivo: es una lectura de estado, idempotente. Un solo cron en lugar de dos.
 
 Migrar a Celery más adelante es configuración, no código: las tasks ya están escritas y registradas en el beat schedule. Tiene sentido el día que haya un segundo motivo, por ejemplo cuando vuelvan los recordatorios de WhatsApp.
+
+---
+
+## 13 — Compras y gastos (fase 2)
+
+Conto es el sistema de registro del inventario en las dos direcciones: las compras lo hacen subir, las ventas lo hacen bajar. **La Plataforma Estética importa ambas como transacciones financieras** — ventas como ingreso, compras como gasto — y su módulo de inventario queda como espejo.
+
+Eso responde la pregunta que quedó abierta al principio: el inventario de la plataforma **no reemplaza a Conto, lo refleja**.
+
+**Estado actual:** las compras no se están cargando en la plataforma, así que esos gastos hoy no se registran de nuestro lado. No es una regresión, es algo que todavía no existe.
+
+**Por qué el sync de stock no genera el gasto.** `update_stock` usa `.update()` de queryset, que no dispara signals. Si los disparara, cada sincronización generaría un gasto fantasma por producto, cada 15 minutos.
+
+**Por qué no se infiere del delta de stock.** Dos motivos que lo descartan:
+
+- La primera sincronización llevaría el stock local de 0 a los valores reales de Conto. Interpretado como compra, sería un gasto falso enorme.
+- Un aumento de stock no siempre es una compra: puede ser un ajuste por conteo, una devolución, una corrección o un traslado. Adivinar ensucia los gastos con datos inventados.
+
+**La solución:** un endpoint `GET /api/compras/` en Conto, con la misma forma que ventas. De nuestro lado es casi el mismo código que `SalesImporter`, creando `EXPENSE` en la categoría "Insumos y Productos" en vez de `INCOME_PRODUCT`. Especificado en el §12 de `CONTO_API_REQUIREMENTS.md`.
+
+**Riesgo a manejar cuando eso exista:** hoy la plataforma genera el gasto sola al crear un producto con stock y costo ([signals.py:11](backend/apps/inventario/signals.py:11)) y al usar `ajustar_stock` con tipo ENTRADA ([views.py:97](backend/apps/inventario/views.py:97)). Con las compras llegando de Conto, esas dos vías tienen que desactivarse para los productos que Conto maneja, o la misma compra se cuenta dos veces.
+
+Vale notar que `create_initial_stock_movement` es discutible incluso hoy: crear la ficha de un producto con un stock inicial no es lo mismo que haber comprado ese stock en ese momento.
+
+---
+
+## 15 — Bloqueante: qué representa el campo `total`
+
+**Estado: en stand by, esperando respuesta de Conto.**
+
+Detectado el 2026-08-06 en la prueba local contra la cuenta real (115 vouchers de Tienda Nube importados desde el 1 de julio).
+
+**El hallazgo.** La cuenta del import es exacta contra las líneas: productos menos descuentos prorrateados da al centavo lo que quedó en `INCOME_PRODUCT`. Pero contra el campo `total` de Conto hay 240.175 de diferencia, y **en los 40 vouchers que difieren la diferencia es exactamente igual a la línea de ENVIO**.
+
+Ejemplo — voucher `f259e41f`, orden TN 2037087304:
+
+```
+PRODUCTO   18.900   CONTORNO DE OJOS
+PRODUCTO   97.020   RUTINA FULL PIEL NORMAL A SECA
+ENVIO       6.231   Envío - Pedido TN #1054
+DESCUENTO  11.592   Descuento Transferencia / Depósito
+
+total de Conto:  104.328  =  115.920 − 11.592   (sin el envío)
+nuestro neto:    110.559  =  115.920 − 11.592 + 6.231
+```
+
+De los 477.331 de envío del período, 240.175 quedan afuera del `total` y 237.156 adentro. O sea que Conto no es consistente en esto, o hay algo que distingue esos 40 casos.
+
+**Las dos lecturas posibles:**
+
+1. **`total` es lo que pagó el cliente.** Entonces en esos 40 el envío fue gratis, lo absorbió el centro, y la línea de ENVIO es un **costo** y no un ingreso. Registrarla como `INCOME_OTHER` inventa 240.175 de facturación.
+2. **`total` se calcula mal y las líneas son la verdad.** Nuestra cuenta está bien y no hay nada que cambiar.
+
+**La pregunta a Conto:** ¿qué representa `total` exactamente, es lo que pagó el cliente? Y donde no incluye el envío, ¿es porque fue gratis o es un problema del cálculo?
+
+**Lo propuesto, pendiente de esa respuesta:** que el import detecte cuando las líneas no suman el `total` declarado y marque el voucher para revisión, en vez de importarlo en silencio. Eso vale independientemente de cuál lectura gane. Qué número manda es una decisión de plata, no técnica.
+
+## 14 — Pendiente: datos personales en el payload guardado
+
+Conto activó `payload_origen`, que guarda el JSON crudo de cada pedido de Tienda Nube. Ese JSON **contiene datos personales del comprador**, y Conto implementó su purga automática vía el webhook `customers/redact` de Tienda Nube.
+
+**Nuestra copia no se purga.** `ContoSale.payload` guarda la respuesta completa de Conto, así que si `payload_origen` viene incluido, esos datos quedan replicados de nuestro lado sin nada que los borre cuando el cliente ejerce el derecho al olvido.
+
+El proyecto declara cumplimiento GDPR y derecho a la erradicación, así que conviene resolverlo. Tres opciones, en orden de preferencia:
+
+1. **Descartar `payload_origen` antes de guardar el payload.** Es lo más simple y no perdemos nada operativo: ese campo servía para reconciliar contra Tienda Nube, y para eso alcanza con `orden_externa_id`.
+2. Guardarlo y purgarlo con la misma señal, lo que implica que Conto la exponga.
+3. Aplicar una retención: borrar el payload de vouchers procesados con más de X meses.
+
+No bloquea la puesta en marcha, pero conviene decidirlo antes de importar el histórico completo.

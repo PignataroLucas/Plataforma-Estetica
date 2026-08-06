@@ -38,21 +38,25 @@ class ContoIntegration(models.Model):
     center = models.OneToOneField(
         CentroEstetica,
         on_delete=models.CASCADE,
-        related_name='conto_integration'
+        related_name='conto_integration',
+        verbose_name='Centro estética'
     )
     branch = models.ForeignKey(
         Sucursal,
         on_delete=models.PROTECT,
         related_name='conto_integrations',
+        verbose_name='Sucursal',
         help_text="Sucursal a la que se imputan las ventas y el stock de Conto"
     )
 
     # Credentials
     base_url = models.URLField(
+        verbose_name='URL de Conto',
         help_text="URL base de la API de Conto, sin barra final"
     )
     token = models.CharField(
         max_length=255,
+        verbose_name='Token',
         help_text="Token de solo lectura generado en Conto. No se muestra en la API"
     )
 
@@ -62,40 +66,48 @@ class ContoIntegration(models.Model):
         null=True,
         blank=True,
         unique=True,
+        verbose_name='ID de cuenta en Conto',
         help_text="Se completa automáticamente al verificar la vinculación"
     )
     conto_account_name = models.CharField(
         max_length=200,
         blank=True,
+        verbose_name='Nombre de cuenta en Conto',
         help_text="Nombre de la cuenta en Conto, para que un humano confirme la vinculación"
     )
     link_verified_at = models.DateTimeField(
         null=True,
         blank=True,
+        verbose_name='Vinculación verificada el',
         help_text="Última vez que se validó la identidad contra Conto"
     )
 
     # Configuration
     is_active = models.BooleanField(
         default=False,
+        verbose_name='Activa',
         help_text="Se activa recién cuando la vinculación fue verificada"
     )
     default_payment_method = models.CharField(
         max_length=20,
         choices=Transaction.PaymentMethod.choices,
         default=Transaction.PaymentMethod.MERCADOPAGO,
+        verbose_name='Medio de pago por defecto',
         help_text="Se usa cuando Conto no informa el medio de pago real"
     )
     channels_to_import = models.JSONField(
         default=default_import_channels,
+        verbose_name='Canales a importar',
         help_text="Canales de Conto a importar. Por defecto solo 'tiendanube'"
     )
     create_missing_clients = models.BooleanField(
         default=True,
+        verbose_name='Crear clientes faltantes',
         help_text="Crear el cliente si no existe en este centro"
     )
     create_missing_products = models.BooleanField(
         default=True,
+        verbose_name='Crear productos faltantes',
         help_text="Crear el producto si el SKU no existe en la sucursal. "
                   "Conto informa costo y precio, así que el producto nace completo"
     )
@@ -104,13 +116,18 @@ class ContoIntegration(models.Model):
     import_from = models.DateTimeField(
         null=True,
         blank=True,
+        verbose_name='Importar ventas desde',
         help_text="No importar ventas anteriores a esta fecha. Obligatorio para la "
                   "primera corrida: evita traer años de histórico sin querer. "
                   "Para ampliar el histórico después, moverla hacia atrás y "
                   "limpiar 'última sincronización de ventas'"
     )
-    last_stock_sync = models.DateTimeField(null=True, blank=True)
-    last_sales_sync = models.DateTimeField(null=True, blank=True)
+    last_stock_sync = models.DateTimeField(
+        null=True, blank=True, verbose_name='Última sincronización de stock'
+    )
+    last_sales_sync = models.DateTimeField(
+        null=True, blank=True, verbose_name='Última sincronización de ventas'
+    )
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -138,6 +155,17 @@ class ContoIntegration(models.Model):
                 raise ValidationError({
                     'branch': "La sucursal no pertenece a este centro de estética"
                 })
+
+        # Activating without a verified link leaves the account tripwire with
+        # nothing to compare responses against. This lives on the model, not only
+        # on the serializer, so the admin is covered too — the admin is the main
+        # interface until the frontend screen exists.
+        if self.is_active and not self.is_linked:
+            raise ValidationError({
+                'is_active': "Primero verificá la vinculación con Conto. "
+                             "Usá la acción «Verificar vinculación con Conto» "
+                             "en el listado de integraciones."
+            })
 
     @property
     def is_linked(self):

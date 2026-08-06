@@ -169,6 +169,16 @@ class Command(BaseCommand):
         style = self.style.ERROR if result.errors else self.style.SUCCESS
         self.stdout.write(style(f'  {label}: {result.summary}'))
 
+        # The unmatched list is the point of the first stock run: it is the Conto
+        # catalog to pair the local products against.
+        unmatched = getattr(result, 'unmatched', None)
+        if unmatched:
+            self.stdout.write(self.style.WARNING(
+                f'    SKU de Conto sin producto en la sucursal ({len(unmatched)}):'
+            ))
+            for sku in unmatched:
+                self.stdout.write(f'      {sku}')
+
         for error in result.errors[:10]:
             self.stdout.write(self.style.ERROR(f'    - {error}'))
 

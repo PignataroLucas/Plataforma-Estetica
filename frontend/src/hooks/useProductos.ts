@@ -54,7 +54,13 @@ export const useProductos = (): UseProductosReturn => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get('/inventario/productos/', { params })
+      // The API paginates at 20 by default, so without this the list silently
+      // shows only the first page. A product catalog of this size does not need
+      // paging; if it ever grows past a few hundred, add real controls instead
+      // of raising this further (the backend caps page_size at 1000).
+      const response = await api.get('/inventario/productos/', {
+        params: { page_size: 200, ...params },
+      })
       const data = Array.isArray(response.data) ? response.data : response.data.results || []
       setProductos(data)
     } catch (err: any) {

@@ -106,11 +106,14 @@ const VentaUnificadaModal = ({ isOpen, onClose, onSuccess }: VentaUnificadaModal
       setLoadingData(true)
       setError(null)
 
+      // page_size matters here: the API paginates at 20, so without it a product
+      // or service beyond the first page cannot be sold at all — it simply never
+      // appears in the picker.
       const [productosResponse, turnosData, clientesData, serviciosResponse] = await Promise.all([
-        api.get('/inventario/productos/', { params: { activo: true } }),
+        api.get('/inventario/productos/', { params: { activo: true, page_size: 200 } }),
         getTurnosPendientesCobro(),
         getClientes({ activo: true, page_size: 1000 }),
-        api.get('/servicios/servicios/', { params: { activo: true } })
+        api.get('/servicios/servicios/', { params: { activo: true, page_size: 200 } })
       ])
 
       const productosData = productosResponse.data.results || productosResponse.data || []
