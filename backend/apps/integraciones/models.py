@@ -239,6 +239,20 @@ class ContoSale(models.Model):
         help_text="Respuesta cruda de Conto. Permite reprocesar sin volver a consultar"
     )
 
+    # Conto's `total` is what the customer actually paid, taken straight from
+    # Tienda Nube's order.total. The line items, summed with the sign of their
+    # type, must equal it exactly. When they do not, our income breakdown is
+    # wrong even though the sale imported, so it gets flagged rather than trusted.
+    total_discrepancy = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Descuadre contra el total',
+        help_text="Diferencia entre la suma de las líneas y el total informado "
+                  "por Conto. Vacío significa que cuadra"
+    )
+
     # Processing state
     status = models.CharField(
         max_length=20,

@@ -173,9 +173,7 @@ Y lo más importante: **cada centro tiene que ver solo sus propios datos.** Veri
 
 # Fase 3 — Producción
 
-> **No arrancar esta fase todavía.** Queda pendiente la respuesta de Conto sobre qué representa el campo `total` — 40 de 115 vouchers no lo incluyen el envío y otros 75 sí, una diferencia de 240.175 sobre 7,5M. Ver §15 de [INTEGRACION_CONTO_SPEC.md](INTEGRACION_CONTO_SPEC.md).
->
-> En local da igual porque la base es descartable. Acá escribiría un 3% de más en los libros reales.
+> **Antes de arrancar:** confirmá que la reimportación en local dejó los vouchers cuadrando contra el `total` de Conto (columna "Descuadre" en verde en el admin, o cero alertas `VOUCHERS_CON_DESCUADRE`). Era un bug de la API de Conto, ya corregido de su lado, pero hay que verificarlo con datos antes de escribir en los libros reales. Ver §15 de [INTEGRACION_CONTO_SPEC.md](INTEGRACION_CONTO_SPEC.md).
 
 ## 3.1 Commitear y deployar
 

@@ -215,6 +215,22 @@ class ContoIntegrationViewSet(viewsets.ModelViewSet):
                 ),
             })
 
+        # Imported, but our breakdown does not add up to what Conto says the
+        # customer paid. The money is recorded; how it was split is suspect.
+        descuadres = ContoSale.objects.filter(
+            integration=integration, total_discrepancy__isnull=False
+        ).count()
+        if descuadres:
+            alerts.append({
+                'nivel': 'error',
+                'codigo': 'VOUCHERS_CON_DESCUADRE',
+                'mensaje': (
+                    f'{descuadres} venta(s) se importaron con un monto que no '
+                    f'coincide con el total informado por Conto. El ingreso está '
+                    f'registrado, pero el desglose puede estar mal.'
+                ),
+            })
+
         if integration.can_sync:
             if not integration.last_sales_sync:
                 alerts.append({

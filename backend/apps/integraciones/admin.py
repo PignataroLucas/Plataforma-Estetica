@@ -258,6 +258,7 @@ class ContoSaleAdmin(admin.ModelAdmin):
         'channel',
         'total_formatted',
         'status_badge',
+        'descuadre',
         'external_order_id',
     ]
     list_filter = ['status', 'type', 'channel', 'integration']
@@ -274,6 +275,7 @@ class ContoSaleAdmin(admin.ModelAdmin):
         'channel',
         'date',
         'total',
+        'total_discrepancy',
         'payload',
         'status',
         'error_message',
@@ -292,6 +294,24 @@ class ContoSaleAdmin(admin.ModelAdmin):
             return '-'
         return format_html('${:,.2f}', obj.total)
     total_formatted.short_description = 'Total'
+
+    def descuadre(self, obj):
+        """
+        Whether our breakdown adds up to what Conto says the customer paid.
+
+        A difference means the income was recorded but split wrong, which is the
+        kind of thing that never surfaces on its own.
+        """
+        if obj.total_discrepancy is None:
+            return format_html(
+                '<span style="color: #065F46;">cuadra</span>'
+            )
+        return format_html(
+            '<span style="background-color: #FEE2E2; color: #DC2626; '
+            'padding: 3px 8px; border-radius: 4px;">{:+,.2f}</span>',
+            obj.total_discrepancy
+        )
+    descuadre.short_description = 'Descuadre'
 
     def status_badge(self, obj):
         colors = {

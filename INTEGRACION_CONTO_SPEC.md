@@ -49,11 +49,9 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 
 Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. Falta la cuenta de prueba con la nota de crédito y la venta cancelada.
 
-> ### Bloqueante para producción: el envío y el campo `total`
+> ### Resuelto: el envío y el campo `total`
 >
-> **No pasar a la Fase 3 hasta resolverlo.** Ver §15. En la prueba local, 40 de 115 vouchers tienen un `total` que no incluye la línea de ENVIO, mientras los otros 75 sí. Son 240.175 sobre 7,5M — un 3%. Según cuál de los dos números sea el correcto, podríamos estar inventando esa facturación.
->
-> En local no importa: la base es descartable. En producción escribiría 3% de más en los libros reales.
+> Era un bug de la API de Conto, ya corregido de su lado. Ver §15. Queda pendiente **reimportar en local después de su deploy** y confirmar que los 115 vouchers cuadran contra el `total`.
 
 **Convención de nombres:** el código va en inglés y la UI en español, según [CODING_CONVENTIONS.md](CODING_CONVENTIONS.md). Por eso los modelos son `ContoIntegration` y `ContoSale`, con `verbose_name` y `help_text` en español.
 
@@ -391,9 +389,28 @@ Vale notar que `create_initial_stock_movement` es discutible incluso hoy: crear 
 
 ---
 
-## 15 — Bloqueante: qué representa el campo `total`
+## 15 — Resuelto: qué representa el campo `total`
 
-**Estado: en stand by, esperando respuesta de Conto.**
+**Estado: era un bug de la API de Conto. Corregido de su lado el 2026-08-06.**
+
+**Qué era.** Conto exponía `precio_unitario` con el **precio de lista** en vez del precio efectivo. Un envío bonificado al 100% llegaba con `precio_unitario: 6231` cuando su aporte real al total era 0. No pasaba solo con el envío: cualquier ítem con descuento tenía el mismo desfase, porque el precio de lista es mayor a lo cobrado.
+
+**Qué representa `total`.** Lo que efectivamente pagó el cliente, tomado directo de `order.total` de Tienda Nube, sin recalcular. Es autoritativo.
+
+**Los 40 casos eran envío gratis**, no un error de cálculo. La línea de ENVIO existe con su precio para que quede constancia de cuánto valía, pero bonificada. El costo que absorbió el centro se registra aparte en Conto, como egreso, junto con la comisión del gateway.
+
+**El fix de Conto:** `precio_unitario` ahora es el precio efectivo, más un campo nuevo `precio_lista` informativo, que permite distinguir un envío gratis de uno inexistente. Nuestro código no necesitó cambios en el cálculo: la fórmula ya era "líneas sumadas con el signo de su tipo".
+
+**Lo que sí se agregó de nuestro lado.** Ahora que `total` es autoritativo y las líneas tienen que sumarlo exacto, dejó de ser una duda y pasó a ser un invariante verificable. `ContoSale.total_discrepancy` guarda la diferencia cuando no cuadra:
+
+- Si cuadra, queda en `null`.
+- Si no cuadra, **la venta se importa igual** —la plata entró, descartarla sería peor— pero queda marcada, aparece en rojo en el admin y dispara la alerta `VOUCHERS_CON_DESCUADRE` en el endpoint de estado.
+
+La diferencia ya no es una decisión de criterio: significa que nuestro desglose está mal, o que Conto manda algo inesperado. Cualquiera de las dos merece que alguien mire.
+
+**Pendiente:** reimportar en local después del deploy de Conto y confirmar que los 115 vouchers quedan con `total_discrepancy` en null.
+
+**Sin usar todavía:** `precio_lista`. Podría servir para dejar constancia en las notas de la transacción de que un envío se entregó gratis y cuánto valía.
 
 Detectado el 2026-08-06 en la prueba local contra la cuenta real (115 vouchers de Tienda Nube importados desde el 1 de julio).
 

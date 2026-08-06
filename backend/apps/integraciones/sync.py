@@ -443,8 +443,39 @@ class SalesImporter:
             )
 
         sale.transactions.set(created)
+        sale.total_discrepancy = self._reconcile(created, voucher)
         self._set_status(sale, ContoSale.Status.PROCESSED, processed=True)
         return True
+
+    def _reconcile(self, created, voucher):
+        """
+        Check our income adds up to what Conto says the customer paid.
+
+        `total` comes straight from Tienda Nube's `order.total`, and Conto
+        confirmed the line items — summed with the sign of their type — equal it
+        exactly. So a difference is not a judgement call about shipping: it means
+        our breakdown is wrong, or Conto is sending something unexpected.
+
+        Returns the difference, or None when it reconciles. The sale is imported
+        either way: the money did come in, and dropping it would be worse than
+        importing it flagged.
+        """
+        declared = to_decimal(voucher.get('total'))
+        if declared <= ZERO:
+            return None
+
+        imported = sum((t.amount for t in created), ZERO)
+        difference = imported - declared
+
+        if abs(difference) <= Decimal('0.01'):
+            return None
+
+        logger.warning(
+            "Voucher %s de Conto no cuadra: importamos %s y el total declarado "
+            "es %s (diferencia %s)",
+            voucher.get('id'), imported, declared, difference,
+        )
+        return difference
 
     def _spread_discount(self, discount_total, product_items, other_items):
         """
