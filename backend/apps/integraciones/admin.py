@@ -5,10 +5,13 @@ This is intentionally usable on its own: it lets an admin load the Conto token
 and configure the integration before the frontend screen exists.
 """
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import ContoIntegration, ContoSale
+from .services import ContoClient, ContoError
+from .sync import SalesImporter, StockSynchronizer
 
 
 class ContoIntegrationForm(forms.ModelForm):
@@ -89,6 +92,141 @@ class ContoIntegrationAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    actions = [
+        'verificar_vinculacion',
+        'sincronizar_stock',
+        'sincronizar_stock_completo',
+        'importar_ventas',
+    ]
+
+    @admin.action(description='Verificar vinculación con Conto')
+    def verificar_vinculacion(self, request, queryset):
+        """
+        Ask Conto which account each token belongs to, and store the answer.
+
+        Refuses to re-link an integration whose token now resolves to a
+        different account: that is the scenario the isolation rules exist to
+        prevent, and an admin action has nowhere to ask for confirmation. Use the
+        API endpoint for that, which requires an explicit flag.
+        """
+        for integration in queryset:
+            try:
+                account = ContoClient(integration).get_account()
+            except ContoError as exc:
+                self.message_user(
+                    request, f'{integration}: {exc}', level=messages.ERROR
+                )
+                continue
+
+            received = account.get('cuenta_id')
+            if not received:
+                self.message_user(
+                    request,
+                    f"{integration}: Conto no devolvió 'cuenta_id'.",
+                    level=messages.ERROR,
+                )
+                continue
+
+            previous = integration.conto_account_id
+            if previous and previous != received:
+                self.message_user(
+                    request,
+                    f'{integration}: el token resuelve a la cuenta {received!r} '
+                    f'y está vinculada a {previous!r}. No se cambió nada. '
+                    f'Cambiar de cuenta requiere confirmación explícita por API.',
+                    level=messages.ERROR,
+                )
+                continue
+
+            integration.conto_account_id = received
+            integration.conto_account_name = account.get('nombre') or ''
+            integration.link_verified_at = timezone.now()
+            integration.save(update_fields=[
+                'conto_account_id', 'conto_account_name',
+                'link_verified_at', 'updated_at',
+            ])
+
+            activa = account.get('activa', True)
+            level = messages.SUCCESS if activa else messages.WARNING
+            self.message_user(
+                request,
+                f'{integration}: vinculado a "{integration.conto_account_name}" '
+                f'({received}). Confirmá que sea la cuenta correcta antes de activar.'
+                + ('' if activa else ' Atención: la cuenta está desactivada en Conto.'),
+                level=level,
+            )
+
+    @admin.action(description='Sincronizar stock desde Conto (incremental)')
+    def sincronizar_stock(self, request, queryset):
+        """Only what changed in Conto since the last run."""
+        self._run(request, queryset, 'Stock',
+                  lambda i: StockSynchronizer(i).run())
+
+    @admin.action(description='Sincronizar stock desde Conto (catálogo completo)')
+    def sincronizar_stock_completo(self, request, queryset):
+        """
+        Re-pull the whole catalog, ignoring the cursor.
+
+        Needed after changing what the sync does — turning on
+        `create_missing_products`, for instance. The incremental run would return
+        nothing, because nothing changed in Conto: the change was on our side.
+        """
+        self._run(request, queryset, 'Stock (completo)',
+                  lambda i: StockSynchronizer(i).run(full=True))
+
+    @admin.action(description='Importar ventas desde Conto')
+    def importar_ventas(self, request, queryset):
+        self._run(request, queryset, 'Ventas',
+                  lambda i: SalesImporter(i).run())
+
+    def _run(self, request, queryset, label, work):
+        """
+        Run a synchronization inline and report the summary.
+
+        Inline because there is no Celery worker deployed. A very large first
+        import should go through the `sincronizar_conto` command instead, to
+        avoid the request timing out.
+        """
+        for integration in queryset:
+            if not integration.can_sync:
+                self.message_user(
+                    request,
+                    f'{integration}: tiene que estar vinculada y activa.',
+                    level=messages.WARNING,
+                )
+                continue
+
+            try:
+                result = work(integration)
+            except ContoError as exc:
+                self.message_user(
+                    request, f'{integration} — {label}: {exc}', level=messages.ERROR
+                )
+                continue
+
+            level = messages.ERROR if result.errors else messages.SUCCESS
+            self.message_user(
+                request, f'{integration} — {label}: {result.summary}', level=level
+            )
+
+            # The unmatched list is the point of the first stock run: it is the
+            # Conto catalog to pair the local products against. A count alone
+            # does not help.
+            unmatched = getattr(result, 'unmatched', None)
+            if unmatched:
+                shown = ', '.join(unmatched[:40])
+                extra = f' … y {len(unmatched) - 40} más' if len(unmatched) > 40 else ''
+                self.message_user(
+                    request,
+                    f'SKU de Conto sin producto en la sucursal: {shown}{extra}',
+                    level=messages.WARNING,
+                )
+
+            for error in (result.errors or [])[:10]:
+                self.message_user(
+                    request, f'{label} — error: {error}', level=messages.ERROR
+                )
 
     def link_status(self, obj):
         """Show whether the account identity was verified against Conto"""

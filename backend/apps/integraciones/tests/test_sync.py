@@ -459,7 +459,20 @@ class TestCreditNotes:
 @pytest.mark.django_db
 class TestPaymentMethod:
 
+    # Values confirmed by Conto: transfer, card, cash, check, mercadopago,
+    # mercadolibre. The default configured in these fixtures is MERCADOPAGO.
     @pytest.mark.parametrize('payment,gateway,expected', [
+        ('cash', None, 'CASH'),
+        ('check', None, 'OTHER'),
+        ('mercadopago', None, 'MERCADOPAGO'),
+        ('mercadolibre', None, 'MERCADOPAGO'),
+        # Valores reales observados en la cuenta de AME: vienen con guion.
+        ('mercadopago', 'mercado-pago', 'MERCADOPAGO'),
+        ('card', 'mercado-pago', 'MERCADOPAGO'),
+        ('card', 'MERCADO PAGO', 'MERCADOPAGO'),
+        ('card', 'pago-nube', 'OTHER'),
+        ('card', 'pagonube', 'OTHER'),
+        (None, 'mercado-pago', 'MERCADOPAGO'),
         ('transfer', None, 'BANK_TRANSFER'),
         ('transfer', 'lo-que-sea', 'BANK_TRANSFER'),
         ('card', 'mercadopago', 'MERCADOPAGO'),
@@ -487,6 +500,33 @@ class TestPaymentMethod:
         SalesImporter(integration, client=client).run()
 
         assert Transaction.objects.get().payment_method == 'CREDIT_CARD'
+
+    def test_a_known_method_is_not_overridden_by_the_default(self):
+        """
+        Regression guard: `cash` used to fall through to the default, because the
+        mapping only handled `transfer` and `card`. Conto reports six values.
+        """
+        _, branch, integration = make_syncable_center(
+            'A', 'cnt_aaa', default_payment_method='MERCADOPAGO'
+        )
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(payment='cash', gateway=None)])
+        SalesImporter(integration, client=client).run()
+
+        assert Transaction.objects.get().payment_method == 'CASH'
+
+    def test_gateway_wins_over_a_generic_method(self):
+        """`card` says a card was used but not which gateway processed it."""
+        _, branch, integration = make_syncable_center(
+            'A', 'cnt_aaa', default_payment_method='CREDIT_CARD'
+        )
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(payment='card', gateway='mercadopago')])
+        SalesImporter(integration, client=client).run()
+
+        assert Transaction.objects.get().payment_method == 'MERCADOPAGO'
 
 
 # --------------------------------------------------------------------------- #
@@ -574,6 +614,72 @@ class TestGuards:
 
         with pytest.raises(ContoError, match='importar desde'):
             SalesImporter(integration, client=FakeClient(sales=[])).run()
+
+    def test_a_sale_older_than_import_from_is_skipped(self):
+        """
+        Conto filters `desde` by `actualizado_en`, so an old voucher touched
+        recently arrives with its original date. Importing it would duplicate a
+        period the center already loaded by hand.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        integration.import_from = timezone.make_aware(
+            timezone.datetime(2026, 7, 1)
+        )
+        integration.save()
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[
+            voucher(voucher_id='vieja', date='2026-05-14'),
+            voucher(voucher_id='nueva', date='2026-07-15'),
+        ])
+        result = SalesImporter(integration, client=client).run()
+
+        assert result.processed == 1
+        assert result.skipped == 1
+        assert Transaction.objects.count() == 1
+        assert ContoSale.objects.get(voucher_id='vieja').status == \
+            ContoSale.Status.SKIPPED
+        assert ContoSale.objects.get(voucher_id='nueva').status == \
+            ContoSale.Status.PROCESSED
+
+    def test_a_sale_on_the_import_from_date_is_included(self):
+        """The boundary is inclusive: `import_from` is the first day imported."""
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        integration.import_from = timezone.make_aware(
+            timezone.datetime(2026, 7, 1)
+        )
+        integration.save()
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(date='2026-07-01')])
+        result = SalesImporter(integration, client=client).run()
+
+        assert result.processed == 1
+
+    def test_widening_import_from_lets_a_skipped_sale_through(self):
+        """A voucher skipped for being too old must not stay skipped forever."""
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        integration.import_from = timezone.make_aware(
+            timezone.datetime(2026, 7, 1)
+        )
+        integration.save()
+        make_product(branch, 'SER-VITC-30')
+
+        payload = voucher(date='2026-05-14')
+        SalesImporter(integration, client=FakeClient(sales=[payload])).run()
+        assert Transaction.objects.count() == 0
+
+        # Se amplía el histórico y se limpia el cursor, como indica la guía.
+        integration.import_from = timezone.make_aware(
+            timezone.datetime(2026, 1, 1)
+        )
+        integration.last_sales_sync = None
+        integration.save()
+
+        SalesImporter(integration, client=FakeClient(sales=[payload])).run()
+
+        assert Transaction.objects.count() == 1
+        assert ContoSale.objects.get().status == ContoSale.Status.PROCESSED
 
     def test_voucher_without_id_is_an_error(self):
         _, _, integration = make_syncable_center('A', 'cnt_aaa')

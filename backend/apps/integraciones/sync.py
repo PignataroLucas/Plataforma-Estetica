@@ -16,6 +16,7 @@ Keeping stock out of the sales import is not an optimization: creating a
 transaction through the inventory signal.
 """
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -37,6 +38,40 @@ logger = logging.getLogger(__name__)
 SALES_OVERLAP = timedelta(minutes=5)
 
 ZERO = Decimal('0.00')
+
+# Conto's `medio_pago` values, confirmed by their team: six, not the two
+# originally reported. Anything unlisted falls back to the integration's
+# configured default rather than being guessed.
+#
+# `card` is deliberately absent: it says a card was used but not which gateway
+# processed it, so it is resolved through `gateway_origen` instead.
+PAYMENT_METHOD_MAP = {
+    'cash': Transaction.PaymentMethod.CASH,
+    'transfer': Transaction.PaymentMethod.BANK_TRANSFER,
+    'mercadopago': Transaction.PaymentMethod.MERCADOPAGO,
+    # Mercado Libre settles through Mercado Pago.
+    'mercadolibre': Transaction.PaymentMethod.MERCADOPAGO,
+    # No cheque option exists on our side.
+    'check': Transaction.PaymentMethod.OTHER,
+}
+
+# Matched against `gateway_origen`, which Conto exposes raw from Tienda Nube.
+#
+# Keys are normalized (lowercase, letters and digits only) because the real
+# values arrive hyphenated — `mercado-pago`, `pago-nube` — and enumerating every
+# spelling variant is how this silently stops matching.
+GATEWAY_MAP = {
+    'mercadopago': Transaction.PaymentMethod.MERCADOPAGO,
+    # Pago Nube is Tienda Nube's own card gateway, not Mercado Pago. Mapping it
+    # to MERCADOPAGO would put money in the wrong bucket of the cash breakdown;
+    # OTHER is at least honest. Revisit if the split matters.
+    'pagonube': Transaction.PaymentMethod.OTHER,
+}
+
+
+def normalize_gateway(value):
+    """Lowercase and strip anything that is not a letter or a digit."""
+    return re.sub(r'[^a-z0-9]', '', (value or '').lower())
 
 
 def to_decimal(value):
@@ -296,6 +331,16 @@ class SalesImporter:
             result.skipped += 1
             return
 
+        # `import_from` has to be enforced here, on the sale date, not just as
+        # the API cursor. Conto filters `desde` by `actualizado_en`, so an old
+        # voucher touched recently arrives with its original date — which would
+        # import periods the center already loaded by hand and double-count the
+        # revenue. Ask for a window and you get updates, not dates.
+        if self._is_before_import_window(sale.date):
+            self._set_status(sale, ContoSale.Status.SKIPPED)
+            result.skipped += 1
+            return
+
         if status == self.CANCELLED:
             reverted = self._revert(sale)
             self._set_status(sale, ContoSale.Status.SKIPPED)
@@ -323,6 +368,17 @@ class SalesImporter:
             result.processed += 1
         else:
             result.pending += 1
+
+    def _is_before_import_window(self, sale_date):
+        """
+        True when the sale predates `import_from` and must not be imported.
+
+        Compared in local time, because `import_from` is set by a human thinking
+        in calendar days and `fecha` already arrives resolved in Argentine time.
+        """
+        if not sale_date or not self.integration.import_from:
+            return False
+        return sale_date < timezone.localtime(self.integration.import_from).date()
 
     # -- sales ------------------------------------------------------------- #
 
@@ -526,15 +582,28 @@ class SalesImporter:
             raise ValueError(f"Fecha inválida en el voucher: {value!r}")
 
     def _payment_method(self, voucher):
-        """See INTEGRACION_CONTO_SPEC.md §5.2. The notes field is never parsed."""
-        method = (voucher.get('medio_pago') or '').lower()
-        gateway = (voucher.get('gateway_origen') or '').lower()
+        """
+        Resolve the payment method, preferring the most specific signal.
 
-        if method == 'transfer':
-            return Transaction.PaymentMethod.BANK_TRANSFER
-        if method == 'card':
-            if 'mercadopago' in gateway or 'mercado pago' in gateway:
-                return Transaction.PaymentMethod.MERCADOPAGO
+        `gateway_origen` wins when recognised: it is the raw gateway Tienda Nube
+        reports, so it distinguishes Pago Nube from Mercado Pago, which
+        `medio_pago` cannot when it says `card`.
+
+        Conto's notes field is never parsed. For dealership sales the real method
+        only exists there as free text, which is the fragility both sides agreed
+        to avoid — and that channel is not imported anyway.
+
+        See INTEGRACION_CONTO_SPEC.md §5.2.
+        """
+        gateway = normalize_gateway(voucher.get('gateway_origen'))
+        if gateway in GATEWAY_MAP:
+            return GATEWAY_MAP[gateway]
+
+        method = (voucher.get('medio_pago') or '').strip().lower()
+        if method in PAYMENT_METHOD_MAP:
+            return PAYMENT_METHOD_MAP[method]
+
+        # `card` with an unknown or absent gateway, or a value Conto adds later.
         return self.integration.default_payment_method
 
     def _resolve_client(self, data):
