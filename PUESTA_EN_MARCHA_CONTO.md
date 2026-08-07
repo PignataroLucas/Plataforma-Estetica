@@ -173,7 +173,9 @@ Y lo más importante: **cada centro tiene que ver solo sus propios datos.** Veri
 
 # Fase 3 — Producción
 
-> **Antes de arrancar:** confirmá que la reimportación en local dejó los vouchers cuadrando contra el `total` de Conto (columna "Descuadre" en verde en el admin, o cero alertas `VOUCHERS_CON_DESCUADRE`). Era un bug de la API de Conto, ya corregido de su lado, pero hay que verificarlo con datos antes de escribir en los libros reales. Ver §15 de [INTEGRACION_CONTO_SPEC.md](INTEGRACION_CONTO_SPEC.md).
+> **Fase 1 verificada el 2026-08-07:** 41 vouchers importados, $2.790.413,95 contra $2.790.413,95 de Conto, diferencia $0,00 y cero descuadres. El camino de las ventas está validado contra datos reales.
+>
+> Falta la Fase 2 (notas de crédito) antes de escribir en los libros reales, o al menos asumir ese riesgo conscientemente.
 
 ## 3.1 Commitear y deployar
 

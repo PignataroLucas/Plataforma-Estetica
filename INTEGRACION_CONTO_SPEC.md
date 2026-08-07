@@ -49,9 +49,9 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 
 Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. Falta la cuenta de prueba con la nota de crédito y la venta cancelada.
 
-> ### Resuelto: el envío y el campo `total`
+> ### Resuelto y verificado: el envío y el campo `total`
 >
-> Era un bug de la API de Conto, ya corregido de su lado. Ver §15. Queda pendiente **reimportar en local después de su deploy** y confirmar que los 115 vouchers cuadran contra el `total`.
+> Era un bug de la API de Conto, corregido de su lado. Reimportado en local el 2026-08-07 contra su versión corregida: **41 vouchers, $2.790.413,95 contra $2.790.413,95, diferencia $0,00 y cero descuadres.** Ver §15.
 
 **Convención de nombres:** el código va en inglés y la UI en español, según [CODING_CONVENTIONS.md](CODING_CONVENTIONS.md). Por eso los modelos son `ContoIntegration` y `ContoSale`, con `verbose_name` y `help_text` en español.
 
@@ -408,7 +408,20 @@ Vale notar que `create_initial_stock_movement` es discutible incluso hoy: crear 
 
 La diferencia ya no es una decisión de criterio: significa que nuestro desglose está mal, o que Conto manda algo inesperado. Cualquiera de las dos merece que alguien mire.
 
-**Pendiente:** reimportar en local después del deploy de Conto y confirmar que los 115 vouchers quedan con `total_discrepancy` en null.
+**Verificado el 2026-08-07**, reimportando contra la versión corregida de Conto:
+
+| Control | Resultado |
+|---|---|
+| Vouchers procesados | 41 (julio y agosto) |
+| Total según Conto | $2.790.413,95 |
+| Total en la plataforma | $2.790.413,95 |
+| Diferencia | **$0,00** |
+| Vouchers con descuadre | **0** |
+| Transacciones anteriores a `import_from` | 0 |
+| Envíos bonificados sin generar ingreso | 12 |
+| Líneas de producto atribuidas | 76 de 76 |
+
+De paso quedó claro que los $7,5M medidos antes incluían abril y mayo: **el volumen real de Tienda Nube es ~$2,8M por mes.**
 
 **Sin usar todavía:** `precio_lista`. Podría servir para dejar constancia en las notas de la transacción de que un envío se entregó gratis y cuánto valía.
 

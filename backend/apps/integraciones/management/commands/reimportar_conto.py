@@ -77,18 +77,22 @@ class Command(BaseCommand):
             self.stdout.write('No hay nada importado de Conto. Nada que borrar.')
             return
 
+        # Resolved to ids before deleting: Django refuses delete() on a queryset
+        # built with distinct(), which this one is because the link to
+        # transactions goes through a many-to-many.
+        transaction_ids = list(transactions.values_list('pk', flat=True))
+        vouchers = sales.count()
+
         with db_transaction.atomic():
-            borradas = transactions.count()
-            vouchers = sales.count()
-            # The M2M does not cascade, so the transactions go first and by hand.
-            transactions.delete()
+            # The m2m does not cascade, so the transactions go first and by hand.
+            Transaction.objects.filter(pk__in=transaction_ids).delete()
             sales.delete()
             integration.last_sales_sync = None
             integration.save(update_fields=['last_sales_sync', 'updated_at'])
 
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS(
-            f'Borradas {borradas} transacciones y {vouchers} vouchers. '
+            f'Borradas {len(transaction_ids)} transacciones y {vouchers} vouchers. '
             f'Cursor de ventas reseteado.'
         ))
         self.stdout.write(
