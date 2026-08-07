@@ -21,7 +21,12 @@
       "WebSearch",
       "Bash(find:*)",
       "Bash(npx tsc:*)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(ls \"C:/Users/lucas/Desktop/\" | head -50)",
+      "Bash(git ls-tree *)",
+      "Bash(cd \"C:/Users/lucas\" && find . -maxdepth 4 -iname \"*CV*\" -o -maxdepth 4 -iname \"*curriculum*\" 2>/dev/null | grep -v -i \"AppData\\\\|node_modules\\\\|\\\\.git/\" | head -20)",
+      "Bash(ls /c/Windows/Fonts/ 2>/dev/null | grep -i -E \"carlito|calibri\" | head; echo \"---\"; ls \"C:/Users/lucas/AppData/Local/Microsoft/Windows/Fonts/\" 2>/dev/null | grep -i carlito | head)",
+      "Bash(pip install *)"
     ],
     "deny": [],
     "ask": []

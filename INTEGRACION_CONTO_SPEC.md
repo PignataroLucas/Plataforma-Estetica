@@ -44,7 +44,8 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 | Tasks de Celery + entradas en Beat | ✅ Hecho |
 | Comando `verificar_conto` (chequeo de contrato) | ✅ Hecho |
 | Endpoints de backend: config, verificar, estado, reprocesar | ✅ Hecho |
-| Tests (108) | ✅ Hecho |
+| Tests (202 en el backend, 185 de la integración) | ✅ Hecho |
+| `import_from` decidido y verificado contra producción | ✅ 2026-07-01. Ver §6.2 |
 | Pantalla de configuración en el frontend | ⬜ Pendiente |
 
 Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. Falta la cuenta de prueba con la nota de crédito y la venta cancelada.
@@ -70,8 +71,13 @@ backend/apps/integraciones/
 ├── permissions.py  # ✅ Solo rol ADMIN
 ├── views.py        # ✅ Config, verificar, estado, sincronizar, reprocesar
 ├── urls.py         # ✅ Montado en /api/integraciones/
-├── tests/          # ✅ 108 tests
-└── management/commands/verificar_conto.py   # ✅ Chequeo de contrato
+├── tests/          # ✅ 185 tests
+└── management/commands/
+    ├── verificar_conto.py       # ✅ Chequeo de contrato, antes de cargar nada
+    ├── sincronizar_conto.py     # ✅ La corrida real. Es lo que dispara el cron
+    ├── emparejar_sku_conto.py   # ✅ Empareja productos locales con el catálogo
+    ├── reimportar_conto.py      # ✅ Borra lo importado para volver a traerlo
+    └── diagnostico_ingresos.py  # ✅ Desglose por mes para decidir `import_from`
 ```
 
 `services.py` separa dos responsabilidades a propósito: `ContoClient` habla HTTP y no sabe nada de nuestros modelos; `ContoScope` es el **único** lugar que resuelve datos de Conto contra la base, y cada consulta que hace está filtrada por sucursal o centro.
@@ -247,6 +253,19 @@ Ambas vías distinguen dos clases de error. Token revocado, cuenta cruzada o cue
 `import_from` es obligatorio para la primera corrida de ventas. Sin él, la primera sincronización intentaría traer todo el histórico de la cuenta. Para ampliar el histórico después, se mueve la fecha hacia atrás y se limpia `last_sales_sync`; la unicidad de `voucher_id` hace que lo ya importado no se duplique.
 
 **Decidido: se importa desde julio de 2026.** Se carga `import_from = 2026-07-01 00:00` (hora Argentina) al configurar la integración.
+
+**Verificado contra producción el 2026-08-07.** El desglose de `INCOME_PRODUCT` por mes en la sucursal Banfield muestra que **julio y agosto están en cero**: la última venta de producto cargada es de junio. Importar desde el 1 de julio llena un hueco y no puede duplicar nada.
+
+| Mes | Ventas cargadas | Monto |
+|---|---|---|
+| 2026-06 | 3 | $74.995,00 |
+| 2026-05 | 31 | $495.537,25 |
+| 2026-04 | 19 | $345.780,00 |
+| 2026-07 en adelante | **0** | **$0,00** |
+
+La medición se hace con [diagnostico_ingresos](backend/apps/integraciones/management/commands/diagnostico_ingresos.py), que separa las ventas por origen — cargadas a mano, de mostrador (movieron stock) o importadas — porque solo las primeras pueden chocar con un import.
+
+**Decidido también: no se amplía hacia atrás.** Abril, mayo y junio quedan como están, aunque lo cargado a mano en esos meses sea una fracción de los ~$2,8M mensuales que factura Tienda Nube. Traerlos exigiría clasificar 53 transacciones una por una para saber cuáles se duplicarían, y el valor de completar meses ya cerrados no lo justifica.
 
 Vale saber que **el histórico completo es importable**: Conto confirmó que el canal es confiable para todos los registros, así que no hay fecha de corte técnica. Si en algún momento se quiere traer todo, se mueve `import_from` hacia atrás y se limpia `last_sales_sync`.
 
@@ -456,12 +475,23 @@ De los 477.331 de envío del período, 240.175 quedan afuera del `total` y 237.1
 
 Conto activó `payload_origen`, que guarda el JSON crudo de cada pedido de Tienda Nube. Ese JSON **contiene datos personales del comprador**, y Conto implementó su purga automática vía el webhook `customers/redact` de Tienda Nube.
 
-**Nuestra copia no se purga.** `ContoSale.payload` guarda la respuesta completa de Conto, así que si `payload_origen` viene incluido, esos datos quedan replicados de nuestro lado sin nada que los borre cuando el cliente ejerce el derecho al olvido.
+**Corregido el 2026-08-07: `payload_origen` no llega.** Inspeccionados los 228 vouchers importados en local, el payload que devuelve `GET /api/ventas/` tiene exactamente estas claves:
 
-El proyecto declara cumplimiento GDPR y derecho a la erradicación, así que conviene resolverlo. Tres opciones, en orden de preferencia:
+```
+actualizado_en, canal, cliente, estado, fecha, gateway_origen,
+id, items, medio_pago, orden_externa_id, relacionada_con, tipo, total
+```
 
-1. **Descartar `payload_origen` antes de guardar el payload.** Es lo más simple y no perdemos nada operativo: ese campo servía para reconciliar contra Tienda Nube, y para eso alcanza con `orden_externa_id`.
-2. Guardarlo y purgarlo con la misma señal, lo que implica que Conto la exponga.
-3. Aplicar una retención: borrar el payload de vouchers procesados con más de X meses.
+Descartar `payload_origen` antes de guardar —que era la opción preferida— sería un no-op contra un campo que no existe de nuestro lado.
 
-No bloquea la puesta en marcha, pero conviene decidirlo antes de importar el histórico completo.
+**El problema real es otro campo: `cliente`.** 157 de esos 228 vouchers traen un bloque con `nombre`, `email` y `telefono` del comprador. Se diferencia de `payload_origen` en dos cosas que cambian qué se puede hacer con él:
+
+- **Lo usa el reproceso.** Es de donde sale el match de clienta por email y teléfono (§5.1). Borrarlo deja los vouchers viejos sin poder reprocesarse con atribución.
+- **En producción esos datos van a estar igual en `Cliente`**, porque `create_missing_clients` va prendido. Esa copia sí es alcanzable por un pedido de borrado; la de `ContoSale.payload` es la que quedaría huérfana.
+
+Las opciones viables quedan en dos:
+
+1. **Retención**: vaciar el payload de vouchers `PROCESSED` con más de X meses. Conserva el reproceso durante la ventana en que sirve, que es corta.
+2. **Limpiar el bloque `cliente`** al pasar a `PROCESSED`, dejando el resto del payload. Conserva la capacidad de reprocesar montos y productos, pierde la atribución de clienta.
+
+No bloquea la puesta en marcha.

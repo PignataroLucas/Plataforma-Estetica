@@ -209,8 +209,11 @@ Mismos pasos que 1.3 a 1.6, pero:
 
 - Con el token de **producción**, no el que usaste en local
 - Sucursal **Banfield**
+- **Importar desde: `2026-07-01 00:00`**
 - **Crear productos faltantes: apagado** para la primera corrida
 - **Crear clientes faltantes: prendido** — acá sí lo querés, es la base de compradores online del centro
+
+> La fecha está verificada contra producción: desde el 1 de julio no hay ninguna venta de producto cargada, así que el import llena un hueco y no duplica nada. La última cargada a mano es de junio. Ver §6.2 del spec.
 
 ## 3.4 Primera corrida controlada
 
@@ -222,9 +225,11 @@ Mismos pasos que 1.3 a 1.6, pero:
 >
 > Una vez que todo está andando, la incremental es la correcta y es la que corre el cron.
 
-## 3.5 Ampliar el histórico (opcional)
+## 3.5 Ampliar el histórico — decidido que no
 
-Conto confirmó que el canal es confiable para todos los registros, así que **no hay fecha de corte técnica**. Si querés traer más atrás que julio: movés "Importar desde" a la fecha nueva, borrás "Última sincronización de ventas" y volvés a importar. Lo ya importado no se duplica.
+**Se importa de julio en adelante y nada anterior.** Abril, mayo y junio quedan como están.
+
+Técnicamente se podría: Conto confirmó que el canal es confiable para todos los registros, así que no hay fecha de corte. Si algún día se quisiera, se mueve "Importar desde", se borra "Última sincronización de ventas" y se vuelve a importar; lo ya importado no se duplica. Pero esos tres meses **sí tienen ventas cargadas a mano**, y traerlos obligaría a clasificar 53 transacciones una por una para saber cuáles se duplicarían.
 
 ---
 
@@ -270,7 +275,7 @@ Esperá 15 minutos y confirmá en el admin que la última sincronización se mov
 
 # Decisiones que quedan pendientes
 
-- **`payload_origen` y datos personales** (§14 del spec). Decidilo **antes** de importar el histórico completo, o hay que limpiar retroactivamente. Lo más simple es descartar ese campo antes de guardar el payload.
+- **Datos personales en el payload guardado** (§14 del spec). `payload_origen` no llega, pero el bloque `cliente` sí, con nombre, email y teléfono. Queda elegir entre una política de retención o limpiar ese bloque cuando el voucher pasa a procesado. No bloquea la puesta en marcha.
 - **¿Importamos el canal `mercadopago`?** Conto lo tiene aparte de `tiendanube`. Si son ventas por link de pago directo, es facturación real que hoy queda afuera del filtro. Vale preguntarles qué son.
 - **`GET /api/compras/`** (fase 2, §13 del spec). Mientras no exista, los gastos por compra de mercadería no se registran.
 - **Revocar el token local** cuando termines de probar.
