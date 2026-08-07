@@ -22,7 +22,7 @@ Guía operativa paso a paso. El diseño y las decisiones están en [INTEGRACION_
 
 Son dos porque el que ande en tu máquina lo vas a querer revocar después sin cortar producción.
 
-**Y un tercero cuando esté lista la cuenta de prueba de Conto**, para los casos de reversión (Fase 3). Ese es el único ítem que Conto tiene pendiente.
+~~Y un tercero cuando esté lista la cuenta de prueba de Conto~~. **Ya no hace falta:** la Fase 2 se saltea (§16 del spec). El token de **producción** es lo único que queda pendiente de Conto.
 
 ---
 
@@ -146,7 +146,13 @@ docker-compose logs -f celery
 
 ---
 
-# Fase 2 — Verificar las reversiones
+# Fase 2 — Verificar las reversiones (NO SE EJECUTA)
+
+> **Decidido el 2026-08-07: esta fase se saltea.** En todo el histórico de AME no hay ninguna nota de crédito ni ninguna venta de Tienda Nube cancelada, y quien opera Conto confirmó que nunca emitió una nota de crédito.
+>
+> Validarlo exigía anular irreversiblemente una venta real —dejando además un gasto huérfano— para ejercitar un camino que no ocurre. La lógica está cubierta por tests, y si algún día llega un voucher con forma inesperada queda en `ERROR` con el payload guardado y se reprocesa, sin tocar la venta original.
+>
+> Ver §16 de [INTEGRACION_CONTO_SPEC.md](INTEGRACION_CONTO_SPEC.md). Lo que sigue queda documentado para el día que haga falta.
 
 Requiere el token de la **cuenta de prueba** de Conto, con una nota de crédito y una venta cancelada cargadas.
 
@@ -175,7 +181,7 @@ Y lo más importante: **cada centro tiene que ver solo sus propios datos.** Veri
 
 > **Fase 1 verificada el 2026-08-07:** 41 vouchers importados, $2.790.413,95 contra $2.790.413,95 de Conto, diferencia $0,00 y cero descuadres. El camino de las ventas está validado contra datos reales.
 >
-> Falta la Fase 2 (notas de crédito) antes de escribir en los libros reales, o al menos asumir ese riesgo conscientemente.
+> La Fase 2 se saltea por decisión (§16 del spec), así que **esta fase ya no está bloqueada.** Lo único que falta de Conto es el token de producción.
 
 ## 3.1 Commitear y deployar
 

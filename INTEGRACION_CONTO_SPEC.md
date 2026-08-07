@@ -36,8 +36,8 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 | Modelos `ContoIntegration` / `ContoSale` + migración | ✅ Hecho |
 | Django admin para cargar el token y configurar | ✅ Hecho |
 | Validación de aislamiento a nivel modelo | ✅ Hecho y verificado |
-| Diagnóstico de `Producto.sku` | ✅ Comando hecho, falta correrlo en producción |
-| Constraint único de `sku` por sucursal | ⬜ Pendiente del diagnóstico en producción |
+| Diagnóstico de `Producto.sku` | ✅ Corrido en producción el 2026-08-05. Ver §8 |
+| Constraint único de `sku` por sucursal | ✅ Aplicado (migración `inventario.0005`) |
 | Cliente HTTP + `ContoScope` (`services.py`) | ✅ Hecho |
 | Sync de stock e import de ventas (`sync.py`) | ✅ Hecho |
 | Notas de crédito y cancelaciones | ✅ Hecho |
@@ -48,7 +48,7 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 | `import_from` decidido y verificado contra producción | ✅ 2026-07-01. Ver §6.2 |
 | Pantalla de configuración en el frontend | ⬜ Pendiente |
 
-Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. Falta la cuenta de prueba con la nota de crédito y la venta cancelada.
+Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. **Lo único pendiente es el token de producción.** La cuenta de prueba dejó de hacer falta al decidirse que la Fase 2 no se ejecuta (§16).
 
 > ### Resuelto y verificado: el envío y el campo `total`
 >
@@ -470,6 +470,22 @@ De los 477.331 de envío del período, 240.175 quedan afuera del `total` y 237.1
 **La pregunta a Conto:** ¿qué representa `total` exactamente, es lo que pagó el cliente? Y donde no incluye el envío, ¿es porque fue gratis o es un problema del cálculo?
 
 **Lo propuesto, pendiente de esa respuesta:** que el import detecte cuando las líneas no suman el `total` declarado y marque el voucher para revisión, en vez de importarlo en silencio. Eso vale independientemente de cuál lectura gane. Qué número manda es una decisión de plata, no técnica.
+
+## 16 — Decidido: la Fase 2 no se ejecuta
+
+**No se valida el camino de notas de crédito ni cancelaciones contra datos reales.** Decidido el 2026-08-07.
+
+**Por qué.** En 332 vouchers de todo el histórico alcanzable de AME no hay ni una nota de crédito, ni una venta de Tienda Nube cancelada. Y quien opera Conto confirmó que **nunca emitió una nota de crédito**: la función existe por si acaso.
+
+Validar esos caminos exigía anular **irreversiblemente** una venta real —dejando además un comprobante de gasto huérfano, porque en Conto el envío y la comisión son un voucher aparte que no se cancela solo— o ensuciar los números de Tienda Nube con un pedido de prueba, o que Conto modificara su código productivo para permitir forzar el canal. Todo eso para ejercitar un camino que no ocurre.
+
+**Qué cubre el riesgo.** La lógica está testeada: nota de crédito total, parcial, la que llega antes que su venta, y la cancelación que revierte transacciones ya importadas. Lo que quedó sin verificar es que el payload real tenga la forma asumida — riesgo de contrato, no de código.
+
+Y ese riesgo falla de forma segura: un voucher con forma inesperada queda en estado `ERROR` con el payload crudo guardado, dispara `VOUCHERS_CON_ERROR`, y se reprocesa después de ajustar. **La venta original no se modifica.** El peor caso es que una devolución tarde en reflejarse hasta que alguien mire la alerta.
+
+**Nota para la fase de compras (§13):** al cancelar una factura de Tienda Nube en Conto, el comprobante de gasto asociado (envío + comisión) **queda activo**. Solo se cancela solo en ventas de concesionario. Cuando se importen compras, una venta cancelada va a dejar su gasto importado.
+
+**Dato aparte:** Conto no permitía vincular una nota de crédito con su factura —no existía el campo ni el backend lo aceptaba— y lo corrigieron al preparar esta prueba. Así que si alguna vez emiten una, va a llegar con `relacionada_con` y nuestro código la va a procesar.
 
 ## 14 — Pendiente: datos personales en el payload guardado
 
