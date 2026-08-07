@@ -373,11 +373,17 @@ Configuración del servicio de cron:
 | Qué | Valor |
 |---|---|
 | Repo | el mismo, `Plataforma-Estetica` |
-| Start command | `python manage.py sincronizar_conto --que todo` |
+| Config file | `railway.cron.json` |
 | Cron schedule | `*/15 * * * *` |
 | Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
 
-**Detalle crítico:** hay que sobrescribir el start command. Por defecto el servicio usaría [entrypoint.sh](backend/entrypoint.sh), que levanta Gunicorn y nunca termina — el cron nunca cerraría.
+**Detalle crítico: el start command no se sobrescribe desde el dashboard.** [railway.json](railway.json) define `startCommand: /bin/sh /app/entrypoint.sh` para todos los servicios del repo, y la configuración por código le gana a la del dashboard. Un start command puesto en la UI queda pisado, arranca [entrypoint.sh](backend/entrypoint.sh), levanta Gunicorn y el servicio nunca termina — el cron no vuelve a dispararse.
+
+Por eso el cron usa su propio archivo, [railway.cron.json](railway.cron.json), con el comando y `restartPolicyType: NEVER`. Lo segundo importa: el comando sale con código distinto de cero cuando una sincronización falla, y la política `ON_FAILURE` del servicio web lo reintentaría tres veces. No hace falta — la corrida siguiente recupera lo que falte por la ventana con solapamiento.
+
+De paso, saltear `entrypoint.sh` evita que cada corrida ejecute `migrate` y `collectstatic`, que ahí no tienen nada que hacer.
+
+**Se puede validar sin la integración cargada:** sin integraciones activas el comando informa "Nada que hacer" y termina con código 0. Eso permite armar el servicio y confirmar que buildea, corre y cierra antes de que exista un solo dato en juego.
 
 Con `--que todo` el stock se sincroniza cada 15 minutos en vez de cada 30. Es inofensivo: es una lectura de estado, idempotente. Un solo cron en lugar de dos.
 

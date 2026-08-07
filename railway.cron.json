@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.up.railway.app/config.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "backend/Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "python manage.py sincronizar_conto --que todo",
+    "restartPolicyType": "NEVER"
+  }
+}

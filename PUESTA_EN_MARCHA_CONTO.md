@@ -243,18 +243,33 @@ Técnicamente se podría: Conto confirmó que el canal es confiable para todos l
 
 Sin esto, en producción **nada dispara la sincronización**. La integración quedaría configurada, verificada y sin traer una sola venta.
 
+Es un **segundo servicio del mismo repo**, no un proyecto nuevo ni otro repo. El mismo código, con otro comando: el servicio que ya tenés corre Gunicorn todo el día sirviendo la API, y este corre un comando, trabaja unos segundos y termina. Al terminar, Railway lo vuelve a arrancar cuando toca el schedule.
+
 En el proyecto de Railway: **New** → **GitHub Repo** → el mismo repo.
 
-| Config | Valor |
-|---|---|
-| Nombre | `conto-sync` |
-| Start command | `python manage.py sincronizar_conto --que todo` |
-| Cron schedule | `*/15 * * * *` |
-| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
+| Config | Dónde | Valor |
+|---|---|---|
+| Nombre | Settings → General | `conto-sync` |
+| Config file | Settings → Config as code | `railway.cron.json` |
+| Cron schedule | Settings → Cron Schedule | `*/15 * * * *` |
+| Variables | Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
 
-**El start command es el paso crítico.** Si no lo sobrescribís, el servicio usa `entrypoint.sh`, levanta Gunicorn y nunca termina — el cron no volvería a dispararse nunca.
+> **El start command NO se pone en el dashboard.** El [railway.json](railway.json) de la raíz define `startCommand: /bin/sh /app/entrypoint.sh` y aplica a **todos** los servicios de este repo, y en Railway la configuración por código le gana a la del dashboard. Si lo sobrescribís desde la UI, `railway.json` te lo pisa igual, arranca `entrypoint.sh`, levanta Gunicorn y el servicio **nunca termina**: el cron no vuelve a dispararse nunca más.
+>
+> Por eso el comando vive en [railway.cron.json](railway.cron.json), y lo único que hay que hacer es apuntar el servicio a ese archivo.
 
-Esperá 15 minutos y confirmá en el admin que la última sincronización se movió.
+Las variables conviene tomarlas de los otros servicios en vez de copiarlas, así no quedan desincronizadas:
+
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+```
+
+`railway.cron.json` también pone `restartPolicyType: NEVER`. Es a propósito: el comando termina con código distinto de cero cuando una sincronización falla, y con la política `ON_FAILURE` que usa el servicio web Railway lo reintentaría hasta tres veces seguidas. La corrida siguiente ya recupera lo que falte gracias a la ventana con solapamiento.
+
+**Antes de ponerle el schedule, disparalo a mano una vez.** Sin integración cargada tiene que imprimir `No hay integraciones activas y verificadas. Nada que hacer.` y **terminar**. Eso confirma que buildea, corre y cierra, sin ningún dato en juego.
+
+Con el schedule puesto: esperá 15 minutos y confirmá en el admin que la última sincronización se movió.
 
 ---
 
