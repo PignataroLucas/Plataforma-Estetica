@@ -250,13 +250,16 @@ En el proyecto de Railway: **New** → **GitHub Repo** → el mismo repo.
 | Config | Dónde | Valor |
 |---|---|---|
 | Nombre | Settings → General | `conto-sync` |
-| Config file | Settings → Config as code | `railway.cron.json` |
+| **Root Directory** | Settings → Source | `backend` |
+| Config file | Settings → Config as code | `backend/railway.cron.json` |
 | Cron schedule | Settings → Cron Schedule | `*/15 * * * *` |
-| Variables | Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
+| Variables | Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0` |
 
-> **El start command NO se pone en el dashboard.** El [railway.json](railway.json) de la raíz define `startCommand: /bin/sh /app/entrypoint.sh` y aplica a **todos** los servicios de este repo, y en Railway la configuración por código le gana a la del dashboard. Si lo sobrescribís desde la UI, `railway.json` te lo pisa igual, arranca `entrypoint.sh`, levanta Gunicorn y el servicio **nunca termina**: el cron no vuelve a dispararse nunca más.
+> **El Root Directory es obligatorio.** El [Dockerfile](backend/Dockerfile) hace `COPY requirements.txt /app/`, o sea que espera que el contexto de build sea `backend/`. Con el root en la raíz del repo el build falla con `"/requirements.txt": not found`. Es la misma configuración que usa el servicio web.
+
+> **El start command NO se pone en el dashboard.** [backend/railway.json](backend/railway.json) define `startCommand: /bin/sh /app/entrypoint.sh`, y en Railway la configuración por código le gana a la del dashboard. Si lo sobrescribís desde la UI te lo pisa igual, arranca `entrypoint.sh`, levanta Gunicorn y el servicio **nunca termina**: el cron no vuelve a dispararse nunca más.
 >
-> Por eso el comando vive en [railway.cron.json](railway.cron.json), y lo único que hay que hacer es apuntar el servicio a ese archivo.
+> Por eso el comando vive en [backend/railway.cron.json](backend/railway.cron.json), y lo único que hay que hacer es apuntar el servicio a ese archivo.
 
 Las variables conviene tomarlas de los otros servicios en vez de copiarlas, así no quedan desincronizadas:
 

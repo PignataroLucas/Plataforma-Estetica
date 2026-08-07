@@ -373,13 +373,18 @@ Configuración del servicio de cron:
 | Qué | Valor |
 |---|---|
 | Repo | el mismo, `Plataforma-Estetica` |
-| Config file | `railway.cron.json` |
+| Root directory | `backend` |
+| Config file | `backend/railway.cron.json` |
 | Cron schedule | `*/15 * * * *` |
-| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
+| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0` |
 
-**Detalle crítico: el start command no se sobrescribe desde el dashboard.** [railway.json](railway.json) define `startCommand: /bin/sh /app/entrypoint.sh` para todos los servicios del repo, y la configuración por código le gana a la del dashboard. Un start command puesto en la UI queda pisado, arranca [entrypoint.sh](backend/entrypoint.sh), levanta Gunicorn y el servicio nunca termina — el cron no vuelve a dispararse.
+**Detalle crítico: el start command no se sobrescribe desde el dashboard.** [backend/railway.json](backend/railway.json) define `startCommand: /bin/sh /app/entrypoint.sh`, y la configuración por código le gana a la del dashboard. Un start command puesto en la UI queda pisado, arranca [entrypoint.sh](backend/entrypoint.sh), levanta Gunicorn y el servicio nunca termina — el cron no vuelve a dispararse.
 
-Por eso el cron usa su propio archivo, [railway.cron.json](railway.cron.json), con el comando y `restartPolicyType: NEVER`. Lo segundo importa: el comando sale con código distinto de cero cuando una sincronización falla, y la política `ON_FAILURE` del servicio web lo reintentaría tres veces. No hace falta — la corrida siguiente recupera lo que falte por la ventana con solapamiento.
+Por eso el cron usa su propio archivo, [backend/railway.cron.json](backend/railway.cron.json), con el comando y `restartPolicyType: NEVER`.
+
+**Segundo detalle: el root directory tiene que ser `backend`.** El [Dockerfile](backend/Dockerfile) hace `COPY requirements.txt /app/`, así que el contexto de build tiene que ser `backend/`. Con el root en la raíz del repo el build falla con `"/requirements.txt": not found`.
+
+Vale aclarar que el `railway.json` de la raíz del repo apunta a `backend/Dockerfile` desde un contexto que no tiene `requirements.txt`, así que **no puede funcionar**: es configuración muerta que sobrevivió y confunde. El servicio web usa el de `backend/`. Lo segundo importa: el comando sale con código distinto de cero cuando una sincronización falla, y la política `ON_FAILURE` del servicio web lo reintentaría tres veces. No hace falta — la corrida siguiente recupera lo que falte por la ventana con solapamiento.
 
 De paso, saltear `entrypoint.sh` evita que cada corrida ejecute `migrate` y `collectstatic`, que ahí no tienen nada que hacer.
 
