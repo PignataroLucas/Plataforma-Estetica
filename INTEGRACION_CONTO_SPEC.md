@@ -146,6 +146,29 @@ Para cada SKU devuelto, buscar el `Producto` **de la sucursal configurada** y ac
 Producto.objects.filter(pk=producto.pk).update(stock_actual=..., precio_costo=...)
 ```
 
+### 4.0 — Qué stock es el de Conto
+
+**Confirmado el 2026-08-07: el stock de Conto es el del depósito, no el del centro.** Tiene sentido con el canal `concesionario` —71 de los 228 comprobantes del histórico—, o sea que AME distribuye además de vender al público. Por eso los números de Conto están en otra escala que los locales:
+
+| Producto | Centro | Depósito |
+|---|---|---|
+| Crema Multivitamínica | 1 | 1315 |
+| Crema Gel AH | 11 | 1112 |
+| Gel de Limpieza x150ml | 19 | 1008 |
+| Duo Serum | 9 | **-5** |
+
+`stock_actual` en la plataforma significaba "lo que hay en el mostrador"; el de Conto significa "lo que hay para reponer". No son la misma cantidad.
+
+**Decidido: se espeja igual.** Se asume conscientemente lo que eso cuesta:
+
+- Las **alertas de stock bajo** dejan de significar algo. Nada va a estar bajo con 1.112 unidades.
+- `check_low_inventory` ([config/celery.py](backend/config/celery.py), diaria 8:00) pasa a comparar contra el depósito. Hoy no corre —Celery no está deployado en producción— así que el efecto es teórico hasta que se deploye.
+- **Mi Caja deja de frenar** una venta de mostrador de algo que el centro no tiene físicamente.
+
+Lo que sí se espeja con sentido pleno es `precio_costo` y `precio_venta`: no dependen de dónde estén las unidades. De hecho ahí la sincronización corrige datos viejos — los costos locales estaban inflados hasta un 60% y los precios desactualizados hasta un 53% por debajo de los de Conto.
+
+Si algún día molesta, la salida es un campo aparte para el stock del depósito en vez de pisar el del centro. No hace falta ahora.
+
 ### 4.1 — Creación de productos faltantes
 
 Con `create_missing_products` activo (default), un SKU de Conto que no existe en la sucursal se crea. Conto informa `nombre`, `stock`, `costo`, `precio` y `activo`, que es todo lo necesario para que el producto nazca completo — a diferencia de Tienda Nube, que no informa costo. Eso evita tener que terminar de cargar el catálogo a mano.
@@ -294,7 +317,7 @@ Lo mismo para el tripwire de `cuenta_id` de §3 y para vouchers en estado `ERROR
 
   Ninguno de los 13 tiene código de barras tampoco, así que no hay match automático posible por ese lado. Lo eficiente es hacerlo contra el catálogo real de Conto cuando el endpoint de stock exista: traer su lista, emparejar por similitud de nombre y confirmar 13 veces. Son minutos.
 - ~~**Bloquear la edición manual de stock**~~. **Decidido: no se bloquea.** El riesgo es bajo porque el stock se sincroniza desde Conto cada 30 minutos, así que una edición manual se sobrescribe sola en la próxima corrida. No corrompe nada, solo es inútil. Lo que sí conviene en algún momento es que la UI aclare que ese número viene de Conto, para que nadie pierda tiempo editándolo.
-- **Revisar `check_low_inventory`** ([config/celery.py](backend/config/celery.py), diario 8:00). Hoy compara contra stock irreal.
+- **Revisar `check_low_inventory`** ([config/celery.py](backend/config/celery.py), diario 8:00). Comparaba contra stock irreal, y después de la sincronización va a comparar contra el del depósito. Ver §4.0: la alerta pierde sentido en las dos situaciones. No corre en producción porque Celery no está deployado.
 - **Unificar categorías de ingreso.** Conviven `"Productos"` ([finanzas/signals.py:25](backend/apps/finanzas/signals.py:25)) y `"Venta de Productos"` ([inventario/signals.py:138](backend/apps/inventario/signals.py:138)), lo que fragmenta los reportes.
 
 ## 9 — Secuencia de puesta en marcha
