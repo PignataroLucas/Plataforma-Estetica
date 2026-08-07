@@ -36,24 +36,23 @@ Conceptos del modelo de Conto que impactan en esta implementación:
 | Modelos `ContoIntegration` / `ContoSale` + migración | ✅ Hecho |
 | Django admin para cargar el token y configurar | ✅ Hecho |
 | Validación de aislamiento a nivel modelo | ✅ Hecho y verificado |
-| Diagnóstico de `Producto.sku` | ✅ Comando hecho, falta correrlo en producción |
-| Constraint único de `sku` por sucursal | ⬜ Pendiente del diagnóstico en producción |
+| Diagnóstico de `Producto.sku` | ✅ Corrido en producción el 2026-08-05. Ver §8 |
+| Constraint único de `sku` por sucursal | ✅ Aplicado (migración `inventario.0005`) |
 | Cliente HTTP + `ContoScope` (`services.py`) | ✅ Hecho |
 | Sync de stock e import de ventas (`sync.py`) | ✅ Hecho |
 | Notas de crédito y cancelaciones | ✅ Hecho |
 | Tasks de Celery + entradas en Beat | ✅ Hecho |
 | Comando `verificar_conto` (chequeo de contrato) | ✅ Hecho |
 | Endpoints de backend: config, verificar, estado, reprocesar | ✅ Hecho |
-| Tests (108) | ✅ Hecho |
+| Tests (202 en el backend, 185 de la integración) | ✅ Hecho |
+| `import_from` decidido y verificado contra producción | ✅ 2026-07-01. Ver §6.2 |
 | Pantalla de configuración en el frontend | ⬜ Pendiente |
 
-Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. Falta la cuenta de prueba con la nota de crédito y la venta cancelada.
+Del lado de Conto: los tres endpoints están deployados y verificados contra datos reales. **Lo único pendiente es el token de producción.** La cuenta de prueba dejó de hacer falta al decidirse que la Fase 2 no se ejecuta (§16).
 
-> ### Bloqueante para producción: el envío y el campo `total`
+> ### Resuelto y verificado: el envío y el campo `total`
 >
-> **No pasar a la Fase 3 hasta resolverlo.** Ver §15. En la prueba local, 40 de 115 vouchers tienen un `total` que no incluye la línea de ENVIO, mientras los otros 75 sí. Son 240.175 sobre 7,5M — un 3%. Según cuál de los dos números sea el correcto, podríamos estar inventando esa facturación.
->
-> En local no importa: la base es descartable. En producción escribiría 3% de más en los libros reales.
+> Era un bug de la API de Conto, corregido de su lado. Reimportado en local el 2026-08-07 contra su versión corregida: **41 vouchers, $2.790.413,95 contra $2.790.413,95, diferencia $0,00 y cero descuadres.** Ver §15.
 
 **Convención de nombres:** el código va en inglés y la UI en español, según [CODING_CONVENTIONS.md](CODING_CONVENTIONS.md). Por eso los modelos son `ContoIntegration` y `ContoSale`, con `verbose_name` y `help_text` en español.
 
@@ -72,8 +71,13 @@ backend/apps/integraciones/
 ├── permissions.py  # ✅ Solo rol ADMIN
 ├── views.py        # ✅ Config, verificar, estado, sincronizar, reprocesar
 ├── urls.py         # ✅ Montado en /api/integraciones/
-├── tests/          # ✅ 108 tests
-└── management/commands/verificar_conto.py   # ✅ Chequeo de contrato
+├── tests/          # ✅ 185 tests
+└── management/commands/
+    ├── verificar_conto.py       # ✅ Chequeo de contrato, antes de cargar nada
+    ├── sincronizar_conto.py     # ✅ La corrida real. Es lo que dispara el cron
+    ├── emparejar_sku_conto.py   # ✅ Empareja productos locales con el catálogo
+    ├── reimportar_conto.py      # ✅ Borra lo importado para volver a traerlo
+    └── diagnostico_ingresos.py  # ✅ Desglose por mes para decidir `import_from`
 ```
 
 `services.py` separa dos responsabilidades a propósito: `ContoClient` habla HTTP y no sabe nada de nuestros modelos; `ContoScope` es el **único** lugar que resuelve datos de Conto contra la base, y cada consulta que hace está filtrada por sucursal o centro.
@@ -141,6 +145,29 @@ Para cada SKU devuelto, buscar el `Producto` **de la sucursal configurada** y ac
 ```python
 Producto.objects.filter(pk=producto.pk).update(stock_actual=..., precio_costo=...)
 ```
+
+### 4.0 — Qué stock es el de Conto
+
+**Confirmado el 2026-08-07: el stock de Conto es el del depósito, no el del centro.** Tiene sentido con el canal `concesionario` —71 de los 228 comprobantes del histórico—, o sea que AME distribuye además de vender al público. Por eso los números de Conto están en otra escala que los locales:
+
+| Producto | Centro | Depósito |
+|---|---|---|
+| Crema Multivitamínica | 1 | 1315 |
+| Crema Gel AH | 11 | 1112 |
+| Gel de Limpieza x150ml | 19 | 1008 |
+| Duo Serum | 9 | **-5** |
+
+`stock_actual` en la plataforma significaba "lo que hay en el mostrador"; el de Conto significa "lo que hay para reponer". No son la misma cantidad.
+
+**Decidido: se espeja igual.** Se asume conscientemente lo que eso cuesta:
+
+- Las **alertas de stock bajo** dejan de significar algo. Nada va a estar bajo con 1.112 unidades.
+- `check_low_inventory` ([config/celery.py](backend/config/celery.py), diaria 8:00) pasa a comparar contra el depósito. Hoy no corre —Celery no está deployado en producción— así que el efecto es teórico hasta que se deploye.
+- **Mi Caja deja de frenar** una venta de mostrador de algo que el centro no tiene físicamente.
+
+Lo que sí se espeja con sentido pleno es `precio_costo` y `precio_venta`: no dependen de dónde estén las unidades. De hecho ahí la sincronización corrige datos viejos — los costos locales estaban inflados hasta un 60% y los precios desactualizados hasta un 53% por debajo de los de Conto.
+
+Si algún día molesta, la salida es un campo aparte para el stock del depósito en vez de pisar el del centro. No hace falta ahora.
 
 ### 4.1 — Creación de productos faltantes
 
@@ -250,6 +277,19 @@ Ambas vías distinguen dos clases de error. Token revocado, cuenta cruzada o cue
 
 **Decidido: se importa desde julio de 2026.** Se carga `import_from = 2026-07-01 00:00` (hora Argentina) al configurar la integración.
 
+**Verificado contra producción el 2026-08-07.** El desglose de `INCOME_PRODUCT` por mes en la sucursal Banfield muestra que **julio y agosto están en cero**: la última venta de producto cargada es de junio. Importar desde el 1 de julio llena un hueco y no puede duplicar nada.
+
+| Mes | Ventas cargadas | Monto |
+|---|---|---|
+| 2026-06 | 3 | $74.995,00 |
+| 2026-05 | 31 | $495.537,25 |
+| 2026-04 | 19 | $345.780,00 |
+| 2026-07 en adelante | **0** | **$0,00** |
+
+La medición se hace con [diagnostico_ingresos](backend/apps/integraciones/management/commands/diagnostico_ingresos.py), que separa las ventas por origen — cargadas a mano, de mostrador (movieron stock) o importadas — porque solo las primeras pueden chocar con un import.
+
+**Decidido también: no se amplía hacia atrás.** Abril, mayo y junio quedan como están, aunque lo cargado a mano en esos meses sea una fracción de los ~$2,8M mensuales que factura Tienda Nube. Traerlos exigiría clasificar 53 transacciones una por una para saber cuáles se duplicarían, y el valor de completar meses ya cerrados no lo justifica.
+
 Vale saber que **el histórico completo es importable**: Conto confirmó que el canal es confiable para todos los registros, así que no hay fecha de corte técnica. Si en algún momento se quiere traer todo, se mueve `import_from` hacia atrás y se limpia `last_sales_sync`.
 
 ## 7 — Falla visible
@@ -277,7 +317,7 @@ Lo mismo para el tripwire de `cuenta_id` de §3 y para vouchers en estado `ERROR
 
   Ninguno de los 13 tiene código de barras tampoco, así que no hay match automático posible por ese lado. Lo eficiente es hacerlo contra el catálogo real de Conto cuando el endpoint de stock exista: traer su lista, emparejar por similitud de nombre y confirmar 13 veces. Son minutos.
 - ~~**Bloquear la edición manual de stock**~~. **Decidido: no se bloquea.** El riesgo es bajo porque el stock se sincroniza desde Conto cada 30 minutos, así que una edición manual se sobrescribe sola en la próxima corrida. No corrompe nada, solo es inútil. Lo que sí conviene en algún momento es que la UI aclare que ese número viene de Conto, para que nadie pierda tiempo editándolo.
-- **Revisar `check_low_inventory`** ([config/celery.py](backend/config/celery.py), diario 8:00). Hoy compara contra stock irreal.
+- **Revisar `check_low_inventory`** ([config/celery.py](backend/config/celery.py), diario 8:00). Comparaba contra stock irreal, y después de la sincronización va a comparar contra el del depósito. Ver §4.0: la alerta pierde sentido en las dos situaciones. No corre en producción porque Celery no está deployado.
 - **Unificar categorías de ingreso.** Conviven `"Productos"` ([finanzas/signals.py:25](backend/apps/finanzas/signals.py:25)) y `"Venta de Productos"` ([inventario/signals.py:138](backend/apps/inventario/signals.py:138)), lo que fragmenta los reportes.
 
 ## 9 — Secuencia de puesta en marcha
@@ -356,11 +396,22 @@ Configuración del servicio de cron:
 | Qué | Valor |
 |---|---|
 | Repo | el mismo, `Plataforma-Estetica` |
-| Start command | `python manage.py sincronizar_conto --que todo` |
+| Root directory | `backend` |
+| Config file | `backend/railway.cron.json` |
 | Cron schedule | `*/15 * * * *` |
-| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
+| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0` |
 
-**Detalle crítico:** hay que sobrescribir el start command. Por defecto el servicio usaría [entrypoint.sh](backend/entrypoint.sh), que levanta Gunicorn y nunca termina — el cron nunca cerraría.
+**Detalle crítico: el start command no se sobrescribe desde el dashboard.** [backend/railway.json](backend/railway.json) define `startCommand: /bin/sh /app/entrypoint.sh`, y la configuración por código le gana a la del dashboard. Un start command puesto en la UI queda pisado, arranca [entrypoint.sh](backend/entrypoint.sh), levanta Gunicorn y el servicio nunca termina — el cron no vuelve a dispararse.
+
+Por eso el cron usa su propio archivo, [backend/railway.cron.json](backend/railway.cron.json), con el comando y `restartPolicyType: NEVER`.
+
+**Segundo detalle: el root directory tiene que ser `backend`.** El [Dockerfile](backend/Dockerfile) hace `COPY requirements.txt /app/`, así que el contexto de build tiene que ser `backend/`. Con el root en la raíz del repo el build falla con `"/requirements.txt": not found`.
+
+Vale aclarar que el `railway.json` de la raíz del repo apunta a `backend/Dockerfile` desde un contexto que no tiene `requirements.txt`, así que **no puede funcionar**: es configuración muerta que sobrevivió y confunde. El servicio web usa el de `backend/`. Lo segundo importa: el comando sale con código distinto de cero cuando una sincronización falla, y la política `ON_FAILURE` del servicio web lo reintentaría tres veces. No hace falta — la corrida siguiente recupera lo que falte por la ventana con solapamiento.
+
+De paso, saltear `entrypoint.sh` evita que cada corrida ejecute `migrate` y `collectstatic`, que ahí no tienen nada que hacer.
+
+**Se puede validar sin la integración cargada:** sin integraciones activas el comando informa "Nada que hacer" y termina con código 0. Eso permite armar el servicio y confirmar que buildea, corre y cierra antes de que exista un solo dato en juego.
 
 Con `--que todo` el stock se sincroniza cada 15 minutos en vez de cada 30. Es inofensivo: es una lectura de estado, idempotente. Un solo cron en lugar de dos.
 
@@ -391,9 +442,41 @@ Vale notar que `create_initial_stock_movement` es discutible incluso hoy: crear 
 
 ---
 
-## 15 — Bloqueante: qué representa el campo `total`
+## 15 — Resuelto: qué representa el campo `total`
 
-**Estado: en stand by, esperando respuesta de Conto.**
+**Estado: era un bug de la API de Conto. Corregido de su lado el 2026-08-06.**
+
+**Qué era.** Conto exponía `precio_unitario` con el **precio de lista** en vez del precio efectivo. Un envío bonificado al 100% llegaba con `precio_unitario: 6231` cuando su aporte real al total era 0. No pasaba solo con el envío: cualquier ítem con descuento tenía el mismo desfase, porque el precio de lista es mayor a lo cobrado.
+
+**Qué representa `total`.** Lo que efectivamente pagó el cliente, tomado directo de `order.total` de Tienda Nube, sin recalcular. Es autoritativo.
+
+**Los 40 casos eran envío gratis**, no un error de cálculo. La línea de ENVIO existe con su precio para que quede constancia de cuánto valía, pero bonificada. El costo que absorbió el centro se registra aparte en Conto, como egreso, junto con la comisión del gateway.
+
+**El fix de Conto:** `precio_unitario` ahora es el precio efectivo, más un campo nuevo `precio_lista` informativo, que permite distinguir un envío gratis de uno inexistente. Nuestro código no necesitó cambios en el cálculo: la fórmula ya era "líneas sumadas con el signo de su tipo".
+
+**Lo que sí se agregó de nuestro lado.** Ahora que `total` es autoritativo y las líneas tienen que sumarlo exacto, dejó de ser una duda y pasó a ser un invariante verificable. `ContoSale.total_discrepancy` guarda la diferencia cuando no cuadra:
+
+- Si cuadra, queda en `null`.
+- Si no cuadra, **la venta se importa igual** —la plata entró, descartarla sería peor— pero queda marcada, aparece en rojo en el admin y dispara la alerta `VOUCHERS_CON_DESCUADRE` en el endpoint de estado.
+
+La diferencia ya no es una decisión de criterio: significa que nuestro desglose está mal, o que Conto manda algo inesperado. Cualquiera de las dos merece que alguien mire.
+
+**Verificado el 2026-08-07**, reimportando contra la versión corregida de Conto:
+
+| Control | Resultado |
+|---|---|
+| Vouchers procesados | 41 (julio y agosto) |
+| Total según Conto | $2.790.413,95 |
+| Total en la plataforma | $2.790.413,95 |
+| Diferencia | **$0,00** |
+| Vouchers con descuadre | **0** |
+| Transacciones anteriores a `import_from` | 0 |
+| Envíos bonificados sin generar ingreso | 12 |
+| Líneas de producto atribuidas | 76 de 76 |
+
+De paso quedó claro que los $7,5M medidos antes incluían abril y mayo: **el volumen real de Tienda Nube es ~$2,8M por mes.**
+
+**Sin usar todavía:** `precio_lista`. Podría servir para dejar constancia en las notas de la transacción de que un envío se entregó gratis y cuánto valía.
 
 Detectado el 2026-08-06 en la prueba local contra la cuenta real (115 vouchers de Tienda Nube importados desde el 1 de julio).
 
@@ -422,16 +505,43 @@ De los 477.331 de envío del período, 240.175 quedan afuera del `total` y 237.1
 
 **Lo propuesto, pendiente de esa respuesta:** que el import detecte cuando las líneas no suman el `total` declarado y marque el voucher para revisión, en vez de importarlo en silencio. Eso vale independientemente de cuál lectura gane. Qué número manda es una decisión de plata, no técnica.
 
+## 16 — Decidido: la Fase 2 no se ejecuta
+
+**No se valida el camino de notas de crédito ni cancelaciones contra datos reales.** Decidido el 2026-08-07.
+
+**Por qué.** En 332 vouchers de todo el histórico alcanzable de AME no hay ni una nota de crédito, ni una venta de Tienda Nube cancelada. Y quien opera Conto confirmó que **nunca emitió una nota de crédito**: la función existe por si acaso.
+
+Validar esos caminos exigía anular **irreversiblemente** una venta real —dejando además un comprobante de gasto huérfano, porque en Conto el envío y la comisión son un voucher aparte que no se cancela solo— o ensuciar los números de Tienda Nube con un pedido de prueba, o que Conto modificara su código productivo para permitir forzar el canal. Todo eso para ejercitar un camino que no ocurre.
+
+**Qué cubre el riesgo.** La lógica está testeada: nota de crédito total, parcial, la que llega antes que su venta, y la cancelación que revierte transacciones ya importadas. Lo que quedó sin verificar es que el payload real tenga la forma asumida — riesgo de contrato, no de código.
+
+Y ese riesgo falla de forma segura: un voucher con forma inesperada queda en estado `ERROR` con el payload crudo guardado, dispara `VOUCHERS_CON_ERROR`, y se reprocesa después de ajustar. **La venta original no se modifica.** El peor caso es que una devolución tarde en reflejarse hasta que alguien mire la alerta.
+
+**Nota para la fase de compras (§13):** al cancelar una factura de Tienda Nube en Conto, el comprobante de gasto asociado (envío + comisión) **queda activo**. Solo se cancela solo en ventas de concesionario. Cuando se importen compras, una venta cancelada va a dejar su gasto importado.
+
+**Dato aparte:** Conto no permitía vincular una nota de crédito con su factura —no existía el campo ni el backend lo aceptaba— y lo corrigieron al preparar esta prueba. Así que si alguna vez emiten una, va a llegar con `relacionada_con` y nuestro código la va a procesar.
+
 ## 14 — Pendiente: datos personales en el payload guardado
 
 Conto activó `payload_origen`, que guarda el JSON crudo de cada pedido de Tienda Nube. Ese JSON **contiene datos personales del comprador**, y Conto implementó su purga automática vía el webhook `customers/redact` de Tienda Nube.
 
-**Nuestra copia no se purga.** `ContoSale.payload` guarda la respuesta completa de Conto, así que si `payload_origen` viene incluido, esos datos quedan replicados de nuestro lado sin nada que los borre cuando el cliente ejerce el derecho al olvido.
+**Corregido el 2026-08-07: `payload_origen` no llega.** Inspeccionados los 228 vouchers importados en local, el payload que devuelve `GET /api/ventas/` tiene exactamente estas claves:
 
-El proyecto declara cumplimiento GDPR y derecho a la erradicación, así que conviene resolverlo. Tres opciones, en orden de preferencia:
+```
+actualizado_en, canal, cliente, estado, fecha, gateway_origen,
+id, items, medio_pago, orden_externa_id, relacionada_con, tipo, total
+```
 
-1. **Descartar `payload_origen` antes de guardar el payload.** Es lo más simple y no perdemos nada operativo: ese campo servía para reconciliar contra Tienda Nube, y para eso alcanza con `orden_externa_id`.
-2. Guardarlo y purgarlo con la misma señal, lo que implica que Conto la exponga.
-3. Aplicar una retención: borrar el payload de vouchers procesados con más de X meses.
+Descartar `payload_origen` antes de guardar —que era la opción preferida— sería un no-op contra un campo que no existe de nuestro lado.
 
-No bloquea la puesta en marcha, pero conviene decidirlo antes de importar el histórico completo.
+**El problema real es otro campo: `cliente`.** 157 de esos 228 vouchers traen un bloque con `nombre`, `email` y `telefono` del comprador. Se diferencia de `payload_origen` en dos cosas que cambian qué se puede hacer con él:
+
+- **Lo usa el reproceso.** Es de donde sale el match de clienta por email y teléfono (§5.1). Borrarlo deja los vouchers viejos sin poder reprocesarse con atribución.
+- **En producción esos datos van a estar igual en `Cliente`**, porque `create_missing_clients` va prendido. Esa copia sí es alcanzable por un pedido de borrado; la de `ContoSale.payload` es la que quedaría huérfana.
+
+Las opciones viables quedan en dos:
+
+1. **Retención**: vaciar el payload de vouchers `PROCESSED` con más de X meses. Conserva el reproceso durante la ventana en que sirve, que es corta.
+2. **Limpiar el bloque `cliente`** al pasar a `PROCESSED`, dejando el resto del payload. Conserva la capacidad de reprocesar montos y productos, pierde la atribución de clienta.
+
+No bloquea la puesta en marcha.

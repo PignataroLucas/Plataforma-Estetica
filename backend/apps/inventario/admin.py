@@ -109,19 +109,25 @@ class ProductoAdmin(admin.ModelAdmin):
 
     def precio_costo_formatted(self, obj):
         """Format cost price"""
-        return format_html('${:,.2f}', obj.precio_costo)
+        # Numbers are formatted before reaching `format_html`: it escapes every
+        # argument to a SafeString first, so a numeric spec like ',.2f' applied
+        # inside the template raises ValueError.
+        return format_html('${}', f'{obj.precio_costo:,.2f}')
     precio_costo_formatted.short_description = 'P. Costo'
 
     def precio_venta_formatted(self, obj):
         """Format sale price with offer indicator"""
         if obj.en_oferta and obj.precio_oferta:
             return format_html(
-                '<span style="text-decoration: line-through; color: #999;">${:,.2f}</span><br>'
-                '<span style="color: #10B981; font-weight: bold;">${:,.2f}</span>',
-                obj.precio_venta,
-                obj.precio_oferta
+                '<span style="text-decoration: line-through; color: #999;">${}</span><br>'
+                '<span style="color: #10B981; font-weight: bold;">${}</span>',
+                f'{obj.precio_venta:,.2f}',
+                f'{obj.precio_oferta:,.2f}'
             )
-        return format_html('<span style="color: #059669;">${:,.2f}</span>', obj.precio_venta)
+        return format_html(
+            '<span style="color: #059669;">${}</span>',
+            f'{obj.precio_venta:,.2f}'
+        )
     precio_venta_formatted.short_description = 'P. Venta'
 
     def offer_badge(self, obj):
@@ -212,10 +218,16 @@ class MovimientoInventarioAdmin(admin.ModelAdmin):
     def precio_formatted(self, obj):
         """Show relevant price based on movement type"""
         if obj.tipo == 'ENTRADA' and obj.costo_unitario:
-            return format_html('<span style="color: #EF4444;">${:,.2f}/u</span>', obj.costo_unitario)
+            return format_html(
+                '<span style="color: #EF4444;">${}/u</span>',
+                f'{obj.costo_unitario:,.2f}'
+            )
         elif obj.tipo == 'SALIDA':
             precio = obj.precio_unitario if obj.precio_unitario else obj.producto.precio_venta_final
-            return format_html('<span style="color: #10B981;">${:,.2f}/u</span>', precio)
+            return format_html(
+                '<span style="color: #10B981;">${}/u</span>',
+                f'{precio:,.2f}'
+            )
         return '-'
     precio_formatted.short_description = 'Precio Unit.'
 
@@ -224,9 +236,9 @@ class MovimientoInventarioAdmin(admin.ModelAdmin):
         if obj.monto_total > 0:
             color = '#EF4444' if obj.tipo == 'ENTRADA' else '#10B981'
             return format_html(
-                '<span style="color: {}; font-weight: bold;">${:,.2f}</span>',
+                '<span style="color: {}; font-weight: bold;">${}</span>',
                 color,
-                obj.monto_total
+                f'{obj.monto_total:,.2f}'
             )
         return '-'
     monto_total_formatted.short_description = 'Monto Total'

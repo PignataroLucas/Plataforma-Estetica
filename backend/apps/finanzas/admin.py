@@ -96,11 +96,14 @@ class TransactionAdmin(admin.ModelAdmin):
         """Display amount with color based on income/expense"""
         color = 'green' if obj.is_income else 'red'
         sign = '+' if obj.is_income else '-'
+        # The number is formatted before being handed to `format_html`: it
+        # escapes every argument to a SafeString first, so a numeric spec like
+        # ',.2f' applied inside the template raises ValueError.
         return format_html(
-            '<span style="color: {}; font-weight: bold;">{} ${:,.2f}</span>',
+            '<span style="color: {}; font-weight: bold;">{} ${}</span>',
             color,
             sign,
-            obj.amount
+            f'{obj.amount:,.2f}'
         )
     formatted_amount.short_description = 'Amount'
 
@@ -149,8 +152,8 @@ class AccountReceivableAdmin(admin.ModelAdmin):
     def formatted_paid(self, obj):
         """Format paid amount in green"""
         return format_html(
-            '<span style="color: green;">${:,.2f}</span>',
-            obj.paid_amount
+            '<span style="color: green;">${}</span>',
+            f'{obj.paid_amount:,.2f}'
         )
     formatted_paid.short_description = 'Paid'
 
@@ -158,8 +161,8 @@ class AccountReceivableAdmin(admin.ModelAdmin):
         """Format pending amount in red if overdue"""
         color = 'red' if obj.is_overdue else 'orange'
         return format_html(
-            '<span style="color: {}; font-weight: bold;">${:,.2f}</span>',
+            '<span style="color: {}; font-weight: bold;">${}</span>',
             color,
-            obj.pending_amount
+            f'{obj.pending_amount:,.2f}'
         )
     formatted_pending.short_description = 'Pending'

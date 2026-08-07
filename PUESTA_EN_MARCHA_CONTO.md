@@ -22,7 +22,7 @@ Guía operativa paso a paso. El diseño y las decisiones están en [INTEGRACION_
 
 Son dos porque el que ande en tu máquina lo vas a querer revocar después sin cortar producción.
 
-**Y un tercero cuando esté lista la cuenta de prueba de Conto**, para los casos de reversión (Fase 3). Ese es el único ítem que Conto tiene pendiente.
+~~Y un tercero cuando esté lista la cuenta de prueba de Conto~~. **Ya no hace falta:** la Fase 2 se saltea (§16 del spec). El token de **producción** es lo único que queda pendiente de Conto.
 
 ---
 
@@ -146,7 +146,13 @@ docker-compose logs -f celery
 
 ---
 
-# Fase 2 — Verificar las reversiones
+# Fase 2 — Verificar las reversiones (NO SE EJECUTA)
+
+> **Decidido el 2026-08-07: esta fase se saltea.** En todo el histórico de AME no hay ninguna nota de crédito ni ninguna venta de Tienda Nube cancelada, y quien opera Conto confirmó que nunca emitió una nota de crédito.
+>
+> Validarlo exigía anular irreversiblemente una venta real —dejando además un gasto huérfano— para ejercitar un camino que no ocurre. La lógica está cubierta por tests, y si algún día llega un voucher con forma inesperada queda en `ERROR` con el payload guardado y se reprocesa, sin tocar la venta original.
+>
+> Ver §16 de [INTEGRACION_CONTO_SPEC.md](INTEGRACION_CONTO_SPEC.md). Lo que sigue queda documentado para el día que haga falta.
 
 Requiere el token de la **cuenta de prueba** de Conto, con una nota de crédito y una venta cancelada cargadas.
 
@@ -173,9 +179,9 @@ Y lo más importante: **cada centro tiene que ver solo sus propios datos.** Veri
 
 # Fase 3 — Producción
 
-> **No arrancar esta fase todavía.** Queda pendiente la respuesta de Conto sobre qué representa el campo `total` — 40 de 115 vouchers no lo incluyen el envío y otros 75 sí, una diferencia de 240.175 sobre 7,5M. Ver §15 de [INTEGRACION_CONTO_SPEC.md](INTEGRACION_CONTO_SPEC.md).
+> **Fase 1 verificada el 2026-08-07:** 41 vouchers importados, $2.790.413,95 contra $2.790.413,95 de Conto, diferencia $0,00 y cero descuadres. El camino de las ventas está validado contra datos reales.
 >
-> En local da igual porque la base es descartable. Acá escribiría un 3% de más en los libros reales.
+> La Fase 2 se saltea por decisión (§16 del spec), así que **esta fase ya no está bloqueada.** Lo único que falta de Conto es el token de producción.
 
 ## 3.1 Commitear y deployar
 
@@ -209,8 +215,11 @@ Mismos pasos que 1.3 a 1.6, pero:
 
 - Con el token de **producción**, no el que usaste en local
 - Sucursal **Banfield**
+- **Importar desde: `2026-07-01 00:00`**
 - **Crear productos faltantes: apagado** para la primera corrida
 - **Crear clientes faltantes: prendido** — acá sí lo querés, es la base de compradores online del centro
+
+> La fecha está verificada contra producción: desde el 1 de julio no hay ninguna venta de producto cargada, así que el import llena un hueco y no duplica nada. La última cargada a mano es de junio. Ver §6.2 del spec.
 
 ## 3.4 Primera corrida controlada
 
@@ -222,9 +231,11 @@ Mismos pasos que 1.3 a 1.6, pero:
 >
 > Una vez que todo está andando, la incremental es la correcta y es la que corre el cron.
 
-## 3.5 Ampliar el histórico (opcional)
+## 3.5 Ampliar el histórico — decidido que no
 
-Conto confirmó que el canal es confiable para todos los registros, así que **no hay fecha de corte técnica**. Si querés traer más atrás que julio: movés "Importar desde" a la fecha nueva, borrás "Última sincronización de ventas" y volvés a importar. Lo ya importado no se duplica.
+**Se importa de julio en adelante y nada anterior.** Abril, mayo y junio quedan como están.
+
+Técnicamente se podría: Conto confirmó que el canal es confiable para todos los registros, así que no hay fecha de corte. Si algún día se quisiera, se mueve "Importar desde", se borra "Última sincronización de ventas" y se vuelve a importar; lo ya importado no se duplica. Pero esos tres meses **sí tienen ventas cargadas a mano**, y traerlos obligaría a clasificar 53 transacciones una por una para saber cuáles se duplicarían.
 
 ---
 
@@ -232,18 +243,36 @@ Conto confirmó que el canal es confiable para todos los registros, así que **n
 
 Sin esto, en producción **nada dispara la sincronización**. La integración quedaría configurada, verificada y sin traer una sola venta.
 
+Es un **segundo servicio del mismo repo**, no un proyecto nuevo ni otro repo. El mismo código, con otro comando: el servicio que ya tenés corre Gunicorn todo el día sirviendo la API, y este corre un comando, trabaja unos segundos y termina. Al terminar, Railway lo vuelve a arrancar cuando toca el schedule.
+
 En el proyecto de Railway: **New** → **GitHub Repo** → el mismo repo.
 
-| Config | Valor |
-|---|---|
-| Nombre | `conto-sync` |
-| Start command | `python manage.py sincronizar_conto --que todo` |
-| Cron schedule | `*/15 * * * *` |
-| Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0`, `ALLOWED_HOSTS` |
+| Config | Dónde | Valor |
+|---|---|---|
+| Nombre | Settings → General | `conto-sync` |
+| **Root Directory** | Settings → Source | `backend` |
+| Config file | Settings → Config as code | `backend/railway.cron.json` |
+| Cron schedule | Settings → Cron Schedule | `*/15 * * * *` |
+| Variables | Variables | `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `DEBUG=0` |
 
-**El start command es el paso crítico.** Si no lo sobrescribís, el servicio usa `entrypoint.sh`, levanta Gunicorn y nunca termina — el cron no volvería a dispararse nunca.
+> **El Root Directory es obligatorio.** El [Dockerfile](backend/Dockerfile) hace `COPY requirements.txt /app/`, o sea que espera que el contexto de build sea `backend/`. Con el root en la raíz del repo el build falla con `"/requirements.txt": not found`. Es la misma configuración que usa el servicio web.
 
-Esperá 15 minutos y confirmá en el admin que la última sincronización se movió.
+> **El start command NO se pone en el dashboard.** [backend/railway.json](backend/railway.json) define `startCommand: /bin/sh /app/entrypoint.sh`, y en Railway la configuración por código le gana a la del dashboard. Si lo sobrescribís desde la UI te lo pisa igual, arranca `entrypoint.sh`, levanta Gunicorn y el servicio **nunca termina**: el cron no vuelve a dispararse nunca más.
+>
+> Por eso el comando vive en [backend/railway.cron.json](backend/railway.cron.json), y lo único que hay que hacer es apuntar el servicio a ese archivo.
+
+Las variables conviene tomarlas de los otros servicios en vez de copiarlas, así no quedan desincronizadas:
+
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+```
+
+`railway.cron.json` también pone `restartPolicyType: NEVER`. Es a propósito: el comando termina con código distinto de cero cuando una sincronización falla, y con la política `ON_FAILURE` que usa el servicio web Railway lo reintentaría hasta tres veces seguidas. La corrida siguiente ya recupera lo que falte gracias a la ventana con solapamiento.
+
+**Antes de ponerle el schedule, disparalo a mano una vez.** Sin integración cargada tiene que imprimir `No hay integraciones activas y verificadas. Nada que hacer.` y **terminar**. Eso confirma que buildea, corre y cierra, sin ningún dato en juego.
+
+Con el schedule puesto: esperá 15 minutos y confirmá en el admin que la última sincronización se movió.
 
 ---
 
@@ -270,7 +299,7 @@ Esperá 15 minutos y confirmá en el admin que la última sincronización se mov
 
 # Decisiones que quedan pendientes
 
-- **`payload_origen` y datos personales** (§14 del spec). Decidilo **antes** de importar el histórico completo, o hay que limpiar retroactivamente. Lo más simple es descartar ese campo antes de guardar el payload.
+- **Datos personales en el payload guardado** (§14 del spec). `payload_origen` no llega, pero el bloque `cliente` sí, con nombre, email y teléfono. Queda elegir entre una política de retención o limpiar ese bloque cuando el voucher pasa a procesado. No bloquea la puesta en marcha.
 - **¿Importamos el canal `mercadopago`?** Conto lo tiene aparte de `tiendanube`. Si son ventas por link de pago directo, es facturación real que hoy queda afuera del filtro. Vale preguntarles qué son.
 - **`GET /api/compras/`** (fase 2, §13 del spec). Mientras no exista, los gastos por compra de mercadería no se registran.
 - **Revocar el token local** cuando termines de probar.

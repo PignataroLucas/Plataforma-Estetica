@@ -615,6 +615,80 @@ class TestGuards:
         with pytest.raises(ContoError, match='importar desde'):
             SalesImporter(integration, client=FakeClient(sales=[])).run()
 
+    def test_a_voucher_that_adds_up_is_not_flagged(self):
+        """
+        Conto's `total` is what the customer paid, and the lines summed with the
+        sign of their type must equal it exactly.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(
+            total='21500.00',
+            items=[
+                product_line(unit='18500.00'),
+                {'tipo': 'ENVIO', 'nombre': 'Envío', 'cantidad': 1,
+                 'precio_unitario': '3000.00'},
+            ],
+        )])
+        SalesImporter(integration, client=client).run()
+
+        assert ContoSale.objects.get().total_discrepancy is None
+
+    def test_free_shipping_reconciles(self):
+        """
+        The case that exposed Conto's bug: a shipping line given free has an
+        effective price of 0, so it must not inflate the income.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(
+            total='18500.00',
+            items=[
+                product_line(unit='18500.00'),
+                {'tipo': 'ENVIO', 'nombre': 'Envío gratis', 'cantidad': 1,
+                 'precio_unitario': '0.00', 'precio_lista': '6231.00'},
+            ],
+        )])
+        SalesImporter(integration, client=client).run()
+
+        sale = ContoSale.objects.get()
+        assert sale.total_discrepancy is None
+        # La línea en cero no genera una transacción de ingreso vacía.
+        assert Transaction.objects.count() == 1
+        assert Transaction.objects.get().amount == Decimal('18500.00')
+
+    def test_a_voucher_that_does_not_add_up_is_flagged_but_imported(self):
+        """
+        The money did come in, so dropping the sale would be worse than importing
+        it flagged. But the breakdown cannot be trusted silently.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(
+            total='12269.00',           # menor que la suma de las líneas
+            items=[product_line(unit='18500.00')],
+        )])
+        result = SalesImporter(integration, client=client).run()
+
+        sale = ContoSale.objects.get()
+        assert result.processed == 1
+        assert sale.status == ContoSale.Status.PROCESSED
+        assert sale.total_discrepancy == Decimal('6231.00')
+        assert Transaction.objects.count() == 1
+
+    def test_a_voucher_without_a_total_is_not_flagged(self):
+        """Nothing to reconcile against; the lines are all there is."""
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher(total='0', items=[product_line()])])
+        SalesImporter(integration, client=client).run()
+
+        assert ContoSale.objects.get().total_discrepancy is None
+
     def test_a_sale_older_than_import_from_is_skipped(self):
         """
         Conto filters `desde` by `actualizado_en`, so an old voucher touched
