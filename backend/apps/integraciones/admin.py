@@ -292,7 +292,10 @@ class ContoSaleAdmin(admin.ModelAdmin):
     def total_formatted(self, obj):
         if obj.total is None:
             return '-'
-        return format_html('${:,.2f}', obj.total)
+        # The number is formatted before being handed to `format_html`: it
+        # escapes every argument to a SafeString first, so a numeric spec like
+        # ',.2f' applied inside the template raises ValueError.
+        return format_html('${}', f'{obj.total:,.2f}')
     total_formatted.short_description = 'Total'
 
     def descuadre(self, obj):
@@ -308,8 +311,8 @@ class ContoSaleAdmin(admin.ModelAdmin):
             )
         return format_html(
             '<span style="background-color: #FEE2E2; color: #DC2626; '
-            'padding: 3px 8px; border-radius: 4px;">{:+,.2f}</span>',
-            obj.total_discrepancy
+            'padding: 3px 8px; border-radius: 4px;">{}</span>',
+            f'{obj.total_discrepancy:+,.2f}'
         )
     descuadre.short_description = 'Descuadre'
 
