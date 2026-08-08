@@ -1,6 +1,8 @@
 from django.db import models
 from django.db.models.functions import Upper
 from apps.empleados.models import Sucursal, Usuario
+from config.storage import storage_publico
+from .imagenes import generar_miniatura, nombre_miniatura
 
 
 class CategoriaProducto(models.Model):
@@ -222,7 +224,14 @@ class Producto(models.Model):
 
     # Configuración
     activo = models.BooleanField(default=True)
-    foto = models.ImageField(upload_to='productos/', null=True, blank=True)
+    # La foto y su miniatura son de cara al público: van al bucket, no al disco.
+    foto = models.ImageField(
+        upload_to='productos/', storage=storage_publico, null=True, blank=True
+    )
+    foto_thumb = models.ImageField(
+        upload_to='productos/thumbs/', storage=storage_publico, null=True, blank=True,
+        help_text="Miniatura generada automáticamente. No cargar a mano.",
+    )
 
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -257,6 +266,57 @@ class Producto(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.stock_actual} {self.unidad_medida})"
+
+    def save(self, *args, **kwargs):
+        """
+        Mantiene `foto_thumb` sincronizada con `foto`.
+
+        Se dispara solo cuando la foto cambió, no en cada guardado: generar la
+        miniatura implica leer el original de vuelta desde S3, y el producto se
+        guarda por muchos otros motivos (ajustes de stock, ediciones del CRM).
+
+        El sync de Conto escribe con `update()` de queryset, que no pasa por
+        acá. Es correcto: no toca la foto.
+        """
+        foto_anterior = None
+        if self.pk:
+            foto_anterior = (
+                Producto.objects.filter(pk=self.pk)
+                .values_list('foto', flat=True)
+                .first()
+            )
+
+        super().save(*args, **kwargs)
+
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'foto' not in update_fields:
+            # La foto no se persistió en este guardado; no hay nada que reflejar.
+            return
+
+        if (self.foto.name or '') == (foto_anterior or ''):
+            return
+
+        miniatura_vieja = self.foto_thumb.name
+
+        if self.foto:
+            contenido = generar_miniatura(self.foto)
+            if contenido is None:
+                # Sin miniatura la app cae al original: se prefiere eso antes
+                # que dejar una miniatura que no corresponde a la foto nueva.
+                self.foto_thumb = None
+            else:
+                self.foto_thumb.save(
+                    nombre_miniatura(self.foto.name), contenido, save=False
+                )
+        else:
+            self.foto_thumb = None
+
+        super().save(update_fields=['foto_thumb'])
+
+        # La miniatura vieja la generó este código y no la referencia nadie más,
+        # así que se borra para no acumular basura en el bucket.
+        if miniatura_vieja and miniatura_vieja != self.foto_thumb.name:
+            self.foto_thumb.storage.delete(miniatura_vieja)
 
     def get_precio_por_metodo_pago(self, metodo_pago):
         """

@@ -53,7 +53,13 @@ class ProductoAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'en_oferta', 'activo', 'sucursal', 'categoria']
     search_fields = ['nombre', 'descripcion', 'marca', 'codigo_barras', 'sku']
     ordering = ['sucursal', 'nombre']
-    readonly_fields = ['creado_en', 'actualizado_en', 'margen_ganancia', 'margen_ganancia_real', 'porcentaje_descuento']
+    readonly_fields = [
+        'creado_en', 'actualizado_en', 'margen_ganancia', 'margen_ganancia_real',
+        'porcentaje_descuento',
+        # La miniatura la genera el modelo al guardar la foto; se muestra para
+        # poder verificar que salió, no para cargarla.
+        'foto_thumb',
+    ]
 
     fieldsets = (
         ('Información Básica', {
@@ -82,7 +88,7 @@ class ProductoAdmin(admin.ModelAdmin):
             'description': 'Activa ofertas y descuentos temporales. El precio de oferta se usará automáticamente en las ventas.'
         }),
         ('Configuración', {
-            'fields': ('activo', 'foto')
+            'fields': ('activo', 'foto', 'foto_thumb')
         }),
         ('Timestamps', {
             'fields': ('creado_en', 'actualizado_en'),

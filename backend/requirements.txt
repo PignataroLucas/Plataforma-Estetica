@@ -29,6 +29,10 @@ python-decouple==3.8
 # Image Handling
 Pillow==10.1.0
 
+# Cloud storage (S3 para fotos de producto y logo del centro)
+django-storages==1.14.4
+boto3==1.35.36
+
 # WhatsApp Integration (for future)
 twilio==8.10.3
 

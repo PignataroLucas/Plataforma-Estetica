@@ -104,6 +104,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Almacenamiento de archivos
+#
+# `default` sigue siendo el disco local a propósito: los cinco campos de archivo
+# sensibles (fotos de clientas, antes/después, foto de usuario, comprobantes)
+# no van a la nube todavía y necesitarían un bucket privado con URLs firmadas.
+# Solo los dos campos públicos -- foto de producto y logo del centro -- optan
+# explícitamente por el storage `publico`. Ver config/storage.py.
+AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
+
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
@@ -112,6 +122,31 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+
+if AWS_STORAGE_BUCKET_NAME:
+    STORAGES['publico'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': AWS_STORAGE_BUCKET_NAME,
+            'region_name': config('AWS_S3_REGION_NAME', default='sa-east-1'),
+            # Las credenciales van explícitas y no por el entorno de boto3:
+            # en desarrollo decouple las lee del .env, que boto3 no mira.
+            'access_key': config('AWS_ACCESS_KEY_ID', default=None),
+            'secret_key': config('AWS_SECRET_ACCESS_KEY', default=None),
+            'querystring_auth': False,  # URLs limpias: el contenido es público
+            'file_overwrite': False,    # dos subidas homónimas no se pisan
+            'default_acl': None,        # los buckets nuevos tienen ACLs deshabilitadas
+            # Se completa con el dominio de CloudFront cuando llegue: todas las
+            # URLs cambian solas, sin tocar código.
+            'custom_domain': config('AWS_S3_CUSTOM_DOMAIN', default=None) or None,
+        },
+    }
+else:
+    # Sin bucket configurado (desarrollo, tests, CI) el storage público cae al
+    # disco local. Que no haya credenciales de AWS no puede romper el arranque.
+    STORAGES['publico'] = {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    }
 
 # Media files (User uploads)
 MEDIA_URL = 'media/'

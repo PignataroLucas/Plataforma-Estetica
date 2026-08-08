@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import api from '../services/api'
-import type { Producto, ProductoList, ProductoDetail, TipoMovimiento } from '../types/models'
+import type { Producto, ProductoFormData, ProductoList, ProductoDetail, TipoMovimiento } from '../types/models'
 
 interface UseProductosReturn {
   productos: ProductoList[]
@@ -8,8 +8,8 @@ interface UseProductosReturn {
   error: string | null
   fetchProductos: (params?: FetchProductosParams) => Promise<void>
   fetchProducto: (id: number) => Promise<ProductoDetail | null>
-  createProducto: (data: Partial<Producto>) => Promise<Producto | null>
-  updateProducto: (id: number, data: Partial<Producto>) => Promise<Producto | null>
+  createProducto: (data: ProductoFormData) => Promise<Producto | null>
+  updateProducto: (id: number, data: ProductoFormData) => Promise<Producto | null>
   deleteProducto: (id: number) => Promise<boolean>
   ajustarStock: (id: number, data: AjustarStockData) => Promise<boolean>
   fetchStockBajo: () => Promise<ProductoList[]>
@@ -32,23 +32,87 @@ interface AjustarStockData {
   costo_unitario?: number
 }
 
+/**
+ * Campos de los que manda Conto.
+ *
+ * El sync los actualiza por su cuenta con un UPDATE acotado. Como el CRM guarda
+ * con PUT mandando el formulario entero, si viajaran alcanzaría con tener el
+ * formulario abierto un rato: se abre a las 10:00, el sync corre a las 10:05 y
+ * el guardado de las 10:10 reescribe stock y precios con los valores viejos.
+ * Es silencioso y dura hasta el próximo sync.
+ *
+ * Se omiten al editar, no al crear: un producto nuevo necesita costo y precio.
+ */
+const CAMPOS_DE_CONTO = ['stock_actual', 'precio_costo', 'precio_venta']
+
+/**
+ * Campos que llegan en initialData pero son de solo lectura en la API: si
+ * viajan, el serializer los ignora o se queja.
+ */
+const CAMPOS_DE_SOLO_LECTURA = [
+  'id', 'sucursal', 'foto_thumb', 'creado_en', 'actualizado_en',
+  'margen_ganancia', 'stock_bajo', 'categoria_nombre', 'proveedor_nombre',
+  'categoria_data', 'proveedor_data',
+]
+
+/**
+ * Campos que el backend no acepta en blanco: una FK, un decimal opcional o un
+ * código único mandados como '' son un error de validación.
+ */
+const OMITIR_SI_ESTAN_VACIOS = [
+  'categoria', 'proveedor', 'codigo_barras', 'stock_maximo',
+  'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
+]
+
+/**
+ * Arma el cuerpo del request. Devuelve un FormData si hay que mover un archivo
+ * y un objeto plano (JSON) si no, que es el caso de la enorme mayoría de los
+ * guardados.
+ */
+const prepararPayload = (data: ProductoFormData, esEdicion: boolean) => {
+  const campos: Record<string, any> = { ...data }
+
+  CAMPOS_DE_SOLO_LECTURA.forEach(campo => delete campos[campo])
+  if (esEdicion) {
+    CAMPOS_DE_CONTO.forEach(campo => delete campos[campo])
+  }
+
+  Object.keys(campos).forEach(campo => {
+    const valor = campos[campo]
+    if (valor === undefined || valor === null) {
+      delete campos[campo]
+    } else if (valor === '' && OMITIR_SI_ESTAN_VACIOS.includes(campo)) {
+      delete campos[campo]
+    }
+  })
+
+  const foto = campos.foto
+  const quitarFoto = campos.quitar_foto === true
+  delete campos.foto
+  delete campos.quitar_foto
+
+  // La foto que ya estaba llega como URL: no se reenvía, el backend la conserva.
+  if (!(foto instanceof File) && !quitarFoto) {
+    return campos
+  }
+
+  const formData = new FormData()
+  Object.entries(campos).forEach(([campo, valor]) => {
+    formData.append(campo, String(valor))
+  })
+  if (foto instanceof File) {
+    formData.append('foto', foto)
+  }
+  if (quitarFoto) {
+    formData.append('quitar_foto', 'true')
+  }
+  return formData
+}
+
 export const useProductos = (): UseProductosReturn => {
   const [productos, setProductos] = useState<ProductoList[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const cleanProductoData = (data: Partial<Producto>) => {
-    const cleaned: any = { ...data }
-    const optionalFields = ['categoria', 'proveedor', 'descripcion', 'marca', 'codigo_barras', 'sku', 'stock_maximo', 'foto']
-
-    optionalFields.forEach(field => {
-      if (cleaned[field] === '' || cleaned[field] === undefined || cleaned[field] === null) {
-        delete cleaned[field]
-      }
-    })
-
-    return cleaned
-  }
 
   const fetchProductos = async (params?: FetchProductosParams) => {
     setLoading(true)
@@ -86,12 +150,11 @@ export const useProductos = (): UseProductosReturn => {
     }
   }
 
-  const createProducto = async (data: Partial<Producto>): Promise<Producto | null> => {
+  const createProducto = async (data: ProductoFormData): Promise<Producto | null> => {
     setLoading(true)
     setError(null)
     try {
-      const cleanedData = cleanProductoData(data)
-      const response = await api.post('/inventario/productos/', cleanedData)
+      const response = await api.post('/inventario/productos/', prepararPayload(data, false))
       return response.data
     } catch (err: any) {
       let errorMessage = 'Error al crear el producto:\n'
@@ -113,15 +176,25 @@ export const useProductos = (): UseProductosReturn => {
     }
   }
 
-  const updateProducto = async (id: number, data: Partial<Producto>): Promise<Producto | null> => {
+  const updateProducto = async (id: number, data: ProductoFormData): Promise<Producto | null> => {
     setLoading(true)
     setError(null)
     try {
-      const cleanedData = cleanProductoData(data)
-      const response = await api.put(`/inventario/productos/${id}/`, cleanedData)
+      // PATCH y no PUT: el payload ya no lleva los campos de Conto, así que un
+      // PUT los tomaría como faltantes y fallaría la validación de requeridos.
+      const response = await api.patch(`/inventario/productos/${id}/`, prepararPayload(data, true))
       return response.data
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Error al actualizar el producto'
+      let errorMessage = 'Error al actualizar el producto:\n'
+      const errores = err.response?.data
+
+      if (errores && typeof errores === 'object') {
+        Object.keys(errores).forEach(campo => {
+          const valor = errores[campo]
+          errorMessage += `${campo}: ${Array.isArray(valor) ? valor.join(', ') : valor}\n`
+        })
+      }
+
       setError(errorMessage)
       console.error('Error updating producto:', err)
       throw err

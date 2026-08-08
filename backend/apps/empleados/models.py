@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from config.storage import storage_publico
+
 
 class CentroEstetica(models.Model):
     """
@@ -17,7 +19,11 @@ class CentroEstetica(models.Model):
     pais = models.CharField(max_length=100, default='Argentina')
 
     # Configuración
-    logo = models.ImageField(upload_to='logos/', null=True, blank=True)
+    # El logo lo muestra la app de clientas, así que va al bucket público.
+    # Ojo: `Usuario.foto` (más abajo) NO, es foto de una persona identificable.
+    logo = models.ImageField(
+        upload_to='logos/', storage=storage_publico, null=True, blank=True
+    )
     activo = models.BooleanField(default=True)
 
     # Timestamps

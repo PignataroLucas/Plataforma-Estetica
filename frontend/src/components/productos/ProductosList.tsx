@@ -52,9 +52,27 @@ export const ProductosList: React.FC<ProductosListProps> = ({
       key: 'nombre',
       header: 'Producto',
       accessor: (producto: ProductoList) => (
-        <div className="flex flex-col">
-          <span className="font-medium">{producto.nombre}</span>
-          {producto.marca && <span className="text-sm text-gray-600">{producto.marca}</span>}
+        <div className="flex items-center gap-3">
+          {/* La miniatura acá es cómo el centro ve, de un vistazo, a qué
+              productos les falta la foto mientras carga el catálogo. */}
+          {producto.foto_thumb || producto.foto ? (
+            <img
+              src={producto.foto_thumb || producto.foto || ''}
+              alt=""
+              className="h-10 w-10 rounded object-cover border border-gray-200 shrink-0"
+            />
+          ) : (
+            <span
+              className="h-10 w-10 rounded border border-dashed border-gray-300 text-gray-300 flex items-center justify-center text-lg shrink-0"
+              title="Sin foto"
+            >
+              📷
+            </span>
+          )}
+          <div className="flex flex-col">
+            <span className="font-medium">{producto.nombre}</span>
+            {producto.marca && <span className="text-sm text-gray-600">{producto.marca}</span>}
+          </div>
         </div>
       ),
     },

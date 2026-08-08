@@ -37,9 +37,12 @@ class ProductoListSerializer(serializers.ModelSerializer):
             'precio_costo', 'precio_venta',
             'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
             'margen_ganancia', 'stock_bajo',
-            'activo', 'foto', 'creado_en', 'actualizado_en'
+            'activo', 'foto', 'foto_thumb', 'creado_en', 'actualizado_en'
         ]
-        read_only_fields = ['id', 'sucursal', 'margen_ganancia', 'stock_bajo', 'creado_en', 'actualizado_en']
+        read_only_fields = [
+            'id', 'sucursal', 'margen_ganancia', 'stock_bajo', 'foto_thumb',
+            'creado_en', 'actualizado_en'
+        ]
 
 
 class ProductoDetailSerializer(serializers.ModelSerializer):
@@ -59,13 +62,21 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
             'precio_costo', 'precio_venta',
             'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
             'margen_ganancia', 'stock_bajo',
-            'activo', 'foto', 'creado_en', 'actualizado_en'
+            'activo', 'foto', 'foto_thumb', 'creado_en', 'actualizado_en'
         ]
-        read_only_fields = ['id', 'sucursal', 'margen_ganancia', 'stock_bajo', 'creado_en', 'actualizado_en']
+        read_only_fields = [
+            'id', 'sucursal', 'margen_ganancia', 'stock_bajo', 'foto_thumb',
+            'creado_en', 'actualizado_en'
+        ]
 
 
 class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer para crear/actualizar productos"""
+
+    # Un multipart no puede mandar "campo vacío" para un archivo, así que sacar
+    # la foto necesita una señal propia.
+    quitar_foto = serializers.BooleanField(write_only=True, required=False, default=False)
+
     class Meta:
         model = Producto
         fields = [
@@ -74,9 +85,34 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',
             'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
-            'activo', 'foto'
+            'activo', 'foto', 'quitar_foto'
         ]
         read_only_fields = ['id']
+
+    def create(self, validated_data):
+        validated_data.pop('quitar_foto', None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if validated_data.pop('quitar_foto', False):
+            validated_data['foto'] = None
+        return super().update(instance, validated_data)
+
+    def validate_foto(self, value):
+        """
+        Tope de tamaño, también del lado del servidor.
+
+        El formulario del CRM ya valida, pero el que sube las 31 fotos puede
+        estar mandando el original de la cámara y el límite tiene que valer
+        aunque la subida no venga del formulario.
+        """
+        maximo = 5 * 1024 * 1024
+        if value and value.size > maximo:
+            raise serializers.ValidationError(
+                f"La foto no puede superar los 5 MB (pesa "
+                f"{value.size / (1024 * 1024):.1f} MB)"
+            )
+        return value
 
     def validate(self, data):
         """Validar precios por método de pago"""

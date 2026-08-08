@@ -3,7 +3,7 @@ import { Card, Button, Input, Select, Modal, ModalHeader, ModalBody, ModalFooter
 import { ProductosList } from '../components/productos/ProductosList'
 import { ProductoForm } from '../components/productos/ProductoForm'
 import { useProductos } from '../hooks/useProductos'
-import type { ProductoList, Producto } from '../types/models'
+import type { ProductoList, ProductoFormData } from '../types/models'
 import { TipoMovimiento } from '../types/models'
 
 type TabType = 'todos' | 'stock-bajo'
@@ -60,7 +60,7 @@ export default function InventarioPage() {
     fetchProductos(params)
   }
 
-  const handleCreateProducto = async (data: Partial<Producto>) => {
+  const handleCreateProducto = async (data: ProductoFormData) => {
     try {
       await createProducto(data)
       setIsCreateModalOpen(false)
@@ -70,7 +70,7 @@ export default function InventarioPage() {
     }
   }
 
-  const handleEditProducto = async (data: Partial<Producto>) => {
+  const handleEditProducto = async (data: ProductoFormData) => {
     if (!selectedProducto) return
 
     try {

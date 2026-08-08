@@ -444,9 +444,23 @@ export interface Producto {
   precio_debito?: number
   precio_credito?: number
   activo: boolean
-  foto?: string
+  foto?: string | null
+  /** Miniatura WebP que genera el backend al subir la foto. Solo lectura. */
+  foto_thumb?: string | null
   creado_en: string
   actualizado_en: string
+}
+
+/**
+ * Lo que manda el formulario de producto.
+ *
+ * `foto` puede ser un File recién elegido (viaja como multipart) o la URL que
+ * ya estaba (no viaja: el backend la conserva). `quitar_foto` es la única forma
+ * de borrar una foto, porque un multipart no puede mandar un archivo vacío.
+ */
+export type ProductoFormData = Partial<Omit<Producto, 'foto'>> & {
+  foto?: string | File | null
+  quitar_foto?: boolean
 }
 
 // Producto con datos nested para listados

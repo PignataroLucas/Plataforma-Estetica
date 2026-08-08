@@ -23,6 +23,11 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // El Content-Type por defecto es JSON, pero una subida de archivo necesita
+    // que el navegador ponga el suyo con el boundary del multipart.
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    }
     return config
   },
   (error) => Promise.reject(error)

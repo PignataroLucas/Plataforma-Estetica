@@ -24,6 +24,11 @@ def plain_static(settings):
         'default': {
             'BACKEND': 'django.core.files.storage.FileSystemStorage',
         },
+        # Los campos públicos (foto de producto, logo) declaran este storage:
+        # sacarlo del dict dejaría la configuración incompleta.
+        'publico': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
         'staticfiles': {
             'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
         },

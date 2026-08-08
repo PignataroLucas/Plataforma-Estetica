@@ -1,16 +1,34 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Input, Select, Button } from '../ui'
-import type { Producto, CategoriaProducto, Proveedor, TipoProducto } from '../../types/models'
+import type { Producto, ProductoFormData, CategoriaProducto, Proveedor, TipoProducto } from '../../types/models'
 import api from '../../services/api'
 
 interface ProductoFormProps {
   initialData?: Partial<Producto>
-  onSubmit: (data: Partial<Producto>) => void
+  onSubmit: (data: ProductoFormData) => void
   onCancel: () => void
   submitLabel?: string
   formId?: string
   showButtons?: boolean
 }
+
+// Coincide con el tope que valida el backend.
+const MAX_FOTO_BYTES = 5 * 1024 * 1024
+
+/**
+ * Un dato que administra el sync de Conto: se muestra pero no se edita ni se
+ * manda al guardar, para que un guardado no lo revierta al valor que tenía
+ * cuando se abrió el formulario.
+ */
+const CampoDeConto: React.FC<{ label: string; valor: React.ReactNode }> = ({ label, valor }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    <div className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
+      {valor ?? '—'}
+    </div>
+    <p className="mt-1 text-xs text-gray-500">Lo administra Conto</p>
+  </div>
+)
 
 const tipoProductoOptions = [
   { value: 'REVENTA', label: 'Producto de Reventa' },
@@ -48,6 +66,18 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
+  // Foto: el archivo nuevo, su vista previa y el pedido de borrar la que había.
+  const [fotoNueva, setFotoNueva] = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+  const [quitarFoto, setQuitarFoto] = useState(false)
+  const [errorFoto, setErrorFoto] = useState<string | null>(null)
+  const fotoInputRef = useRef<HTMLInputElement>(null)
+
+  // Editar un producto que existe es el caso donde el sync de Conto puede pisar
+  // datos; al crear uno nuevo hay que poder cargar costo y precio a mano.
+  const esEdicion = Boolean(initialData?.id)
+  const fotoActual = quitarFoto ? null : (fotoPreview || initialData?.foto || null)
+
   useEffect(() => {
     loadFormData()
   }, [])
@@ -57,6 +87,48 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
       setFormData({ ...formData, ...initialData })
     }
   }, [initialData])
+
+  // La URL del objeto vive mientras se ve la vista previa; si no se libera,
+  // cargar 31 fotos seguidas deja 31 blobs colgados en memoria.
+  useEffect(() => {
+    return () => {
+      if (fotoPreview) URL.revokeObjectURL(fotoPreview)
+    }
+  }, [fotoPreview])
+
+  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0]
+    if (!archivo) return
+
+    if (!archivo.type.startsWith('image/')) {
+      setErrorFoto('El archivo tiene que ser una imagen (JPG, PNG o WebP)')
+      e.target.value = ''
+      return
+    }
+    if (archivo.size > MAX_FOTO_BYTES) {
+      setErrorFoto(
+        `La foto pesa ${(archivo.size / (1024 * 1024)).toFixed(1)} MB y el máximo es 5 MB`
+      )
+      e.target.value = ''
+      return
+    }
+
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview)
+    setErrorFoto(null)
+    setQuitarFoto(false)
+    setFotoNueva(archivo)
+    setFotoPreview(URL.createObjectURL(archivo))
+  }
+
+  const handleQuitarFoto = () => {
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview)
+    setFotoPreview(null)
+    setFotoNueva(null)
+    setErrorFoto(null)
+    // Solo hay algo que borrar en el servidor si el producto ya tenía foto.
+    setQuitarFoto(Boolean(initialData?.foto))
+    if (fotoInputRef.current) fotoInputRef.current.value = ''
+  }
 
   const loadFormData = async () => {
     setLoadingData(true)
@@ -115,14 +187,18 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
     if (!formData.nombre?.trim()) {
       newErrors.nombre = 'El nombre es requerido'
     }
-    if (!formData.precio_costo || costo <= 0) {
-      newErrors.precio_costo = 'El precio de costo debe ser mayor a 0'
-    }
-    if (!formData.precio_venta || venta <= 0) {
-      newErrors.precio_venta = 'El precio de venta debe ser mayor a 0'
-    }
-    if (formData.precio_venta && formData.precio_costo && venta < costo) {
-      newErrors.precio_venta = 'El precio de venta debe ser mayor al costo'
+
+    // Al editar, costo y precio no se tocan ni se mandan: los administra Conto.
+    if (!esEdicion) {
+      if (!formData.precio_costo || costo <= 0) {
+        newErrors.precio_costo = 'El precio de costo debe ser mayor a 0'
+      }
+      if (!formData.precio_venta || venta <= 0) {
+        newErrors.precio_venta = 'El precio de venta debe ser mayor a 0'
+      }
+      if (formData.precio_venta && formData.precio_costo && venta < costo) {
+        newErrors.precio_venta = 'El precio de venta debe ser mayor al costo'
+      }
     }
 
     // Validate payment method prices (if specified)
@@ -151,9 +227,15 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (validateForm()) {
-      onSubmit(formData)
-    }
+    if (!validateForm()) return
+
+    onSubmit({
+      ...formData,
+      // La foto solo viaja si es un archivo nuevo; la que ya estaba es una URL
+      // y el backend la conserva sola.
+      foto: fotoNueva,
+      quitar_foto: quitarFoto,
+    })
   }
 
   const categoriaOptions = [
@@ -263,15 +345,22 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
         <h4 className="text-sm font-semibold text-blue-900 mb-3">Stock</h4>
         <div className="grid grid-cols-3 gap-4">
-          <Input
-            label="Stock Actual"
-            name="stock_actual"
-            type="number"
-            step="0.01"
-            value={formData.stock_actual?.toString() || '0'}
-            onChange={handleChange}
-            required
-          />
+          {esEdicion ? (
+            <CampoDeConto
+              label="Stock Actual"
+              valor={`${formData.stock_actual ?? 0} ${formData.unidad_medida || ''}`.trim()}
+            />
+          ) : (
+            <Input
+              label="Stock Actual"
+              name="stock_actual"
+              type="number"
+              step="0.01"
+              value={formData.stock_actual?.toString() || '0'}
+              onChange={handleChange}
+              required
+            />
+          )}
 
           <Input
             label="Stock Mínimo"
@@ -300,29 +389,44 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
         <h4 className="text-sm font-semibold text-green-900 mb-3">Precios</h4>
 
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <Input
-            label="Precio de Costo"
-            name="precio_costo"
-            type="number"
-            step="0.01"
-            value={formData.precio_costo?.toString() || ''}
-            onChange={handleChange}
-            required
-            error={errors.precio_costo}
-            placeholder="$0.00"
-          />
+          {esEdicion ? (
+            <>
+              <CampoDeConto
+                label="Precio de Costo"
+                valor={formData.precio_costo != null ? `$${formData.precio_costo}` : null}
+              />
+              <CampoDeConto
+                label="Precio de Venta (Base)"
+                valor={formData.precio_venta != null ? `$${formData.precio_venta}` : null}
+              />
+            </>
+          ) : (
+            <>
+              <Input
+                label="Precio de Costo"
+                name="precio_costo"
+                type="number"
+                step="0.01"
+                value={formData.precio_costo?.toString() || ''}
+                onChange={handleChange}
+                required
+                error={errors.precio_costo}
+                placeholder="$0.00"
+              />
 
-          <Input
-            label="Precio de Venta (Base)"
-            name="precio_venta"
-            type="number"
-            step="0.01"
-            value={formData.precio_venta?.toString() || ''}
-            onChange={handleChange}
-            required
-            error={errors.precio_venta}
-            placeholder="$0.00"
-          />
+              <Input
+                label="Precio de Venta (Base)"
+                name="precio_venta"
+                type="number"
+                step="0.01"
+                value={formData.precio_venta?.toString() || ''}
+                onChange={handleChange}
+                required
+                error={errors.precio_venta}
+                placeholder="$0.00"
+              />
+            </>
+          )}
         </div>
 
         <div className="border-t border-green-300 pt-3 mb-3">
@@ -385,19 +489,70 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
         )}
       </div>
 
-      <div>
-        <label htmlFor="descripcion" className="block text-sm font-medium text-gray-700 mb-1">
-          Descripción
-        </label>
-        <textarea
-          id="descripcion"
-          name="descripcion"
-          value={formData.descripcion || ''}
-          onChange={handleChange}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Descripción detallada del producto..."
-        />
+      <div className="p-4 bg-purple-50 border border-purple-200 rounded-md">
+        <h4 className="text-sm font-semibold text-purple-900 mb-1">Contenido para el catálogo</h4>
+        <p className="text-xs text-purple-800 mb-3">
+          La foto y la descripción son lo que ve la clienta en la app. El sync de Conto no las toca.
+        </p>
+
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <span className="block text-sm font-medium text-gray-700 mb-1">Foto</span>
+            <div className="aspect-square w-full rounded-lg border border-purple-200 bg-white overflow-hidden flex items-center justify-center">
+              {fotoActual ? (
+                <img src={fotoActual} alt="Vista previa del producto" className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-xs text-gray-400 text-center px-2">Sin foto</span>
+              )}
+            </div>
+          </div>
+
+          <div className="col-span-2 flex flex-col justify-center gap-2">
+            <input
+              ref={fotoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFotoChange}
+              className="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-purple-100 file:text-purple-800 file:text-sm file:font-medium hover:file:bg-purple-200"
+            />
+            {errorFoto ? (
+              <p className="text-sm text-red-600">{errorFoto}</p>
+            ) : (
+              <p className="text-xs text-gray-500">
+                JPG, PNG o WebP, hasta 5 MB. La miniatura para la grilla se genera sola.
+              </p>
+            )}
+            {fotoActual && (
+              <button
+                type="button"
+                onClick={handleQuitarFoto}
+                className="self-start text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Quitar foto
+              </button>
+            )}
+            {quitarFoto && (
+              <p className="text-xs text-red-600">
+                La foto se va a borrar al guardar.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label htmlFor="descripcion" className="block text-sm font-medium text-gray-700 mb-1">
+            Descripción
+          </label>
+          <textarea
+            id="descripcion"
+            name="descripcion"
+            value={formData.descripcion || ''}
+            onChange={handleChange}
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Qué es, para qué tipo de piel, cómo se usa..."
+          />
+        </div>
       </div>
 
       <div className="flex items-center">

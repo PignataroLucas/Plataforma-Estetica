@@ -89,7 +89,9 @@ class ProductoPublicoSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nombre', 'descripcion', 'marca',
             'precio', 'en_oferta', 'precio_oferta', 'porcentaje_descuento',
-            'disponible', 'foto', 'categoria_nombre', 'sucursal',
+            # `foto_thumb` es para la grilla y `foto` para la ficha: la grilla
+            # nunca debería bajar 31 originales por datos móviles.
+            'disponible', 'foto', 'foto_thumb', 'categoria_nombre', 'sucursal',
             # Datos para el motor de recompra (app mobile)
             'contenido_ml', 'duracion_estimada_dias', 'pao_meses', 'frecuencia_uso',
         ]

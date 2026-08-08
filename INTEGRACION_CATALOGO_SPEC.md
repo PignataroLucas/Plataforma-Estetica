@@ -1,6 +1,8 @@
 # Catálogo de productos en la app + almacenamiento en la nube
 
-**Estado:** especificado, sin implementar
+**Estado:** fases 1 y 2 implementadas en el código (08/08/2026); falta la
+configuración de AWS, que la hace el dueño de la cuenta (ver 4.4 y el checklist
+de §9). Fase 3 y 4, especificadas y sin implementar.
 **Fecha:** 07/08/2026
 
 Documento de handoff: está escrito para que se pueda implementar **sin haber
@@ -17,6 +19,34 @@ productos activos, y al tocar uno, su ficha con foto, descripción, precio y un
 
 Importa porque los productos son la **fuente principal de ingresos del centro**.
 Es el equivalente de la ficha de tratamiento, del lado que factura.
+
+Eso es la meta. Lo que sigue acota qué parte se construye ahora.
+
+### ⚠️ Alcance de esta tanda: fases 1 y 2 solamente
+
+**Construir el almacenamiento (fase 1) y el formulario de carga del CRM
+(fase 2). Frenar ahí.** La pantalla de catálogo (fase 3) queda especificada pero
+**no se implementa todavía**.
+
+No es una limitación de tiempo, es una decisión de orden, y conviene entender el
+porqué para no "adelantar trabajo" y terminar rompiéndolo:
+
+- **El contenido es la tarea más lenta del plan y no la hace quien programa.**
+  Alguien del centro tiene que fotografiar 31 productos y escribir 31
+  descripciones. Eso es semanas de calendario ajeno. Mientras no exista dónde
+  cargarlo, esa cuenta regresiva ni siquiera arrancó. Terminar las fases 1 y 2
+  es lo que la larga.
+- **El almacenamiento es el único pendiente cuyo costo crece si se posterga.**
+  Hoy hay cero archivos en el proyecto: es el momento más barato que va a
+  existir. Cada foto cargada al disco local mientras tanto es una foto que
+  después hay que migrar o perder.
+- **Una pantalla sin contenido ya salió mal dos veces** en este proyecto: la
+  ficha de tratamiento y el calendario de fechas se construyeron y quedaron
+  vacías. La pantalla de catálogo se construye cuando haya fotos que mostrar.
+
+Entre una cosa y la otra, la prioridad vuelve a los bloqueantes de lanzamiento
+(notificaciones, teléfono real, tiendas) mientras el contenido se acumula en
+paralelo. Ver `PENDIENTES_AME.pdf`.
 
 ### Fuera de alcance (decidido)
 
@@ -52,9 +82,11 @@ Lo que **no** existe:
 - Endpoint de **detalle** de producto (solo hay listado). El molde a copiar es
   `ServicioPublicoDetalleView` en el mismo archivo.
 - Campo de **video** en `Producto`.
-- Cualquier manejo de **foto en el CRM**: `frontend/src/components/productos/ProductoForm.tsx`
-  no menciona el campo. Hoy las fotos solo se cargan desde el admin de Django.
-- `boto3` / `django-storages` en las dependencias.
+
+> Resuelto en esta tanda (08/08/2026): `django-storages`/`boto3` están en
+> `requirements.txt`, el storage `publico` vive en `backend/config/storage.py`,
+> y `ProductoForm.tsx` ya carga foto y descripción. El detalle y el video siguen
+> pendientes, cada uno en su fase.
 
 ### El dato que manda sobre el cronograma
 
@@ -96,6 +128,7 @@ desconocer el porqué.
 | **Video en fase aparte** | El catálogo está frenado por las fotos, que se resuelven en 1-2 días. El video suma transcodificación, que merece pensarse sin bloquear el catálogo. |
 | **Transcodificar con ffmpeg + cron** | Reutiliza el patrón de comando programado que ya existe y está probado para notificaciones. AWS MediaConvert es lo correcto a otra escala; acá es pagar complejidad que no se necesita. |
 | **Costo y precio son de solo lectura en el CRM** | El centro confirmó que no los va a editar más. Conto es la fuente de verdad. Ver 5.2, que además arregla una condición de carrera. |
+| **Se cortan las fases 1 y 2, la 3 espera** | Ver el recuadro de alcance en §1. Se libera lo que destraba al centro y no se construye una pantalla sin contenido. |
 
 ---
 
@@ -145,8 +178,11 @@ sin tocar código.
 
 ### 4.2 Enganchar los campos públicos
 
+El callable vive en `backend/config/storage.py`, no dentro de una app: lo usan
+`inventario` y `empleados`, y la migración serializa la ruta del import.
+
 ```python
-# backend/apps/inventario/models.py (y empleados/models.py para el logo)
+# backend/config/storage.py
 from django.core.files.storage import storages
 
 def storage_publico():
@@ -157,6 +193,7 @@ def storage_publico():
     return storages['publico']
 
 
+# backend/apps/inventario/models.py (y empleados/models.py para el logo)
 class Producto(models.Model):
     foto = models.ImageField(
         upload_to='productos/', storage=storage_publico, null=True, blank=True
@@ -308,7 +345,11 @@ y revisar el resultado antes de que el centro cargue una sola foto.**
 
 ---
 
-## 6. Fase 3 — API pública y pantalla
+## 6. Fase 3 — API pública y pantalla · NO EN ESTA TANDA
+
+> **No implementar todavía.** Queda especificado para que las fases 1 y 2 no
+> tomen decisiones que después haya que deshacer. Se retoma cuando el centro
+> tenga fotos y descripciones cargadas. Ver el recuadro de alcance en §1.
 
 **Estimación: 3 a 4 días.** Sale con fotos y sin video.
 
@@ -468,21 +509,54 @@ del usuario y abarata el tráfico. Del lado de la aplicación es **completar
 
 ## 9. Orden y checklist
 
-1. **Imágenes en S3** — bucket, IAM, `STORAGES`, campos públicos, miniaturas
-2. **Carga en el CRM** — foto y descripción, campos de Conto bloqueados
-3. *(en paralelo)* **El centro carga contenido** — es lo que manda el calendario
-4. **API de detalle + pantalla de catálogo y ficha**
-5. **Video** — proyecto aparte
+| | Trabajo | Cuándo |
+|---|---|---|
+| 1 | **Imágenes en S3** — bucket, IAM, `STORAGES`, campos públicos, miniaturas | **Esta tanda** |
+| 2 | **Carga en el CRM** — foto y descripción, campos de Conto bloqueados | **Esta tanda** |
+| 3 | **El centro carga contenido** | Arranca apenas cierra la 2, en paralelo |
+| 4 | **API de detalle + pantalla de catálogo y ficha** | Cuando haya contenido |
+| 5 | **Video** | Proyecto aparte |
 
-Antes de dar por cerrada la fase 3:
+### Checklist de esta tanda
 
-- [ ] `emparejar_sku_conto` corrido y revisado, **antes** de cargar fotos
-- [ ] `disponible` fuera del serializer público
-- [ ] Costo, precio y stock de solo lectura en el CRM y fuera del payload
-- [ ] Una foto sobrevive a un redeploy de Railway
+Antes de dar por cerradas las fases 1 y 2:
+
+- [x] `default` sigue apuntando al disco local; solo foto de producto y logo
+      usan el storage `publico` (ver 4.1) — con test que lo fija: los cuatro
+      campos sensibles no declaran storage
+- [x] Se genera la miniatura al subir y pesa mucho menos que el original
+      (WebP 400 px, solo cuando la foto cambió)
+- [x] Costo, precio y stock son de solo lectura en el formulario **y no viajan
+      en el guardado** (ver 5.2). Solo al editar: un producto nuevo necesita
+      poder cargarlos
+- [x] Guardar una descripción **no** revierte el stock ni el precio que dejó el
+      último sync de Conto
+- [x] El centro puede cargar foto y descripción **sin entrar al admin de Django**
+
+Lo que queda, y no lo puede hacer quien programa:
+
+- [ ] Bucket, política y usuario de IAM creados (ver 4.4)
+- [ ] Las claves de AWS están en las variables de Railway y **no** en el repo.
+      Sin `AWS_STORAGE_BUCKET_NAME` el storage público cae al disco local, que
+      en Railway se borra en cada deploy
+- [ ] Una foto cargada desde el CRM **sobrevive a un redeploy de Railway** —
+      esta es la prueba que valida toda la fase 1
+- [ ] `emparejar_sku_conto` corrido y revisado, **antes** de que se cargue una
+      sola foto (si no, se le puede cargar la foto a un producto duplicado).
+      Sin `--aplicar` solo propone
+
+### Cómo se sabe que esta tanda terminó
+
+Alguien del centro, sin ayuda técnica, entra al CRM, le carga foto y descripción
+a un producto, y esa foto sigue estando después de un despliegue. Con eso, la
+carga de contenido puede arrancar y la pantalla queda para cuando haya qué
+mostrar.
+
+### Para después (fase 3, no ahora)
+
+- [ ] `disponible` fuera del serializer público (ver 7.2)
 - [ ] La grilla carga miniaturas, no los originales
 - [ ] Un id de producto de otro centro devuelve 404, no datos
-- [ ] Las claves de AWS están en Railway y no en el repo
 
 ---
 
