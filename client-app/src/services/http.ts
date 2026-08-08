@@ -90,3 +90,11 @@ export function authPost<T>(path: string, body?: unknown): Promise<T> {
 export function authPatch<T>(path: string, body: unknown): Promise<T> {
   return authRequest<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
+
+/** DELETE con cuerpo: lo usa la baja de dispositivo push, que manda su token. */
+export function authDelete<T>(path: string, body?: unknown): Promise<T> {
+  return authRequest<T>(path, {
+    method: 'DELETE',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}

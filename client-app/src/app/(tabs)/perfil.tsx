@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { SimuladorPush } from '@/components/dev/SimuladorPush';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -48,6 +49,8 @@ export default function Perfil() {
             </Card>
           </View>
         ) : null}
+
+        <SimuladorPush />
 
         <View style={styles.section}>
           <Button label="Cerrar sesión" variant="ghost" onPress={() => logout()} />

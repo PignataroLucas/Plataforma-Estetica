@@ -9,7 +9,13 @@ from apps.empleados.models import CentroEstetica
 
 TEST_REST_FRAMEWORK = {
     **settings.REST_FRAMEWORK,
-    'DEFAULT_THROTTLE_RATES': {'cliente_auth': None, 'cliente_registro': None},
+    # Ver la nota en test_auth.py: reemplazar el diccionario entero se filtra a
+    # los tests de otros módulos.
+    'DEFAULT_THROTTLE_RATES': {
+        **settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],
+        'cliente_auth': None,
+        'cliente_registro': None,
+    },
 }
 
 TELEFONO = '+5491151234567'  # AR mobile válido (normaliza a E.164)

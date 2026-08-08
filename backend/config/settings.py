@@ -199,6 +199,49 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# Push Notifications (Expo)
+# Only needed if the Expo project has push security enabled; the Push API works
+# unauthenticated otherwise.
+EXPO_ACCESS_TOKEN = config('EXPO_ACCESS_TOKEN', default='')
+
+# Delivery channel: 'expo' really sends, 'consola' prints instead. The console
+# channel runs the whole pipeline -- triggers, queue, receipts, retries -- with
+# no Expo account, no development build and no phone, which is how the system is
+# exercised locally. Defaults to the console channel in DEBUG so a dev machine
+# never sends a real notification by accident.
+NOTIFICACIONES_CANAL = config(
+    'NOTIFICACIONES_CANAL', default='consola' if DEBUG else 'expo'
+)
+
+# Logging
+# Django's own defaults only surface WARNING and above from our code, which hid
+# the console channel's simulated notifications and the queue run summaries.
+# `disable_existing_loggers: False` keeps Django's default handlers intact.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {'format': '%(levelname)s %(name)s: %(message)s'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'simple'},
+    },
+    'loggers': {
+        'apps': {
+            'handlers': ['console'],
+            'level': config('LOG_LEVEL', default='INFO'),
+            'propagate': False,
+        },
+    },
+}
+
+# Daily skincare-routine reminder. Off by default: it is one push per day per
+# client and the routine model still has no per-step frequency, so the reminder
+# would be wrong for anything that is not meant to be done every night.
+NOTIFICACIONES_RUTINA_DIARIA = config(
+    'NOTIFICACIONES_RUTINA_DIARIA', default=False, cast=bool
+)
+
 # Custom User Model
 AUTH_USER_MODEL = 'empleados.Usuario'
 

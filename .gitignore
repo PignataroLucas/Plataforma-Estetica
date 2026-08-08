@@ -75,3 +75,6 @@ htmlcov/
 *.bak
 *.tmp
 .cache/
+
+# Claude Code: preferencias locales de la máquina, no del proyecto
+.claude/settings.local.json

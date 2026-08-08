@@ -1,0 +1,446 @@
+<meta charset="utf-8">
+<title>Plataforma AME - Pendientes</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 14mm 17mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.6;
+    color: #2b2b2b;
+  }
+  .page { position: relative; height: 258mm; page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .foot {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    font-size: 8pt; color: #a89b8e;
+  }
+
+  h1 { font-size: 26pt; margin: 0; letter-spacing: -0.5px; color: #1a1a1a; }
+  .sub { font-size: 9.5pt; color: #8f8378; margin: 4px 0 0; }
+  hr { border: 0; border-top: 1px solid #e3d8cb; margin: 14px 0 20px; }
+
+  h2 {
+    font-size: 14.5pt; margin: 0 0 4px; color: #1a1a1a;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  h2 + .rule { border-top: 1px solid #e3d8cb; margin-bottom: 18px; }
+  h3 { font-size: 10.5pt; margin: 18px 0 5px; color: #1a1a1a; }
+  h3:first-of-type { margin-top: 0; }
+  p { margin: 0 0 9px; text-align: justify; }
+
+  .tag {
+    font-size: 7pt; font-weight: bold; letter-spacing: 1px;
+    padding: 5px 0; width: 100px; text-align: center; border-radius: 2px;
+  }
+  .critico   { background: #9c5148; color: #fff; }
+  .listo     { background: #6f7f6a; color: #fff; }
+  .alta      { background: #d5c4b9; color: #33291f; }
+  .media     { background: #ebe0ce; color: #33291f; }
+  .propuesta { background: #dfd3c6; color: #33291f; }
+  .ultimo    { background: #e8d1cd; color: #33291f; }
+
+  ul { margin: 0 0 9px; padding: 0; list-style: none; }
+  li { position: relative; padding-left: 22px; margin-bottom: 7px; text-align: justify; }
+  li::before {
+    content: ""; position: absolute; left: 7px; top: 8px;
+    width: 3px; height: 3px; background: #c3b5a6;
+  }
+  li.si::before, li.no::before { display: none; }
+  li.si::after {
+    content: "\2713"; position: absolute; left: 3px; top: 0; color: #6f7f6a; font-weight: bold;
+  }
+  li.no::after {
+    content: "\2022"; position: absolute; left: 4px; top: 0; color: #9c5148; font-weight: bold;
+  }
+
+  .nota { color: #a89b8e; font-size: 9pt; }
+
+  .nuevo {
+    background: #faf6f1; border-left: 2px solid #d5c4b9;
+    padding: 12px 16px 4px; margin: 0 0 12px;
+  }
+  .nuevo h3 { margin-top: 12px; }
+  .nuevo h3:first-of-type { margin-top: 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  th {
+    background: #1f1f1f; color: #fff; text-align: left;
+    padding: 8px 12px; font-size: 9pt;
+  }
+  td { padding: 7px 12px; border-bottom: 1px solid #eee6dc; vertical-align: top; }
+  tr:nth-child(even) td { background: #faf6f1; }
+  td.num { color: #a89b8e; width: 28px; }
+  td.que { width: 33%; }
+</style>
+
+<!-- ============================ 1 ============================ -->
+<div class="page">
+  <h1>Plataforma AME</h1>
+  <p class="sub">Estado del proyecto y trabajo pendiente &middot; 07/08/2026</p>
+  <hr>
+
+  <p>Este documento resume qué está construido, qué falta y en qué orden conviene encararlo. El criterio de
+  prioridad no es técnico sino de negocio: el problema declarado del centro es la <b>adquisición de clientas</b>
+  y la <b>baja conversión a servicios</b>, con la venta de productos como fuente principal de ingresos. Todo lo
+  que no acerque la app a manos de clientas reales queda por detrás.</p>
+
+  <h2 style="margin-top:24px">Estado actual</h2>
+  <div class="rule"></div>
+
+  <p>La plataforma cubre el ciclo de vida de la clienta de punta a punta. Lo que sigue ya está construido y
+  probado:</p>
+
+  <ul>
+    <li><b>Backend del cliente:</b> autenticación JWT propia, aislada de la del staff; perfil, rutina, turnos,
+    catálogo público, preferencias y registro de dispositivos. Todo con alcance por vinculación.</li>
+    <li><b>App mobile:</b> alta de cuenta y login, inicio con próximo turno real, Mi rutina, perfil, listado de
+    turnos con cancelación, reserva en tres pasos con política de días o de fechas, catálogo de tratamientos
+    con ficha de detalle, y recepción de notificaciones con navegación al tocarlas.</li>
+    <li><b>CRM del staff:</b> editor de rutinas, detector y fusión de fichas duplicadas, control de qué
+    servicios se pueden reservar desde la app, carga del contenido de la ficha y calendario de fechas de
+    reserva por servicio.</li>
+    <li><b>Notificaciones:</b> sistema completo de avisos a la app. Se detalla en la página 2.</li>
+    <li><b>Datos:</b> vinculación multi-centro, teléfonos normalizados y los campos del motor de recompra.</li>
+  </ul>
+
+  <p><b>375 tests en verde</b> en todo el backend. El número no es comparable con el 98 de la versión anterior,
+  que contaba solo la API de la app. Conviene registrar por qué: <b>la suite completa nunca había estado entera
+  en verde</b> &mdash;24 tests fallaban al correr todo junto, y pasaban por separado, así que el problema no se
+  veía&mdash;. Ya está corregido.</p>
+
+  <h2 style="margin-top:22px">Lo nuevo desde la versión anterior</h2>
+  <div class="rule"></div>
+
+  <div class="nuevo">
+    <h3>Sistema de notificaciones, completo</h3>
+    <p>Era el punto 1.2 y estaba entero por hacer. Hoy está construido de punta a punta y probado: el backend
+    decide y encola, la app recibe y navega. Lo que falta no es programación sino trámite &mdash;una cuenta de
+    Expo y credenciales de Firebase&mdash;. Página 2.</p>
+
+    <h3>Build nativo de Android</h3>
+    <p>La app dejó de depender de Expo Go: se compila un build propio que corre en el emulador. Era obligatorio
+    &mdash;Expo Go no soporta notificaciones desde el SDK 53&mdash; y de paso adelanta trabajo de la
+    distribución, porque el proyecto nativo ya existe.</p>
+  </div>
+
+  <p class="nota">En estas pruebas apareció y se corrigió un defecto que dejaba a la app sin sesión.</p>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 1</span></div>
+</div>
+
+<!-- ============================ 2 ============================ -->
+<div class="page">
+  <h2>Notificaciones <span class="tag listo">CONSTRUIDO</span></h2>
+  <div class="rule"></div>
+
+  <p>Con WhatsApp caído, es el único canal para llegar a la clienta. Se construyó como <b>una sola tubería para
+  todos los avisos</b> y no como una función suelta de turnos: sumar un aviso nuevo &mdash;"te quedan dos
+  sesiones", "llegó tu producto"&mdash; es agregar una entrada a una lista, sin tocar el resto.</p>
+
+  <h3>Qué quedó funcionando</h3>
+  <ul>
+    <li class="si"><b>Nueve tipos de aviso</b> ya definidos: turno confirmado, cancelado, recordatorio de 24 h y
+    de 2 h, rutina actualizada, recordatorio de rutina, cumpleaños, promoción nueva y fechas nuevas.</li>
+    <li class="si"><b>Recordatorios automáticos</b> de turno, que se programan solos a la hora exacta y se
+    corrigen si el turno se mueve o se cancela.</li>
+    <li class="si"><b>Preferencias por clienta:</b> puede apagar Promociones sin perder los avisos de turno.
+    Los avisos de turno cancelado igual llegan siempre: no son publicidad.</li>
+    <li class="si"><b>Textos editables por centro</b>, con los de fábrica como respaldo.</li>
+    <li class="si"><b>Varios teléfonos por cuenta.</b> Antes el sistema guardaba uno solo, así que instalar la
+    app en un teléfono nuevo apagaba el anterior sin avisar.</li>
+    <li class="si"><b>Envío masivo</b> para promociones, y baja automática de los teléfonos donde se desinstaló
+    la app.</li>
+    <li class="si"><b>Modo simulación:</b> se puede ver exactamente qué le llegaría a una clienta, sin mandar
+    nada. Sirve para revisar la redacción con el centro antes de que exista un solo teléfono.</li>
+  </ul>
+
+  <h3>Qué falta para que llegue a un teléfono</h3>
+  <p>Nada de esto es desarrollo. Son tres trámites y una configuración:</p>
+  <ul>
+    <li class="no"><b>Cuenta de Expo</b> (gratuita) para identificar el proyecto. Sin eso la app no puede pedir
+    su credencial de notificaciones.</li>
+    <li class="no"><b>Credenciales de Firebase</b>, que es el servicio por el que Google entrega las
+    notificaciones en Android.</li>
+    <li class="no"><b>Un servicio programado en el servidor</b> que despache la cola cada pocos minutos. La
+    configuración está escrita; falta crearlo en el panel de Railway.</li>
+  </ul>
+  <p class="nota">Buena noticia de las pruebas: las notificaciones funcionan en el emulador, así que no hace
+  falta un teléfono físico para validar todo el circuito.</p>
+
+  <h3>Decisiones pendientes</h3>
+  <ul>
+    <li><b>El identificador de la app</b> quedó con un nombre provisorio. Es permanente una vez publicada en
+    Google Play: conviene definirlo antes, porque cambiarlo después obliga a crear una ficha nueva.</li>
+    <li><b>El recordatorio diario de rutina está apagado</b> a propósito. Es un aviso por día y el modelo de
+    rutina todavía no distingue lo que va todas las noches de lo que va dos veces por semana (punto 3.1), así
+    que hoy sería impreciso para la mitad de los pasos.</li>
+  </ul>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 2</span></div>
+</div>
+
+<!-- ============================ 3 ============================ -->
+<div class="page">
+  <h2>1. Crítico para lanzar <span class="tag critico">CRÍTICO</span></h2>
+  <div class="rule"></div>
+
+  <h3>1.1 Distribución de la app</h3>
+  <p>Sigue siendo el verdadero cuello de botella, y ahora es el único de los grandes. La app corre en el
+  emulador de la máquina de desarrollo; <b>no hay nada resuelto sobre cómo llega al teléfono de una
+  clienta</b>.</p>
+  <ul>
+    <li>Habilitar pruebas en un teléfono real: falta apuntar la app a la IP de red local en lugar de la
+    dirección interna, y habilitarla del lado del servidor. Es trabajo de horas.</li>
+    <li>Cuenta de desarrollador de Apple (anual) y de Google Play (pago único).</li>
+    <li>Generar los binarios y publicarlos. La revisión en ambas tiendas es tiempo de calendario, no de código.</li>
+    <li>Definir el canal de actualizaciones, que permite corregir sin pasar por revisión.</li>
+  </ul>
+  <p class="nota">El build nativo que se hizo para las notificaciones adelanta parte de esto: el proyecto ya
+  compila fuera de Expo Go, que era el primer paso. Atajo recomendado, sin cambios: poner la app en manos de dos
+  o tres clientas antes de esperar a las tiendas.</p>
+
+  <h3>1.2 Habilitar las notificaciones</h3>
+  <p>El sistema está construido (página 2). Falta la cuenta de Expo, las credenciales de Firebase y el servicio
+  programado en el servidor. <b>Pasó de ser semanas de desarrollo a ser un trámite de una tarde</b>, pero sigue
+  siendo condición para lanzar: sin recordatorio no hay hábito, y sin aviso la confirmación del staff no llega
+  hasta que la persona abra la app.</p>
+
+  <h3>1.3 Onboarding de producción</h3>
+  <p>Decisión abierta, sin cambios. Hoy la vinculación exige que el staff genere un código y la clienta lo
+  tipee: sirve para probar, pero es fricción alta para lanzamiento. Las alternativas evaluadas fueron enlace
+  mágico o QR, verificación por SMS (bloqueada hoy) y auto-registro puro. Hay que definirlo antes de publicar.</p>
+
+  <h3>1.4 Almacenamiento de imágenes</h3>
+  <p>Sin cambios. Las imágenes se guardan en el disco del servidor, que en este tipo de hosting es efímero:
+  <b>cada despliegue borra todo lo que se haya subido</b>. Hay que resolverlo antes de que el centro cargue
+  fotos, porque migrar imágenes ya cargadas cuesta mucho más que empezar bien.</p>
+  <ul>
+    <li>Afecta a las fotos de producto, que la app ya muestra en Mi rutina.</li>
+    <li>En el mismo lugar están las fotos de antes y después de las clientas: son datos de salud de personas
+    identificables y no pueden quedar en direcciones públicas. Hay que separar un espacio público del catálogo
+    de uno privado con acceso restringido.</li>
+    <li>El CRM sigue sin ningún formulario de carga de archivos: hoy las fotos solo se suben desde el panel de
+    administración técnico.</li>
+  </ul>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 3</span></div>
+</div>
+
+<!-- ============================ 4 ============================ -->
+<div class="page">
+  <h2>2. Pantallas y funciones incompletas <span class="tag alta">ALTA</span></h2>
+  <div class="rule"></div>
+
+  <h3>2.1 Del sistema de notificaciones</h3>
+  <p>Tres puntas quedaron deliberadamente sin cerrar, porque no tenía sentido construirlas antes de que el
+  circuito llegara a un teléfono:</p>
+  <ul>
+    <li><b>Pantalla de preferencias en la app.</b> La clienta todavía no puede elegir qué recibir desde la app;
+    la capacidad existe del lado del servidor, falta la interfaz.</li>
+    <li><b>Botón en el CRM para lanzar una promoción.</b> El envío masivo está construido y probado, pero no hay
+    desde dónde apretarlo: hoy requiere asistencia técnica.</li>
+    <li><b>Aviso de "se abrieron fechas".</b> El aviso está definido pero nadie lo dispara todavía. Es el que
+    conecta con el calendario de fechas puntuales que se construyó en la iteración anterior.</li>
+  </ul>
+
+  <h3>2.2 Promos y detalle de producto</h3>
+  <ul>
+    <li>Promos: sigue siendo una pantalla vacía. Es el lugar natural del programa de puntos y beneficios, y
+    ahora también el destino de los avisos de promoción.</li>
+    <li>Detalle de producto: no existe. Es el equivalente de la ficha de servicio del lado de los productos,
+    que son la fuente principal de ingresos.</li>
+  </ul>
+
+  <h3>2.3 Contenido de las fichas</h3>
+  <p>No es deuda técnica sino la condición para que lo construido sirva: la ficha de tratamiento se ve vacía
+  hasta que alguien escriba descripción, beneficios y cuidados de cada servicio. <b>Es trabajo del centro, no de
+  programación</b>, y decide si convierte o no. Lo mismo vale para el texto de los avisos, que ya se puede
+  revisar y ajustar sin mandar nada.</p>
+
+  <h3>2.4 Sin instrumentación</h3>
+  <p>Al lanzar no se va a poder responder qué se usa y qué no. Ya son tres las funcionalidades construidas a
+  ciegas &mdash;la ficha, el calendario de fechas y ahora los avisos&mdash;. Con notificaciones el costo sube:
+  no hay forma de saber cuántas se abren, que es el único dato que dice si el canal sirve.</p>
+
+  <h3>2.5 Dos lugares dicen cuándo viene la máquina</h3>
+  <p>Las fechas de reserva de un tratamiento se cargan a mano y <b>no están conectadas con los alquileres de
+  máquina programados en el CRM</b>, que es el sistema que genera el gasto. Nada impide abrir fechas para un día
+  en que la máquina no está alquilada, ni al revés. Mientras sean pocas fechas se maneja con cuidado.</p>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 4</span></div>
+</div>
+
+<!-- ============================ 5 ============================ -->
+<div class="page">
+  <h2>3. Deuda técnica <span class="tag alta">ALTA</span></h2>
+  <div class="rule"></div>
+
+  <h3>3.1 Frecuencia por paso en la rutina</h3>
+  <p>El modelo de la rutina sigue sin frecuencia: todo paso es implícitamente diario, así que no se puede
+  prescribir "exfoliar dos veces por semana". Es un problema clínico, no cosmético. Ahora además <b>bloquea el
+  recordatorio de rutina</b>, que quedó construido pero apagado por este motivo, y sigue bloqueando cualquier
+  sistema de rachas.</p>
+
+  <h3>3.2 Frescura de los datos entre web y app</h3>
+  <p>Resuelto a medias. Con las notificaciones, un aviso ahora refresca solo los datos que cambiaron: si el
+  staff confirma un turno, la app se entera. Lo que falta es el caso sin aviso de por medio &mdash;que la app
+  refresque al volver del segundo plano&mdash;, que es trabajo menor y aislado.</p>
+
+  <h3>3.3 Otros pendientes conocidos</h3>
+  <ul>
+    <li>Migrar y eliminar los campos de texto legados de la rutina.</li>
+    <li>El botón "Comprar" de la rutina sigue siendo un botón sin acción.</li>
+    <li>El producto asociado a un paso de rutina acepta cualquier identificador: falta restringirlo al centro
+    de la clienta.</li>
+    <li>No existe reprogramar un turno; solo cancelar y reservar de nuevo.</li>
+    <li>El soporte multi-centro está modelado pero la app usa siempre la primera vinculación.</li>
+    <li>Tres errores de tipos preexistentes en la barra de navegación (no afectan el funcionamiento).</li>
+    <li>Un defecto latente en el módulo de WhatsApp: el armado del mensaje usa un dato que no existe con ese
+    nombre, así que cualquier mensaje que mencione a la profesional fallaría. No se detectó antes porque el
+    canal está caído. Queda anotado para cuando se retome.</li>
+  </ul>
+
+  <h2 style="margin-top:26px">4. Evaluadas, sin construir <span class="tag media">MEDIA</span></h2>
+  <div class="rule"></div>
+
+  <h3>4.1 Video reproducible dentro de la app</h3>
+  <p>La ficha ya guarda un enlace de video, y hoy ese enlace abre la aplicación de origen. Que se reproduzca sin
+  salir de la app depende de dónde esté alojado: desde YouTube se puede embeber (medio día de trabajo, sin
+  costo); desde Instagram no se puede, porque la plataforma no lo permite fuera de su dominio; con archivo
+  propio es la mejor experiencia y la más cara, y requiere el almacenamiento del punto 1.4.</p>
+  <p class="nota">Decisión abierta: dónde va a subir los videos el centro. Si es YouTube conviene hacerlo; si es
+  Instagram, no hay nada que construir.</p>
+
+  <h3>4.2 Cruce de servicio con producto</h3>
+  <p>La ficha se construyó sin productos relacionados, por decisión, para no bloquear la primera versión. Es la
+  pieza que la conecta con la fuente principal de ingresos: quien mira un tratamiento debería ver qué productos
+  lo acompañan, y quien compra un producto debería ver a qué tratamiento lleva.</p>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 5</span></div>
+</div>
+
+<!-- ============================ 6 ============================ -->
+<div class="page">
+  <h3 style="margin-top:0">4.3 Rachas de rutina de skincare</h3>
+  <p>Registro diario de la rutina con racha, al estilo de las apps de hábitos. El valor no es el estímulo sino
+  <b>el dato de consumo</b>: saber a qué velocidad se gasta cada producto habilita la recompra predictiva, que
+  sí toca la facturación.</p>
+  <ul>
+    <li>Su dependencia principal ya está resuelta: sin recordatorio nadie registra, y el recordatorio existe.</li>
+    <li>Sigue dependiendo de la frecuencia por paso (punto 3.1): premiar el uso diario de ácidos o retinol
+    sería dañino.</li>
+    <li>La racha debe ser tolerante; romperla no puede generar abandono.</li>
+    <li>Sin tablas comparativas entre clientas: son pocas y es información sensible.</li>
+    <li>Validar con una versión mínima antes de invertir: si nadie registra el segundo día, no se construye el
+    resto.</li>
+  </ul>
+
+  <h2 style="margin-top:26px">5. Asistente conversacional <span class="tag propuesta">PROPUESTA</span></h2>
+  <div class="rule"></div>
+
+  <p>Evaluado en detalle en un documento aparte (<i>Asistente conversacional, Rev. 2</i>). Es viable y el
+  proyecto es un sustrato inusualmente bueno, porque la capa más cara &mdash;el acceso a datos reales y
+  seguros&mdash; ya está construida y probada.</p>
+
+  <h3>5.1 Qué resuelve</h3>
+  <p>El centro responde las mismas preguntas una y otra vez: qué es cada tratamiento, cuánto dura, qué producto
+  sirve para cada tipo de piel, cuándo es el próximo turno. Un asistente dentro de la app absorbe ese volumen y
+  convierte: lleva de una consulta a una reserva sin fricción intermedia. La adquisición queda fuera de su
+  alcance: son clientas que todavía no tienen la app.</p>
+
+  <h3>5.2 Restricciones que no son negociables</h3>
+  <ul>
+    <li><b>No da indicaciones clínicas.</b> Ante cualquier consulta de ese tipo deriva a la profesional, aunque
+    la ficha tenga las contraindicaciones cargadas. Se verifica con pruebas que frenan la publicación.</li>
+    <li><b>El alcance se resuelve en el servidor</b>, nunca a partir de lo que proponga el modelo. En cuentas
+    multi-centro el centro queda fijado al abrir la conversación.</li>
+    <li><b>Lo que el asistente lee no es confiable:</b> las notas de turno las escribe la clienta y vuelven al
+    contexto. Todo lo que sale de la base se trata como dato, nunca como instrucción.</li>
+  </ul>
+
+  <h3>5.3 Prerrequisitos y esfuerzo</h3>
+  <p>Se apoya en trabajo ya planificado: el contenido de las fichas (punto 2.3), el almacenamiento de imágenes
+  (1.4) y las notificaciones, que ya están. Queda una decisión de infraestructura: el chat responde escribiendo
+  de a poco, y eso no convive con la configuración actual del servidor; hay que aislar esa ruta antes de
+  exponerla. Con los prerrequisitos cubiertos, una primera versión angosta es del orden de <b>cuatro a cinco
+  semanas</b>.</p>
+  <p class="nota">Primer paso, que no requiere escribir código: juntar unas cincuenta consultas reales del
+  historial de WhatsApp e Instagram del centro. Es a la vez el material de prueba y la forma más barata de
+  descubrir si esas dudas se resuelven con una buena ficha en lugar de un asistente.</p>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 6</span></div>
+</div>
+
+<!-- ============================ 7 ============================ -->
+<div class="page">
+  <h2>6. E-commerce (Tienda Nube) <span class="tag ultimo">ÚLTIMO</span></h2>
+  <div class="rule"></div>
+
+  <p>Definido explícitamente como lo último del plan. La factibilidad ya fue analizada y no presenta obstáculos
+  técnicos serios, pero arrastra decisiones de negocio que no están tomadas y que conviene no apurar.</p>
+
+  <h3>6.1 Enfoque técnico previsto</h3>
+  <ul>
+    <li>Integración con la API directa de Tienda Nube, sin intermediarios.</li>
+    <li>Un módulo nuevo en el backend que reciba los avisos de la tienda (pedidos creados, pagados, cancelados).</li>
+    <li>Mapeo entre el catálogo de Tienda Nube y el inventario propio.</li>
+    <li>Impacto en el sistema financiero: los pedidos online deberían generar sus transacciones igual que las
+    ventas presenciales, para no partir la contabilidad.</li>
+  </ul>
+
+  <h3>6.2 Decisiones abiertas</h3>
+  <p>Estas dos preguntas hay que responderlas antes de escribir código, porque cambian la arquitectura por
+  completo:</p>
+  <ul>
+    <li><b>¿El stock físico y el online son el mismo pool?</b> Si lo son, hace falta sincronización en ambos
+    sentidos y resolver qué pasa cuando dos ventas simultáneas compiten por la última unidad. Si no lo son, hay
+    que definir cómo se reparte y quién lo administra.</li>
+    <li><b>¿Cuál es el rol de la "Plataforma 2"?</b> Sin eso definido no se sabe si este módulo vive en el
+    sistema actual o en otro lado.</li>
+  </ul>
+
+  <h3>6.3 Oportunidad y dependencias</h3>
+  <p>Es la funcionalidad con vínculo más directo con la fuente principal de ingresos: permitiría cerrar el
+  circuito entre la rutina de cuidado, el aviso de recompra y la compra efectiva, sin que la clienta tenga que
+  ir al centro. Por eso, aunque vaya última, conviene que las piezas previas se construyan pensando en ella: el
+  motor de recompra, la ficha de producto y el registro de consumo alimentan directamente este canal. El aviso
+  de recompra, que era la pieza que faltaba, ahora tiene por dónde salir.</p>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 7</span></div>
+</div>
+
+<!-- ============================ 8 ============================ -->
+<div class="page">
+  <h2>7. Orden sugerido</h2>
+  <div class="rule"></div>
+
+  <table>
+    <tr><th>#</th><th>Trabajo</th><th>Por qué va acá</th></tr>
+    <tr><td class="num">1</td><td class="que">Habilitar las notificaciones</td><td>Está todo construido. Es una cuenta de Expo, credenciales de Firebase y un servicio programado: una tarde.</td></tr>
+    <tr><td class="num">2</td><td class="que">Definir el identificador de la app</td><td>Es permanente una vez publicada. Cambiarlo después obliga a una ficha nueva.</td></tr>
+    <tr><td class="num">3</td><td class="que">App en un teléfono real</td><td>Horas de trabajo. Desbloquea probar con clientas sin esperar a las tiendas.</td></tr>
+    <tr><td class="num">4</td><td class="que">Contenido de las fichas y de los avisos</td><td>Sin texto la pantalla se ve vacía. Lo hace el centro, en paralelo.</td></tr>
+    <tr><td class="num">5</td><td class="que">Distribución (tiendas)</td><td>Tiempo de calendario: conviene empezar el trámite cuanto antes.</td></tr>
+    <tr><td class="num">6</td><td class="que">Onboarding de producción</td><td>Decisión de producto que bloquea el lanzamiento.</td></tr>
+    <tr><td class="num">7</td><td class="que">Almacenamiento de imágenes</td><td>Antes de que se suban fotos; migrarlas después cuesta más.</td></tr>
+    <tr><td class="num">8</td><td class="que">Instrumentación básica</td><td>Sin medir no se sabe si los avisos se abren, que es lo que dice si el canal sirve.</td></tr>
+    <tr><td class="num">9</td><td class="que">Preferencias y promos en la app</td><td>Cierra las puntas del sistema de avisos del lado de la clienta y del centro.</td></tr>
+    <tr><td class="num">10</td><td class="que">Fechas de reserva ligadas al alquiler</td><td>Cierra el hueco entre las fechas que ve la clienta y el gasto de la máquina.</td></tr>
+    <tr><td class="num">11</td><td class="que">Frecuencia por paso en la rutina</td><td>Corrige un problema clínico y destraba el recordatorio de rutina.</td></tr>
+    <tr><td class="num">12</td><td class="que">Cruce de servicio con producto</td><td>Conecta la ficha con la venta de productos.</td></tr>
+    <tr><td class="num">13</td><td class="que">Rachas y recompra predictiva</td><td>Depende del punto 11. Genera el dato de consumo.</td></tr>
+    <tr><td class="num">14</td><td class="que">Asistente conversacional</td><td>Depende del contenido, las imágenes y una decisión de infraestructura.</td></tr>
+    <tr><td class="num">15</td><td class="que">E-commerce (Tienda Nube)</td><td>Último por decisión propia; requiere definiciones de negocio previas.</td></tr>
+  </table>
+
+  <p class="nota" style="margin-top:18px">Cambió algo de fondo respecto de las versiones anteriores. Hasta ahora
+  la lista de bloqueantes era de desarrollo; con las notificaciones terminadas, <b>los cuatro primeros puntos ya
+  no son programación</b>: son trámites, una decisión de nombre y trabajo de contenido del centro. El
+  diagnóstico se afila en lugar de cambiar: hoy el límite del negocio no es la falta de features ni el tiempo de
+  desarrollo, es que la aplicación todavía no está en manos de nadie.</p>
+
+  <div class="foot"><span>Plataforma AME - Pendientes</span><span>Página 8</span></div>
+</div>

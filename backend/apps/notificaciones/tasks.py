@@ -7,9 +7,39 @@ from datetime import timedelta
 import logging
 
 from apps.turnos.models import Turno
+
+from . import cola, disparadores
 from .services import whatsapp_service
 
 logger = logging.getLogger(__name__)
+
+
+# ------------------------------------------------------------------ #
+# Push
+#
+# Envoltorios finos sobre las mismas funciones que corre el comando
+# ``procesar_notificaciones``. En producción hoy manda el cron --no hay
+# worker de Celery levantado-- y estas tasks sirven en desarrollo, donde
+# docker-compose sí levanta worker y beat. Que las dos vías compartan
+# función es lo que evita que se comporten distinto.
+# ------------------------------------------------------------------ #
+
+@shared_task
+def correr_disparadores_task():
+    """Evalúa los disparadores programados y encola lo que corresponda."""
+    return disparadores.correr_todos()
+
+
+@shared_task
+def procesar_cola_push_task():
+    """Manda los avisos vencidos."""
+    return cola.procesar_pendientes()
+
+
+@shared_task
+def procesar_recibos_push_task():
+    """Consulta a Expo el desenlace de lo que ya aceptó."""
+    return cola.procesar_recibos()
 
 
 @shared_task(bind=True, max_retries=3)

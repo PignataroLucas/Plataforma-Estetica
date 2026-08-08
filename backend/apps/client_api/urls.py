@@ -7,6 +7,7 @@ from .views import (
     LoginView,
     MiRutinaView,
     PerfilView,
+    PreferenciasNotificacionView,
     PushRegisterView,
     RegistroView,
     ServiciosReservablesView,
@@ -24,4 +25,6 @@ urlpatterns = [
     path('turnos/disponibilidad/', DisponibilidadView.as_view(), name='client-disponibilidad'),
     path('turnos/<int:pk>/cancelar/', CancelarTurnoView.as_view(), name='client-cancelar-turno'),
     path('push/register/', PushRegisterView.as_view(), name='client-push-register'),
+    path('notificaciones/preferencias/', PreferenciasNotificacionView.as_view(),
+         name='client-preferencias-notificacion'),
 ]

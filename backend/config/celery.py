@@ -45,6 +45,22 @@ app.conf.beat_schedule = {
         'task': 'apps.integraciones.tasks.verify_conto_links',
         'schedule': crontab(hour=7, minute=30),
     },
+    # Push notifications. These mirror what the `procesar_notificaciones`
+    # command does; production runs the command from Railway cron because the
+    # deploy has no Celery worker. Keeping both wired to the same functions
+    # means dev and prod cannot drift.
+    'notificaciones-disparadores': {
+        'task': 'apps.notificaciones.tasks.correr_disparadores_task',
+        'schedule': crontab(minute='*/15'),
+    },
+    'notificaciones-cola': {
+        'task': 'apps.notificaciones.tasks.procesar_cola_push_task',
+        'schedule': crontab(minute='*/5'),
+    },
+    'notificaciones-recibos': {
+        'task': 'apps.notificaciones.tasks.procesar_recibos_push_task',
+        'schedule': crontab(minute='*/30'),
+    },
 }
 
 @app.task(bind=True)

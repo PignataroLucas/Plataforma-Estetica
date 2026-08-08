@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { queryClient } from '@/services/queryClient';
 import { useAuthStore } from '@/stores/auth';
 import { colors } from '@/theme/ame';
@@ -66,6 +67,10 @@ export default function RootLayout() {
  * disponible (tabs si hay sesión, bienvenida/auth si no).
  */
 function RootNavigator({ authenticated }: { authenticated: boolean }) {
+  // Va acá y no en RootLayout porque necesita el QueryClientProvider ya montado,
+  // y porque para navegar el Stack tiene que existir.
+  usePushNotifications();
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={authenticated}>

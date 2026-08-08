@@ -16,11 +16,20 @@ from apps.clientes.models import (
 )
 from apps.client_api.tokens import tokens_para_usuario_cliente
 from apps.empleados.models import CentroEstetica, Usuario
+from apps.notificaciones.models import DispositivoPush, PreferenciaNotificacion
 
 # Cache local + throttle desactivado para tests hermeticos
 TEST_REST_FRAMEWORK = {
     **settings.REST_FRAMEWORK,
-    'DEFAULT_THROTTLE_RATES': {'cliente_auth': None, 'cliente_registro': None},
+    # Se parte del diccionario real y solo se anulan los scopes bajo prueba.
+    # Reemplazarlo entero borraba los otros scopes, y como DRF cachea las tasas
+    # en la clase del throttle, la pérdida se filtraba a los tests de otros
+    # módulos que corrían después (KeyError: 'public_api').
+    'DEFAULT_THROTTLE_RATES': {
+        **settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],
+        'cliente_auth': None,
+        'cliente_registro': None,
+    },
 }
 
 
@@ -158,9 +167,9 @@ class ClientAuthTests(APITestCase):
 
     # ---------- Perfil ----------
 
-    def _crear_usuario_vinculado(self):
+    def _crear_usuario_vinculado(self, email='perfil@mail.com'):
         usuario = UsuarioCliente.objects.create_user(
-            email='perfil@mail.com', password='ClaveSegura123', nombre='Maria', apellido='R',
+            email=email, password='ClaveSegura123', nombre='Maria', apellido='R',
         )
         VinculacionCliente.objects.create(
             usuario_cliente=usuario, cliente=self.cliente_a,
@@ -220,17 +229,132 @@ class ClientAuthTests(APITestCase):
 
     # ---------- Push ----------
 
-    def test_push_register(self):
-        usuario = self._crear_usuario_vinculado()
+    def _autenticar(self, usuario):
         token = tokens_para_usuario_cliente(usuario)['access']
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def test_push_register(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
         resp = self.client.post(reverse('client-push-register'),
-                                {'push_token': 'ExponentPushToken[abc123]'}, format='json')
+                                {'push_token': 'ExponentPushToken[abc123]',
+                                 'plataforma': 'ANDROID'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        dispositivo = DispositivoPush.objects.get(token='ExponentPushToken[abc123]')
+        self.assertEqual(dispositivo.usuario_cliente, usuario)
+        self.assertTrue(dispositivo.activo)
+
+    def test_push_register_es_idempotente(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        for _ in range(3):
+            self.client.post(reverse('client-push-register'),
+                             {'push_token': 'ExponentPushToken[abc123]'}, format='json')
+        self.assertEqual(DispositivoPush.objects.count(), 1)
+
+    def test_una_cuenta_puede_registrar_dos_telefonos(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        for token in ('ExponentPushToken[uno]', 'ExponentPushToken[dos]'):
+            self.client.post(reverse('client-push-register'),
+                             {'push_token': token}, format='json')
+        self.assertEqual(DispositivoPush.objects.filter(usuario_cliente=usuario).count(), 2)
+
+    def test_el_telefono_prestado_se_reasigna_a_la_cuenta_nueva(self):
+        """
+        Si otra cuenta inicia sesión en el mismo aparato, el token pasa a ser
+        suyo: si no, el teléfono seguiría recibiendo los turnos de la anterior.
+        """
+        primera = self._crear_usuario_vinculado()
+        self._autenticar(primera)
+        self.client.post(reverse('client-push-register'),
+                         {'push_token': 'ExponentPushToken[compartido]'}, format='json')
+
+        segunda = self._crear_usuario_vinculado(email='otra@mail.com')
+        self._autenticar(segunda)
+        self.client.post(reverse('client-push-register'),
+                         {'push_token': 'ExponentPushToken[compartido]'}, format='json')
+
+        self.assertEqual(DispositivoPush.objects.count(), 1)
+        self.assertEqual(DispositivoPush.objects.get().usuario_cliente, segunda)
+
+    def test_push_register_rechaza_un_token_que_no_es_de_expo(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        resp = self.client.post(reverse('client-push-register'),
+                                {'push_token': 'cualquier-cosa'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(DispositivoPush.objects.exists())
+
+    def test_push_unregister_da_de_baja_el_dispositivo(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        self.client.post(reverse('client-push-register'),
+                         {'push_token': 'ExponentPushToken[abc123]'}, format='json')
+
+        resp = self.client.delete(reverse('client-push-register'),
+                                  {'push_token': 'ExponentPushToken[abc123]'}, format='json')
+
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        usuario.refresh_from_db()
-        self.assertEqual(usuario.push_token, 'ExponentPushToken[abc123]')
+        dispositivo = DispositivoPush.objects.get()
+        self.assertFalse(dispositivo.activo)
+        self.assertEqual(dispositivo.motivo_baja, DispositivoPush.MotivoBaja.SESION_CERRADA)
+
+    def test_no_se_puede_dar_de_baja_el_dispositivo_de_otra_cuenta(self):
+        primera = self._crear_usuario_vinculado()
+        self._autenticar(primera)
+        self.client.post(reverse('client-push-register'),
+                         {'push_token': 'ExponentPushToken[ajeno]'}, format='json')
+
+        segunda = self._crear_usuario_vinculado(email='otra@mail.com')
+        self._autenticar(segunda)
+        resp = self.client.delete(reverse('client-push-register'),
+                                  {'push_token': 'ExponentPushToken[ajeno]'}, format='json')
+
+        self.assertFalse(resp.data['dado_de_baja'])
+        self.assertTrue(DispositivoPush.objects.get().activo)
 
     def test_push_register_sin_auth(self):
         resp = self.client.post(reverse('client-push-register'),
                                 {'push_token': 'ExponentPushToken[abc123]'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # ---------- Preferencias ----------
+
+    def test_preferencias_arrancan_todas_encendidas(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        resp = self.client.get(reverse('client-preferencias-notificacion'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(all(resp.data.values()))
+        self.assertIn('TURNOS', resp.data)
+
+    def test_apagar_y_volver_a_encender_una_categoria(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        url = reverse('client-preferencias-notificacion')
+
+        resp = self.client.patch(url, {'PROMOCIONES': False}, format='json')
+        self.assertFalse(resp.data['PROMOCIONES'])
+        self.assertTrue(resp.data['TURNOS'])
+        self.assertEqual(
+            PreferenciaNotificacion.objects.filter(usuario_cliente=usuario).count(), 1
+        )
+
+        resp = self.client.patch(url, {'PROMOCIONES': True}, format='json')
+        self.assertTrue(resp.data['PROMOCIONES'])
+        # Encender borra la excepción en lugar de guardar un True.
+        self.assertEqual(
+            PreferenciaNotificacion.objects.filter(usuario_cliente=usuario).count(), 0
+        )
+
+    def test_preferencias_rechaza_una_categoria_inventada(self):
+        usuario = self._crear_usuario_vinculado()
+        self._autenticar(usuario)
+        resp = self.client.patch(reverse('client-preferencias-notificacion'),
+                                 {'LO_QUE_SEA': False}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_preferencias_sin_auth(self):
+        resp = self.client.get(reverse('client-preferencias-notificacion'))
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)

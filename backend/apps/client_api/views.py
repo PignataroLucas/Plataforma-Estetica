@@ -17,6 +17,7 @@ from apps.clientes.models import (
     UsuarioCliente,
     VinculacionCliente,
 )
+from apps.notificaciones.models import DispositivoPush, PreferenciaNotificacion
 from apps.servicios.models import Servicio
 from apps.turnos.models import Turno
 from apps.turnos.services import (
@@ -38,6 +39,7 @@ from .serializers import (
     PerfilSerializer,
     PerfilUpdateSerializer,
     PlanAppSerializer,
+    PreferenciasNotificacionSerializer,
     PushTokenSerializer,
     RegistroSerializer,
     ReservaSerializer,
@@ -241,14 +243,82 @@ class MiRutinaView(ClienteScopeMixin, APIView):
 
 
 class PushRegisterView(ClienteScopeMixin, APIView):
-    """POST /api/client/push/register/ — guarda el Expo push token."""
+    """
+    POST   /api/client/push/register/ — registra este teléfono para recibir push.
+    DELETE /api/client/push/register/ — lo da de baja (al cerrar sesión).
+
+    El token es único a nivel sistema, así que registrar uno que ya estaba a
+    nombre de otra cuenta lo **reasigna** en vez de duplicarlo. Es el caso del
+    teléfono prestado o de la clienta que cierra sesión y entra con otra cuenta:
+    sin esta reasignación, el aparato seguiría recibiendo los turnos de la cuenta
+    anterior.
+    """
 
     def post(self, request):
         serializer = PushTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        request.user.push_token = serializer.validated_data['push_token']
-        request.user.save(update_fields=['push_token'])
-        return Response({'status': 'ok'})
+        datos = serializer.validated_data
+
+        dispositivo, creado = DispositivoPush.objects.update_or_create(
+            token=datos['push_token'],
+            defaults={
+                'usuario_cliente': request.user,
+                'plataforma': datos['plataforma'],
+                'activo': True,
+                'motivo_baja': '',
+            },
+        )
+        return Response(
+            {'status': 'ok', 'creado': creado},
+            status=status.HTTP_201_CREATED if creado else status.HTTP_200_OK,
+        )
+
+    def delete(self, request):
+        serializer = PushTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Solo se da de baja un dispositivo propio: el token de otra cuenta no se
+        # toca aunque se conozca la cadena.
+        actualizados = DispositivoPush.objects.filter(
+            token=serializer.validated_data['push_token'],
+            usuario_cliente=request.user,
+        ).update(
+            activo=False,
+            motivo_baja=DispositivoPush.MotivoBaja.SESION_CERRADA,
+        )
+        return Response({'status': 'ok', 'dado_de_baja': bool(actualizados)})
+
+
+class PreferenciasNotificacionView(ClienteScopeMixin, APIView):
+    """
+    GET   /api/client/notificaciones/preferencias/ — qué recibe hoy.
+    PATCH /api/client/notificaciones/preferencias/ — encender o apagar categorías.
+
+    Se guardan solo las categorías apagadas, así que sumar una categoría nueva al
+    catálogo no exige migrar a nadie: quien no la apagó, la recibe.
+    """
+
+    def get(self, request):
+        return Response(PreferenciasNotificacionSerializer().to_representation(request.user))
+
+    def patch(self, request):
+        serializer = PreferenciasNotificacionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        for categoria, habilitada in serializer.validated_data.items():
+            if habilitada:
+                # Encender es borrar la excepción, no guardar un True.
+                PreferenciaNotificacion.objects.filter(
+                    usuario_cliente=request.user, categoria=categoria
+                ).delete()
+            else:
+                PreferenciaNotificacion.objects.update_or_create(
+                    usuario_cliente=request.user,
+                    categoria=categoria,
+                    defaults={'habilitada': False},
+                )
+
+        return Response(PreferenciasNotificacionSerializer().to_representation(request.user))
 
 
 # ------------------------------------------------------------------ #

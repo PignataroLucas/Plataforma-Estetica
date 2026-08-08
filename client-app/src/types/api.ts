@@ -100,9 +100,10 @@ export interface Perfil {
   nombre: string;
   apellido: string;
   email_verificado: boolean;
-  push_token: string | null;
   creado_en: string;
   vinculaciones: VinculacionResumen[];
+  // Los push tokens no viven en el perfil: una cuenta puede tener varios
+  // teléfonos y se manejan aparte (ver `services/push.ts`).
 }
 
 /** Par de tokens JWT de cliente (claim token_use='cliente'). */

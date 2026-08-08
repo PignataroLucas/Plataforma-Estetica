@@ -501,13 +501,11 @@ class UsuarioCliente(AbstractBaseUser):
     nombre = models.CharField(max_length=100, blank=True)
     apellido = models.CharField(max_length=100, blank=True)
     email_verificado = models.BooleanField(default=False)
-    push_token = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        help_text="Expo push token (ExponentPushToken[...]) para notificaciones"
-    )
     activo = models.BooleanField(default=True)
+
+    # Los push tokens NO viven acá: una cuenta puede tener varios teléfonos.
+    # Ver ``apps.notificaciones.models.DispositivoPush`` (related_name
+    # ``dispositivos_push``).
 
     # Timestamps (last_login lo provee AbstractBaseUser)
     creado_en = models.DateTimeField(auto_now_add=True)

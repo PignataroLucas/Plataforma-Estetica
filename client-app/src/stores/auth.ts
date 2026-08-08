@@ -15,6 +15,7 @@ import {
   registro as registroReq,
 } from '@/services/auth';
 import { configureHttpAuth } from '@/services/http';
+import { darDeBajaDispositivo } from '@/services/push';
 import { limpiarCacheDeDatos } from '@/services/queryClient';
 import { deleteItem, getItem, setItem } from '@/services/storage';
 import type { AuthResponse, Perfil, RegistroPayload, TokenPair } from '@/types/api';
@@ -100,6 +101,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUsuario: (usuario) => set({ usuario }),
 
   logout: async () => {
+    // Antes que nada: la baja del dispositivo push necesita el token que estamos
+    // por soltar. Si no se da de baja, el teléfono seguiría recibiendo los avisos
+    // de esta cuenta. Nunca lanza, así que no puede impedir cerrar sesión.
+    await darDeBajaDispositivo();
+
     // ORDEN IMPORTANTE: primero se corta la sesión (esto desmonta las pantallas
     // y deja el access en null), después se limpia el cache. Al revés queda una
     // ventana —el await a SecureStore— con las pantallas vivas y el token válido,

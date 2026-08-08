@@ -20,12 +20,15 @@ def track_previous_state(sender, instance, **kwargs):
             old_instance = Turno.objects.get(pk=instance.pk)
             instance._previous_estado = old_instance.estado
             instance._previous_estado_pago = old_instance.estado_pago
+            instance._previous_inicio = old_instance.fecha_hora_inicio
         except Turno.DoesNotExist:
             instance._previous_estado = None
             instance._previous_estado_pago = None
+            instance._previous_inicio = None
     else:
         instance._previous_estado = None
         instance._previous_estado_pago = None
+        instance._previous_inicio = None
 
 
 @receiver(post_save, sender=Turno)
@@ -274,3 +277,65 @@ def send_whatsapp_notifications(sender, instance, created, **kwargs):
             print(f"📲 Cancellation WhatsApp scheduled for turno #{instance.id}")
         else:
             print(f"⚠️ Cliente {instance.cliente.nombre_completo} does not accept WhatsApp or has no phone")
+
+
+# ==================== PUSH NOTIFICATION SIGNALS ====================
+
+@receiver(post_save, sender=Turno)
+def encolar_avisos_push(sender, instance, created, **kwargs):
+    """
+    Avisos push del ciclo de vida del turno.
+
+    A diferencia de WhatsApp, acá no se envía nada: se deja el aviso en la cola y
+    se sigue. El request del staff que confirma un turno no espera a la API de
+    Expo, y si el proceso de envío está caído el aviso sale igual cuando vuelva.
+
+    Los recordatorios NO se encolan acá: los programa el barrido de
+    ``disparadores`` a partir del estado de la base, que también cubre los turnos
+    cargados por vías que no pasan por esta señal. Lo que sí hace falta acá es
+    **descartar los recordatorios viejos** cuando el turno se cancela o se mueve
+    de hora, porque el texto y el momento quedaron mal.
+    """
+    from apps.notificaciones import despacho, eventos
+    from apps.notificaciones.disparadores import clave_de_turno, contexto_de_turno
+
+    previous_estado = getattr(instance, '_previous_estado', None)
+    previous_inicio = getattr(instance, '_previous_inicio', None)
+
+    # --- Confirmación: el staff aprobó el turno (o lo creó ya confirmado) ---
+    recien_confirmado = (
+        instance.estado == Turno.Estado.CONFIRMADO
+        and previous_estado != Turno.Estado.CONFIRMADO
+    )
+    if recien_confirmado:
+        despacho.crear_aviso_para_cliente(
+            evento=eventos.TURNO_CONFIRMADO,
+            cliente=instance.cliente,
+            contexto=contexto_de_turno(instance),
+            clave=clave_de_turno(instance.id, eventos.TURNO_CONFIRMADO),
+            datos_extra={'turnoId': instance.id},
+        )
+
+    # --- Cancelación: avisar y bajar los recordatorios que quedaron colgados ---
+    cancelado = (
+        instance.estado == Turno.Estado.CANCELADO
+        and previous_estado != Turno.Estado.CANCELADO
+    )
+    if cancelado:
+        despacho.descartar_pendientes(clave_prefijo=f'turno:{instance.id}:')
+        despacho.crear_aviso_para_cliente(
+            evento=eventos.TURNO_CANCELADO,
+            cliente=instance.cliente,
+            contexto=contexto_de_turno(instance),
+            clave=clave_de_turno(instance.id, eventos.TURNO_CANCELADO),
+            datos_extra={'turnoId': instance.id},
+        )
+
+    # --- Reprogramación: el recordatorio viejo apunta a una hora que ya no es ---
+    elif (not created and previous_inicio
+            and previous_inicio != instance.fecha_hora_inicio):
+        # Se borran y el próximo barrido los vuelve a crear con la hora nueva.
+        for evento in (eventos.TURNO_RECORDATORIO_24H, eventos.TURNO_RECORDATORIO_2H):
+            despacho.descartar_pendientes(
+                clave_prefijo=clave_de_turno(instance.id, evento)
+            )

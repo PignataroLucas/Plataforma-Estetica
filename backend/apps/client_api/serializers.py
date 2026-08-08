@@ -16,6 +16,8 @@ from apps.clientes.models import (
 )
 from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica
+from apps.notificaciones.eventos import Categoria
+from apps.notificaciones.models import DispositivoPush
 from apps.public_api.serializers import ProductoPublicoSerializer, ServicioPublicoSerializer
 from apps.servicios.models import Servicio
 from apps.turnos.models import Turno
@@ -52,7 +54,7 @@ class PerfilSerializer(serializers.ModelSerializer):
         model = UsuarioCliente
         fields = [
             'id', 'email', 'nombre', 'apellido',
-            'email_verificado', 'push_token', 'creado_en',
+            'email_verificado', 'creado_en',
             'vinculaciones',
         ]
         read_only_fields = ['id', 'email', 'email_verificado', 'creado_en']
@@ -139,7 +141,64 @@ class LoginSerializer(serializers.Serializer):
 
 
 class PushTokenSerializer(serializers.Serializer):
+    """Alta o baja de un dispositivo para push."""
     push_token = serializers.CharField(max_length=255)
+    plataforma = serializers.ChoiceField(
+        choices=DispositivoPush.Plataforma.choices,
+        required=False,
+        default=DispositivoPush.Plataforma.DESCONOCIDA,
+    )
+
+    def validate_push_token(self, value):
+        # Expo entrega siempre este formato. Validarlo acá evita guardar basura
+        # que después falla recién en el envío, lejos de donde se originó.
+        token = value.strip()
+        if not (token.startswith('ExponentPushToken[') and token.endswith(']')):
+            raise serializers.ValidationError(
+                'No parece un Expo push token (ExponentPushToken[...]).'
+            )
+        return token
+
+
+class PreferenciasNotificacionSerializer(serializers.Serializer):
+    """
+    Preferencias como un diccionario ``categoria -> bool``.
+
+    La app no necesita saber que por debajo son filas que solo existen cuando se
+    apaga algo: pide el mapa completo y manda el mapa completo.
+    """
+
+    def to_representation(self, usuario_cliente):
+        apagadas = set(
+            usuario_cliente.preferencias_notificacion
+            .filter(habilitada=False)
+            .values_list('categoria', flat=True)
+        )
+        return {
+            categoria: categoria not in apagadas
+            for categoria, _ in Categoria.choices
+        }
+
+    def to_internal_value(self, data):
+        # Los errores van en un dict: al levantarlos desde `to_internal_value`
+        # con una lista suelta, DRF no puede armar su ReturnDict y el 400 se
+        # convierte en un 500.
+        if not isinstance(data, dict):
+            raise serializers.ValidationError(
+                {'detail': 'Se espera un objeto de categorías.'}
+            )
+
+        validas = {categoria for categoria, _ in Categoria.choices}
+        desconocidas = set(data) - validas
+        if desconocidas:
+            raise serializers.ValidationError(
+                {'detail': f"Categorías desconocidas: {', '.join(sorted(desconocidas))}."}
+            )
+        if not all(isinstance(valor, bool) for valor in data.values()):
+            raise serializers.ValidationError(
+                {'detail': 'Cada categoría tiene que ser true o false.'}
+            )
+        return data
 
 
 class PerfilUpdateSerializer(serializers.ModelSerializer):
