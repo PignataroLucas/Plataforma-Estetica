@@ -69,7 +69,7 @@ const OMITIR_SI_ESTAN_VACIOS = [
  * y un objeto plano (JSON) si no, que es el caso de la enorme mayoría de los
  * guardados.
  */
-const prepararPayload = (data: ProductoFormData, esEdicion: boolean) => {
+export const prepararPayload = (data: ProductoFormData, esEdicion: boolean) => {
   const campos: Record<string, any> = { ...data }
 
   CAMPOS_DE_SOLO_LECTURA.forEach(campo => delete campos[campo])
