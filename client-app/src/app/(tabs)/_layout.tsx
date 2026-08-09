@@ -1,4 +1,6 @@
-import { Tabs } from 'expo-router';
+// `Tabs` desde 'expo-router' está deprecado por el propio paquete a favor de
+// este subpath, que además es de donde AmeTabBar toma sus tipos.
+import { Tabs } from 'expo-router/js-tabs';
 
 import { AmeTabBar } from '@/components/AmeTabBar';
 
