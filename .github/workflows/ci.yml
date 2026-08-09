@@ -1,0 +1,143 @@
+# Integración continua.
+#
+# Existe por un motivo concreto: la suite completa del backend **nunca había
+# estado entera en verde**. En la rama de la app mobile, veinticuatro tests
+# fallaban al correr todo junto por una configuración de test que se filtraba
+# entre módulos, y como cada módulo pasaba por separado nadie se enteró durante
+# meses. Eso es exactamente lo que un pipeline detecta el primer día.
+#
+# Un solo archivo sirve para todas las ramas. `main` tiene el backend y el CRM;
+# la app mobile vive en `Mobile/**`. Por eso el job de la app se saltea solo
+# cuando no encuentra el proyecto, en vez de mantener dos workflows que se van
+# a desincronizar.
+#
+# El lint todavía NO entra: el CRM arrastra 40 errores y 152 warnings. Sumarlo
+# ahora sería nacer en rojo, que es la forma más rápida de que un equipo aprenda
+# a ignorar el CI. Se agrega cuando esa deuda esté saldada.
+
+name: CI
+
+on:
+  push:
+    branches: [main, 'Mobile/**']
+  pull_request:
+    branches: [main]
+
+# Un push nuevo sobre la misma rama cancela la corrida anterior: no tiene
+# sentido gastar minutos validando un commit que ya quedó viejo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend · tests
+    runs-on: ubuntu-latest
+
+    services:
+      # Mismas versiones que docker-compose, para que un test que pasa acá
+      # signifique lo mismo que uno que pasa en la máquina de desarrollo.
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: plataforma_estetica
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/plataforma_estetica
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: clave-solo-para-ci-no-usar-en-ningun-lado
+      DEBUG: 'True'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'      # la misma del Dockerfile
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verificar que no falten migraciones
+        working-directory: backend
+        # Un modelo cambiado sin su migración rompe el despliegue, no los tests.
+        # Este chequeo lo agarra acá y no en producción.
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Tests
+        working-directory: backend
+        run: pytest -q
+
+  crm:
+    name: CRM · typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+      - name: Typecheck
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+  app:
+    name: App mobile · typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # En `main` no existe el proyecto de la app: solo viven ahí unos archivos
+      # generados de Expo. El job se saltea en lugar de fallar, así el mismo
+      # workflow sirve en las dos ramas.
+      - name: ¿Está la app en esta rama?
+        id: proyecto
+        run: |
+          if [ -f client-app/package.json ]; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            echo "La app mobile no está en esta rama; no hay nada que chequear."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.proyecto.outputs.existe == 'true'
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: client-app/package-lock.json
+
+      - name: Instalar dependencias
+        if: steps.proyecto.outputs.existe == 'true'
+        working-directory: client-app
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.proyecto.outputs.existe == 'true'
+        working-directory: client-app
+        run: npx tsc --noEmit

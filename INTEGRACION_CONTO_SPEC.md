@@ -269,7 +269,7 @@ Un problema de vínculo en un centro **no silencia a los demás**: se reporta, s
 
 Ambas vías distinguen dos clases de error. Token revocado, cuenta cruzada o cuenta inactiva **no se reintentan**: reintentar solo demora la alerta. `ContoUnavailable` sí es transitorio, y la corrida siguiente recupera lo que falte gracias a la ventana con solapamiento.
 
-**Pendiente de decisión:** con qué scheduler se corre el comando en Railway. Ver §12.
+El comando se dispara desde un cron de Railway. Ver §13.
 
 ## 6.2 — Desde cuándo importar
 
@@ -383,7 +383,28 @@ Códigos de alerta que devuelve `estado`: `SIN_VINCULAR`, `INACTIVA`, `SIN_FECHA
 
 ---
 
-## 12 — Scheduler en producción
+## 12 — Compras y gastos (fase 2)
+
+Conto es el sistema de registro del inventario en las dos direcciones: las compras lo hacen subir, las ventas lo hacen bajar. **La Plataforma Estética importa ambas como transacciones financieras** — ventas como ingreso, compras como gasto — y su módulo de inventario queda como espejo.
+
+Eso resuelve la pregunta que quedó abierta al principio: el inventario de la plataforma **no reemplaza a Conto, lo refleja**.
+
+**Estado actual:** las compras no se están cargando en la plataforma, así que esos gastos hoy no se registran en ningún lado del lado nuestro. No es una regresión, es algo que todavía no existe.
+
+**Por qué el sync de stock no genera el gasto.** `update_stock` usa `.update()` de queryset, que no dispara signals. Si los disparara, cada sincronización generaría un gasto fantasma por producto, cada 15 minutos.
+
+**Por qué no se infiere del delta de stock.** Dos motivos que lo descartan:
+
+- La primera sincronización llevaría el stock local de 0 a los valores reales de Conto. Interpretado como compra, sería un gasto falso enorme.
+- Un aumento de stock no siempre es una compra: puede ser un ajuste por conteo, una devolución, una corrección o un traslado. Adivinar ensucia los gastos con datos inventados.
+
+**La solución:** un cuarto endpoint `GET /api/compras/` en Conto, con la misma forma que ventas. Del lado nuestro es casi el mismo código que `SalesImporter`, creando `EXPENSE` en la categoría "Insumos y Productos" en vez de `INCOME_PRODUCT`. Documentado en el §12 de `CONTO_API_REQUIREMENTS.md`.
+
+**Riesgo a manejar cuando eso exista:** hoy la plataforma genera el gasto sola al crear un producto con stock y costo ([signals.py:11](backend/apps/inventario/signals.py:11)) y al usar `ajustar_stock` con tipo ENTRADA ([views.py:97](backend/apps/inventario/views.py:97)). Con las compras llegando de Conto, esas dos vías tienen que desactivarse para los productos que Conto maneja, o la misma compra se cuenta dos veces.
+
+Vale notar que `create_initial_stock_movement` es discutible incluso hoy: crear la ficha de un producto con un stock inicial no es lo mismo que haber comprado ese stock en ese momento.
+
+## 13 — Scheduler en producción
 
 Celery nunca se configuró en Railway, así que **sin scheduler nada dispararía la sincronización**. La integración quedaría configurada, verificada y sin traer una sola venta — un síntoma difícil de diagnosticar, porque todo diría OK.
 
