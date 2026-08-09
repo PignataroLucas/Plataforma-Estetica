@@ -14,6 +14,25 @@ from .serializers import (
 )
 
 
+def productos_del_catalogo(centro):
+    """
+    Los productos que la app puede mostrar de un centro.
+
+    Vive suelto porque el listado y la ficha tienen que coincidir exactamente:
+    si divergieran, un producto que no aparece en la grilla podría abrirse por
+    id, que es la forma sutil de filtrar el catálogo interno.
+    """
+    return (
+        Producto.objects
+        .filter(
+            sucursal__centro_estetica=centro,
+            tipo=Producto.TipoProducto.REVENTA,
+            activo=True,
+        )
+        .select_related('categoria', 'sucursal')
+    )
+
+
 class PublicoBase:
     """Config común a todos los endpoints públicos: sin auth, con rate limit anónimo."""
     authentication_classes = []
@@ -71,14 +90,18 @@ class ProductosPublicosView(PublicoBase, ListAPIView):
     serializer_class = ProductoPublicoSerializer
 
     def get_queryset(self):
-        centro = self.get_centro()
-        return (
-            Producto.objects
-            .filter(
-                sucursal__centro_estetica=centro,
-                tipo=Producto.TipoProducto.REVENTA,
-                activo=True,
-            )
-            .select_related('categoria', 'sucursal')
-            .order_by('nombre')
-        )
+        return productos_del_catalogo(self.get_centro()).order_by('nombre')
+
+
+class ProductoPublicoDetalleView(PublicoBase, RetrieveAPIView):
+    """
+    GET /api/public/centros/<id>/productos/<pk>/ — ficha de un producto.
+
+    Mismo scope que el listado: solo productos de reventa activos del centro
+    pedido, así un id de otro centro (o de un producto de uso interno) devuelve
+    404 en vez de filtrar el catálogo interno.
+    """
+    serializer_class = ProductoPublicoSerializer
+
+    def get_queryset(self):
+        return productos_del_catalogo(self.get_centro())

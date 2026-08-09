@@ -106,3 +106,17 @@ export function etiquetasDeDia(fecha: Date) {
     mes: MESES[fecha.getMonth()],
   };
 }
+
+/**
+ * Convierte el texto libre de `beneficios` en una lista.
+ *
+ * El campo es un TextField sin estructura, así que el centro escribe una línea
+ * por beneficio y puede o no ponerle viñeta. Acá se limpia lo que haya puesto.
+ * Lo usan la ficha del tratamiento y la del producto.
+ */
+export function parsearBeneficios(texto: string): string[] {
+  return texto
+    .split('\n')
+    .map((linea) => linea.replace(/^[\s•\-–*]+/, '').trim())
+    .filter(Boolean);
+}

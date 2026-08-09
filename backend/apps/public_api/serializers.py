@@ -77,28 +77,36 @@ class ServicioPublicoSerializer(serializers.ModelSerializer):
 
 
 class ProductoPublicoSerializer(serializers.ModelSerializer):
+    """
+    No expone disponibilidad, y es a propósito.
+
+    Había un campo `disponible` que devolvía `stock_actual > 0`. Desde el sync
+    con Conto, `stock_actual` es el stock **del depósito**, no el del mostrador:
+    el Duo Serum tiene 9 en el centro y −5 en el depósito. La app le habría
+    dicho a una clienta que no está disponible algo que está en la vitrina.
+
+    Mostrar disponibilidad de verdad requiere separar los dos stocks, que es un
+    trabajo aparte. Hasta entonces, no decir nada es más honesto que mentir.
+    """
     precio = serializers.DecimalField(
         source='precio_venta_final', max_digits=10, decimal_places=2, read_only=True
     )
     porcentaje_descuento = serializers.ReadOnlyField()
     categoria_nombre = serializers.SerializerMethodField()
-    disponible = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
         fields = [
-            'id', 'nombre', 'descripcion', 'marca',
+            # `descripcion` es el "qué es" y `beneficios` el "qué gana",
+            # mismo criterio que la ficha del tratamiento.
+            'id', 'nombre', 'descripcion', 'beneficios', 'marca',
             'precio', 'en_oferta', 'precio_oferta', 'porcentaje_descuento',
             # `foto_thumb` es para la grilla y `foto` para la ficha: la grilla
             # nunca debería bajar 31 originales por datos móviles.
-            'disponible', 'foto', 'foto_thumb', 'categoria_nombre', 'sucursal',
+            'foto', 'foto_thumb', 'categoria_nombre', 'sucursal',
             # Datos para el motor de recompra (app mobile)
             'contenido_ml', 'duracion_estimada_dias', 'pao_meses', 'frecuencia_uso',
         ]
 
     def get_categoria_nombre(self, obj):
         return obj.categoria.nombre if obj.categoria else None
-
-    def get_disponible(self, obj):
-        # Expone disponibilidad como booleano, sin revelar el stock exacto
-        return obj.stock_actual > 0

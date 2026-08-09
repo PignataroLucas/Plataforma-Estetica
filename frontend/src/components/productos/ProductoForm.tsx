@@ -541,7 +541,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
 
         <div className="mt-4">
           <label htmlFor="descripcion" className="block text-sm font-medium text-gray-700 mb-1">
-            Descripción
+            Qué es
           </label>
           <textarea
             id="descripcion"
@@ -552,6 +552,24 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Qué es, para qué tipo de piel, cómo se usa..."
           />
+        </div>
+
+        <div className="mt-4">
+          <label htmlFor="beneficios" className="block text-sm font-medium text-gray-700 mb-1">
+            Beneficios
+          </label>
+          <textarea
+            id="beneficios"
+            name="beneficios"
+            value={formData.beneficios || ''}
+            onChange={handleChange}
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={'Un beneficio por línea:\nHidrata sin sensación grasa\nCalma la piel después del sol'}
+          />
+          <p className="mt-1 text-xs text-purple-800">
+            Una línea por beneficio. La app los muestra como lista, igual que en los tratamientos.
+          </p>
         </div>
       </div>
 

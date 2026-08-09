@@ -11,7 +11,7 @@ import { useCentroActivo } from '@/hooks/useCentroActivo';
 import { getCentroInfo, getServicio } from '@/services/public';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { ServicioPublico } from '@/types/api';
-import { formatFechaChip, formatPrecio } from '@/utils/format';
+import { formatFechaChip, formatPrecio, parsearBeneficios } from '@/utils/format';
 
 /** Cuántas fechas puntuales se muestran en la ficha antes del "+N más". */
 const MAX_FECHAS_FICHA = 4;
@@ -266,14 +266,6 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
       {children}
     </View>
   );
-}
-
-/** El centro escribe un beneficio por línea; toleramos viñetas y líneas vacías. */
-function parsearBeneficios(texto: string): string[] {
-  return texto
-    .split('\n')
-    .map((linea) => linea.replace(/^[\s•\-–*]+/, '').trim())
-    .filter(Boolean);
 }
 
 const styles = StyleSheet.create({

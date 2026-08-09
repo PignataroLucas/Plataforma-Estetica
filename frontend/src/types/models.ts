@@ -428,7 +428,10 @@ export interface Producto {
   categoria?: number
   proveedor?: number
   nombre: string
+  /** El "qué es" de la ficha en la app. */
   descripcion: string
+  /** Qué gana la clienta, una línea por beneficio. */
+  beneficios: string
   marca: string
   codigo_barras: string
   sku: string

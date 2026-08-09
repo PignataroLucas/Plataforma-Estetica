@@ -97,6 +97,15 @@ class Producto(models.Model):
     # Información básica
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
+    # Ficha del producto en la app de clientas, con el mismo criterio que la del
+    # tratamiento: `descripcion` es el "qué es" y esto es "qué gana la clienta".
+    # Texto libre y una línea por beneficio, igual que en Servicio: recién con
+    # las primeras fichas escritas se va a saber qué estructura hace falta.
+    beneficios = models.TextField(
+        blank=True,
+        help_text="Qué gana la clienta con el producto, una línea por beneficio. "
+                  "Se muestra en la ficha de la app."
+    )
     marca = models.CharField(max_length=100, blank=True)
     codigo_barras = models.CharField(max_length=50, blank=True, null=True, unique=True)
     sku = models.CharField(

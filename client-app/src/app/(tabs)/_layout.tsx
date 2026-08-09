@@ -12,7 +12,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="turnos" />
       <Tabs.Screen name="reservar" />
-      <Tabs.Screen name="promos" />
+      <Tabs.Screen name="tienda" />
       <Tabs.Screen name="perfil" />
     </Tabs>
   );

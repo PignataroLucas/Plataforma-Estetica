@@ -31,7 +31,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
         model = Producto
         fields = [
             'id', 'sucursal', 'categoria', 'categoria_nombre',
-            'proveedor', 'proveedor_nombre', 'nombre', 'descripcion',
+            'proveedor', 'proveedor_nombre', 'nombre', 'descripcion', 'beneficios',
             'marca', 'codigo_barras', 'sku', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',
@@ -56,7 +56,7 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
         model = Producto
         fields = [
             'id', 'sucursal', 'categoria', 'categoria_data',
-            'proveedor', 'proveedor_data', 'nombre', 'descripcion',
+            'proveedor', 'proveedor_data', 'nombre', 'descripcion', 'beneficios',
             'marca', 'codigo_barras', 'sku', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',
@@ -80,7 +80,7 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Producto
         fields = [
-            'id', 'categoria', 'proveedor', 'nombre', 'descripcion',
+            'id', 'categoria', 'proveedor', 'nombre', 'descripcion', 'beneficios',
             'marca', 'codigo_barras', 'sku', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',

@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CentroInfoView,
+    ProductoPublicoDetalleView,
     ProductosPublicosView,
     ServicioPublicoDetalleView,
     ServiciosPublicosView,
@@ -16,4 +17,9 @@ urlpatterns = [
         name='public-centro-servicio-detalle',
     ),
     path('centros/<int:centro_id>/productos/', ProductosPublicosView.as_view(), name='public-centro-productos'),
+    path(
+        'centros/<int:centro_id>/productos/<int:pk>/',
+        ProductoPublicoDetalleView.as_view(),
+        name='public-centro-producto-detalle',
+    ),
 ]

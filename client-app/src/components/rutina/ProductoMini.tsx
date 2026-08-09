@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
@@ -10,10 +11,16 @@ import { formatPrecio } from '@/utils/format';
 
 /** Card compacta de un producto del catálogo dentro de la rutina. */
 export function ProductoMini({ producto }: { producto: ProductoPublico }) {
-  const foto = resolveMediaUrl(producto.foto);
+  // La miniatura alcanza para 44px; el original queda para la ficha.
+  const foto = resolveMediaUrl(producto.foto_thumb ?? producto.foto);
+  const abrirFicha = () => router.push(`/producto/${producto.id}`);
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={abrirFicha}
+      accessibilityRole="button"
+      accessibilityLabel={`Ver ${producto.nombre}`}>
       <View style={styles.thumb}>
         {foto ? (
           <Image source={{ uri: foto }} style={styles.img} contentFit="cover" transition={150} />
@@ -43,17 +50,21 @@ export function ProductoMini({ producto }: { producto: ProductoPublico }) {
         </View>
       </View>
 
-      {/* Stub de checkout (opción C): botón visible, sin acción todavía. */}
+      {/*
+        Sigue sin haber checkout. Hasta que se decida por dónde se compra, el
+        botón abre la ficha: está encima de la card, así que un onPress vacío lo
+        convertiría en una zona muerta que además tapa el toque de la card.
+      */}
       <Pressable
         style={({ pressed }) => [styles.comprar, pressed && styles.comprarPressed]}
-        onPress={() => {}}
+        onPress={abrirFicha}
         accessibilityRole="button"
-        accessibilityLabel={`Comprar ${producto.nombre}`}>
+        accessibilityLabel={`Ver ${producto.nombre}`}>
         <AppText variant="button" color={colors.onDark} style={styles.comprarTxt}>
           Comprar
         </AppText>
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 

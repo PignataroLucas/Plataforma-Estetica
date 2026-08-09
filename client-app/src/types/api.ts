@@ -63,14 +63,19 @@ export interface ServicioPublico {
 export interface ProductoPublico {
   id: number;
   nombre: string;
+  /** El "qué es". */
   descripcion: string;
+  /** Qué gana la clienta. Texto libre, una línea por beneficio. */
+  beneficios: string;
   marca: string;
   precio: string;
   en_oferta: boolean;
   precio_oferta: string | null;
   porcentaje_descuento: number;
-  disponible: boolean;
+  /** Original, para la ficha. */
   foto: string | null;
+  /** Miniatura WebP de 400px que genera el backend. Para la grilla. */
+  foto_thumb: string | null;
   categoria_nombre: string | null;
   contenido_ml: string | null;
   duracion_estimada_dias: number | null;

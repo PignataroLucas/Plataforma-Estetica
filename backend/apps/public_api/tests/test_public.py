@@ -142,12 +142,48 @@ class PublicApiTests(APITestCase):
         # Datos internos NO deben aparecer
         for campo in ['precio_costo', 'margen_ganancia', 'stock_actual', 'stock_minimo', 'proveedor']:
             self.assertNotIn(campo, prod)
-        # Disponibilidad como booleano, no el stock exacto
-        self.assertIn('disponible', prod)
-        self.assertTrue(prod['disponible'])
+
+    def test_productos_no_exponen_disponibilidad(self):
+        """
+        `disponible` se sacó a propósito: devolvía `stock_actual > 0`, y desde el
+        sync con Conto ese stock es el del depósito, no el del mostrador. La app
+        le habría dicho a una clienta que no está disponible algo que está en la
+        vitrina. Mientras los dos stocks no estén separados, no decir nada es
+        más honesto que mentir.
+        """
+        resp = self.client.get(reverse('public-centro-productos', args=[self.centro_a.id]))
+        self.assertNotIn('disponible', resp.data['results'][0])
 
     def test_productos_centro_b_no_leak(self):
         # Centro B no tiene productos; debe devolver lista vacía, no los de A
         resp = self.client.get(reverse('public-centro-productos', args=[self.centro_b.id]))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data['results'], [])
+
+    # ---------- Ficha de producto ----------
+
+    def test_producto_detalle_devuelve_la_ficha(self):
+        resp = self.client.get(reverse(
+            'public-centro-producto-detalle', args=[self.centro_a.id, self.prod_reventa.id]
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['nombre'], 'Serum Vitamina C')
+
+    def test_producto_detalle_de_otro_centro_da_404(self):
+        """
+        El id es adivinable, así que el scope de la ficha tiene que ser el mismo
+        que el del listado: si no, pedir ids al azar recorre el catálogo de
+        cualquier centro.
+        """
+        resp = self.client.get(reverse(
+            'public-centro-producto-detalle', args=[self.centro_b.id, self.prod_reventa.id]
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_producto_detalle_no_expone_los_que_el_listado_oculta(self):
+        """Un producto inactivo o de uso interno no puede abrirse por id."""
+        for producto in (self.prod_reventa_inactivo, self.prod_uso_interno):
+            resp = self.client.get(reverse(
+                'public-centro-producto-detalle', args=[self.centro_a.id, producto.id]
+            ))
+            self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND, producto.nombre)

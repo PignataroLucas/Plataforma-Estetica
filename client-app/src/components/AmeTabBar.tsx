@@ -14,7 +14,7 @@ const TABS: Record<string, { label: string; icon: FeatherName; central?: boolean
   index: { label: 'Inicio', icon: 'home' },
   turnos: { label: 'Turnos', icon: 'calendar' },
   reservar: { label: 'Reservar', icon: 'plus', central: true },
-  promos: { label: 'Promos', icon: 'star' },
+  tienda: { label: 'Tienda', icon: 'shopping-bag' },
   perfil: { label: 'Perfil', icon: 'user' },
 };
 
