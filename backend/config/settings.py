@@ -267,6 +267,16 @@ LOGGING = {
             'level': config('LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
+        # Los tracebacks de los errores 500 los emite Django por este logger.
+        # Su configuración por defecto los manda al handler `mail_admins` y a
+        # una consola filtrada con `require_debug_true`: en producción, donde
+        # DEBUG es False y no hay ADMINS ni servidor de mail, eso significaba
+        # que cada 500 se perdía sin dejar rastro en los logs.
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
     },
 }
 
