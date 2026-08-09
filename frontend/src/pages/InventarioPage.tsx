@@ -271,11 +271,13 @@ export default function InventarioPage() {
           />
         </ModalBody>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setIsCreateModalOpen(false)}>
+          <Button variant="secondary" disabled={loading} onClick={() => setIsCreateModalOpen(false)}>
             Cancelar
           </Button>
-          <Button type="submit" form="create-producto-form" variant="primary">
-            Crear Producto
+          {/* Subir una foto tarda varios segundos: sin el spinner el botón
+              parece colgado y se lo aprieta de nuevo. */}
+          <Button type="submit" form="create-producto-form" variant="primary" loading={loading}>
+            {loading ? 'Guardando…' : 'Crear Producto'}
           </Button>
         </ModalFooter>
       </Modal>
@@ -300,11 +302,11 @@ export default function InventarioPage() {
           )}
         </ModalBody>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
+          <Button variant="secondary" disabled={loading} onClick={() => setIsEditModalOpen(false)}>
             Cancelar
           </Button>
-          <Button type="submit" form="edit-producto-form" variant="primary">
-            Actualizar
+          <Button type="submit" form="edit-producto-form" variant="primary" loading={loading}>
+            {loading ? 'Guardando…' : 'Actualizar'}
           </Button>
         </ModalFooter>
       </Modal>

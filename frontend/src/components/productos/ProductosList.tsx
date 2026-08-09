@@ -175,7 +175,10 @@ export const ProductosList: React.FC<ProductosListProps> = ({
     },
   ]
 
-  if (loading) {
+  // Solo en la carga inicial se reemplaza la tabla por el cartel. Después de
+  // guardar, la página vuelve a pedir la lista: si eso vaciara la pantalla, el
+  // centro vería la tabla desaparecer y volver una vez por cada foto que carga.
+  if (loading && productos.length === 0) {
     return <div className="text-center py-8">Cargando productos...</div>
   }
 
@@ -187,5 +190,9 @@ export const ProductosList: React.FC<ProductosListProps> = ({
     )
   }
 
-  return <Table columns={columns} data={productos} />
+  return (
+    <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+      <Table columns={columns} data={productos} />
+    </div>
+  )
 }
