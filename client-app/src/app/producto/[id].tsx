@@ -180,7 +180,12 @@ function Ficha({ producto }: { producto: ProductoPublico }) {
         ) : null}
       </ScrollView>
 
-      <PieDeCompra producto={producto} />
+      {/*
+        Un producto sin variante de Tienda Nube no se puede comprar: la URL del
+        carrito se arma con ese id (§5.2). El botón no se muestra en vez de
+        fallar al tocarlo.
+      */}
+      {producto.comprable ? <PieDeCompra producto={producto} /> : null}
     </>
   );
 }

@@ -154,6 +154,29 @@ class PublicApiTests(APITestCase):
         resp = self.client.get(reverse('public-centro-productos', args=[self.centro_a.id]))
         self.assertNotIn('disponible', resp.data['results'][0])
 
+    def test_comprable_es_falso_sin_variante_de_tienda_nube(self):
+        """
+        La app oculta el botón de comprar con esto. Sin la variante no se puede
+        armar la URL del carrito (COMPRA_EN_APP_SPEC.md §5.2), así que ofrecer
+        el botón sería ofrecer algo que falla al tocarlo.
+        """
+        resp = self.client.get(reverse('public-centro-productos', args=[self.centro_a.id]))
+        self.assertFalse(resp.data['results'][0]['comprable'])
+
+    def test_comprable_es_verdadero_con_variante(self):
+        producto = self.prod_reventa
+        producto.tiendanube_product_id = '900'
+        producto.tiendanube_variant_id = '1001'
+        producto.save()
+
+        resp = self.client.get(
+            reverse('public-centro-producto-detalle', args=[self.centro_a.id, producto.id])
+        )
+        self.assertTrue(resp.data['comprable'])
+        # El id de la variante no se expone: la app no lo necesita.
+        self.assertNotIn('tiendanube_product_id', resp.data)
+        self.assertNotIn('tiendanube_variant_id', resp.data)
+
     def test_productos_centro_b_no_leak(self):
         # Centro B no tiene productos; debe devolver lista vacía, no los de A
         resp = self.client.get(reverse('public-centro-productos', args=[self.centro_b.id]))

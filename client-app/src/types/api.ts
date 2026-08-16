@@ -77,6 +77,11 @@ export interface ProductoPublico {
   /** Miniatura WebP de 400px que genera el backend. Para la grilla. */
   foto_thumb: string | null;
   categoria_nombre: string | null;
+  /**
+   * Si se puede comprar desde la app. Es falso mientras el producto no tenga
+   * su variante de Tienda Nube cargada (COMPRA_EN_APP_SPEC.md §5.2).
+   */
+  comprable: boolean;
   contenido_ml: string | null;
   duracion_estimada_dias: number | null;
   pao_meses: number | null;

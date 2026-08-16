@@ -209,6 +209,14 @@ class TiendanubeIntegration(models.Model):
         verbose_name='Nombre de la tienda',
         help_text="Para que un humano confirme que se vinculó la tienda correcta"
     )
+    # La dirección pública de la tienda, que es contra la que se arma el carrito.
+    # Sale de `url_with_protocol` al vincular y no se escribe a mano: un dominio
+    # tipeado mal manda a la clienta a una tienda que no es.
+    store_url = models.URLField(
+        blank=True,
+        verbose_name='URL de la tienda',
+        help_text="Dirección pública, para armar el carrito y el checkout"
+    )
 
     # The token does not expire: it is valid until the merchant uninstalls the
     # app or a new one is issued. There is no refresh flow to implement.
@@ -232,6 +240,17 @@ class TiendanubeIntegration(models.Model):
         default=True,
         verbose_name='Activa',
         help_text="Se desactiva sola cuando el centro desinstala la app"
+    )
+    # Acá vive la decisión del §7.2, que es del centro y no técnica: si el
+    # descuento de la app se suma al 10% de transferencia o lo reemplaza.
+    # Arranca en True porque es lo que hace Tienda Nube por defecto (verificado
+    # contra la API): dejarlo en False sin que nadie lo haya decidido cambiaría
+    # el comportamiento actual de la tienda por omisión.
+    coupons_combine_with_other_discounts = models.BooleanField(
+        default=True,
+        verbose_name='Los cupones se combinan con otras promociones',
+        help_text="Si está activo, el descuento de la app se suma a los del "
+                  "medio de pago. Si no, lo reemplaza"
     )
     installed_at = models.DateTimeField(
         default=timezone.now,
@@ -257,6 +276,90 @@ class TiendanubeIntegration(models.Model):
     @property
     def can_issue_coupons(self):
         return self.is_active and bool(self.token)
+
+
+class CuponApp(models.Model):
+    """
+    A single-use coupon issued to one clienta for one purchase from the app.
+
+    It is the whole mechanism of COMPRA_EN_APP_SPEC.md §3.2 in one row: it
+    applies the discount, it locks it to a single use so the code cannot leak
+    into a WhatsApp group, and it is what makes the sale attributable — a sale
+    that comes back from Conto carrying one of these codes is, by definition, a
+    sale from the app.
+
+    The row outlives the coupon in Tienda Nube on purpose. The cleanup deletes
+    the coupon there but keeps this, because the analytics of §5.7 are built
+    against it: which code, to which clienta, when, and for how much.
+    """
+    integration = models.ForeignKey(
+        TiendanubeIntegration,
+        on_delete=models.CASCADE,
+        related_name='cupones'
+    )
+    # SET_NULL and not CASCADE: borrar una ficha no puede borrar el rastro de un
+    # descuento que se dio y que quizás ya se cobró.
+    cliente = models.ForeignKey(
+        'clientes.Cliente',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cupones_app',
+        verbose_name='Clienta'
+    )
+
+    code = models.CharField(
+        max_length=30,
+        unique=True,
+        verbose_name='Código',
+        help_text="Código con prefijo APP-, impredecible y de un solo uso"
+    )
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Descuento',
+        help_text="Porcentaje que se le aplicó, resuelto por el segmento de la clienta"
+    )
+    tiendanube_coupon_id = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        verbose_name='ID en Tienda Nube',
+        help_text="Necesario para borrarlo cuando vence sin usarse"
+    )
+
+    issued_at = models.DateTimeField(default=timezone.now, verbose_name='Emitido')
+    expires_at = models.DateTimeField(verbose_name='Vence')
+    used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Usado',
+        help_text="Se completa al importar la venta que lo trae"
+    )
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Borrado de Tienda Nube',
+        help_text="Cuándo lo borró la limpieza por haber vencido sin usarse"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Cupón de la app'
+        verbose_name_plural = 'Cupones de la app'
+        ordering = ['-issued_at']
+        indexes = [
+            # La limpieza busca por acá: vencidos, sin usar y todavía vivos en TN.
+            models.Index(fields=['expires_at', 'used_at', 'revoked_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.code} ({self.percentage}%)"
+
+    @property
+    def esta_vencido(self):
+        return timezone.now() >= self.expires_at
 
 
 class ContoSale(models.Model):

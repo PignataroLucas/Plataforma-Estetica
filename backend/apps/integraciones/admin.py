@@ -9,7 +9,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import ContoIntegration, ContoSale, TiendanubeIntegration
+from .models import ContoIntegration, ContoSale, CuponApp, TiendanubeIntegration
 from .services import ContoClient, ContoError
 from .sync import SalesImporter, StockSynchronizer
 
@@ -362,3 +362,35 @@ class TiendanubeIntegrationAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(CuponApp)
+class CuponAppAdmin(admin.ModelAdmin):
+    """
+    Los cupones emitidos por la app.
+
+    Sirve para dos preguntas: qué se emitió y a quién, y cuántos quedaron sin
+    usar — que es la tasa de compras que se empiezan y no se terminan.
+    """
+    list_display = ['code', 'cliente', 'percentage', 'estado', 'issued_at', 'expires_at']
+    list_filter = ['integration', 'issued_at']
+    search_fields = ['code', 'cliente__nombre', 'cliente__apellido']
+    date_hierarchy = 'issued_at'
+    readonly_fields = [
+        'integration', 'cliente', 'code', 'percentage', 'tiendanube_coupon_id',
+        'issued_at', 'expires_at', 'used_at', 'revoked_at', 'created_at',
+    ]
+
+    def has_add_permission(self, request):
+        """Los cupones los emite la app al tocar «Comprar», nunca una persona."""
+        return False
+
+    def estado(self, obj):
+        if obj.used_at:
+            return format_html('<span style="color: #065F46;">usado</span>')
+        if obj.revoked_at:
+            return format_html('<span style="color: #6B7280;">borrado de TN</span>')
+        if obj.esta_vencido:
+            return format_html('<span style="color: #92400E;">vencido</span>')
+        return format_html('<span style="color: #1D4ED8;">vigente</span>')
+    estado.short_description = 'Estado'

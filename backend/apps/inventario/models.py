@@ -114,6 +114,27 @@ class Producto(models.Model):
         help_text="Código del producto. Es la llave de cruce con Conto, "
                   "así que debe ser único dentro de la sucursal"
     )
+    # Los dos ids de Tienda Nube, y hacen falta los dos por motivos distintos:
+    # el carrito se arma con el id de PRODUCTO (verificado contra la tienda demo:
+    # con el de variante contesta "este producto no está disponible"), y el de
+    # variante es el que identifica la unidad concreta cuando el producto tiene
+    # más de una. Ver COMPRA_EN_APP_SPEC.md §5.2.
+    tiendanube_product_id = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        verbose_name='Producto en Tienda Nube',
+        help_text="ID del producto en Tienda Nube. Sin esto no se puede comprar "
+                  "desde la app: es lo que se manda al carrito"
+    )
+    tiendanube_variant_id = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        verbose_name='Variante en Tienda Nube',
+        help_text="ID de la variante. Identifica cuál unidad, cuando el producto "
+                  "tiene más de una"
+    )
     tipo = models.CharField(
         max_length=15,
         choices=TipoProducto.choices,

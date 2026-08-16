@@ -332,6 +332,22 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           placeholder="Opcional"
         />
 
+        <Input
+          label="Producto en Tienda Nube"
+          name="tiendanube_product_id"
+          value={formData.tiendanube_product_id || ''}
+          onChange={handleChange}
+          placeholder="Sin esto no se puede comprar desde la app"
+        />
+
+        <Input
+          label="Variante en Tienda Nube"
+          name="tiendanube_variant_id"
+          value={formData.tiendanube_variant_id || ''}
+          onChange={handleChange}
+          placeholder="Solo si el producto tiene más de una"
+        />
+
         <Select
           label="Unidad de Medida"
           name="unidad_medida"

@@ -130,6 +130,10 @@ class TiendanubeClient:
     travel together, so there is no way to call one store with another's token.
     """
 
+    PER_PAGE = 200
+    # Guard contra una paginación que no termine nunca.
+    MAX_PAGES = 50
+
     def __init__(self, integration, session=None):
         self.integration = integration
         self.session = session or requests.Session()
@@ -137,6 +141,43 @@ class TiendanubeClient:
     def get_store(self):
         """Read the store, to confirm the token works and name the link."""
         return self._request('GET', 'store')
+
+    def iter_products(self):
+        """
+        Yield the store's products, following pagination.
+
+        Read-only, y es el único lugar donde se lee el catálogo de Tienda Nube:
+        sirve para emparejar cada `Producto` nuestro con su variante (§5.2). El
+        stock y los precios siguen viniendo por Conto.
+        """
+        for page in range(1, self.MAX_PAGES + 1):
+            lote = self._request(
+                'GET', 'products', params={'page': page, 'per_page': self.PER_PAGE}
+            ) or []
+            if not lote:
+                return
+            yield from lote
+            if len(lote) < self.PER_PAGE:
+                return
+
+    def create_coupon(self, payload):
+        """Create a coupon. `payload` goes as Tienda Nube documents it."""
+        return self._request('POST', 'coupons', json=payload)
+
+    def delete_coupon(self, coupon_id):
+        """
+        Delete a coupon in Tienda Nube.
+
+        A 404 is success as far as the caller is concerned: the coupon is gone,
+        which is the point. Treating it as an error would make the cleanup
+        command retry the same rows forever.
+        """
+        try:
+            return self._request('DELETE', f'coupons/{coupon_id}')
+        except TiendanubeError as exc:
+            if '404' in str(exc):
+                return None
+            raise
 
     # -- internals --------------------------------------------------------- #
 

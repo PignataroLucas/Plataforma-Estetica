@@ -32,7 +32,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sucursal', 'categoria', 'categoria_nombre',
             'proveedor', 'proveedor_nombre', 'nombre', 'descripcion', 'beneficios',
-            'marca', 'codigo_barras', 'sku', 'tipo',
+            'marca', 'codigo_barras', 'sku', 'tiendanube_product_id', 'tiendanube_variant_id', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',
             'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
@@ -57,7 +57,7 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sucursal', 'categoria', 'categoria_data',
             'proveedor', 'proveedor_data', 'nombre', 'descripcion', 'beneficios',
-            'marca', 'codigo_barras', 'sku', 'tipo',
+            'marca', 'codigo_barras', 'sku', 'tiendanube_product_id', 'tiendanube_variant_id', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',
             'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',
@@ -81,7 +81,7 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
         model = Producto
         fields = [
             'id', 'categoria', 'proveedor', 'nombre', 'descripcion', 'beneficios',
-            'marca', 'codigo_barras', 'sku', 'tipo',
+            'marca', 'codigo_barras', 'sku', 'tiendanube_product_id', 'tiendanube_variant_id', 'tipo',
             'stock_actual', 'stock_minimo', 'stock_maximo', 'unidad_medida',
             'precio_costo', 'precio_venta',
             'precio_efectivo', 'precio_transferencia', 'precio_debito', 'precio_credito',

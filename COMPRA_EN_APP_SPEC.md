@@ -285,6 +285,14 @@ Hoy no existe.
 **Un producto sin `tiendanube_variant_id` no se puede comprar.** La ficha tiene
 que ocultar el botón, no fallar al tocarlo.
 
+> **Corrección del 15/08/2026, verificada contra la tienda demo: el carrito se
+> arma con el ID DE PRODUCTO, no con el de variante.** Mandando el id de
+> variante, Tienda Nube contesta *"Este producto no está disponible"*; con el de
+> producto, agrega. Se guardan los dos: `tiendanube_product_id` es el que arma
+> el carrito y decide si el producto se puede comprar, y
+> `tiendanube_variant_id` identifica cuál unidad cuando el producto tiene más de
+> una. El emparejador escribe ambos.
+
 ### 5.3 Emisión de cupones
 
 Un modelo nuevo, `CuponApp`, con: código, clienta, porcentaje, fecha de emisión,
@@ -503,12 +511,57 @@ Y hay que decidirlo antes de construir: cambia qué porcentaje se le pone al cup
 Cada "Comprar" que no termina en compra deja un cupón vivo en Tienda Nube. Sin
 limpieza, en unos meses hay miles. De ahí el comando del 5.3.
 
+> **Hecho y verificado contra la tienda demo el 15/08/2026**, emitiendo un cupón
+> real y borrándolo con el comando. Dos cosas que se aprendieron ahí:
+>
+> - **El `DELETE` de Tienda Nube es un borrado lógico.** El cupón sigue
+>   respondiendo por su id, pero vuelve con `is_deleted: true` y
+>   `valid: false`, o sea que ya no se puede usar. Es lo que importa; no
+>   esperar un 404 después de borrar.
+> - **`end_date` / `end_time` se mandan en hora local y vuelven en UTC.** Se
+>   envió 23:47 (Argentina) y la API devolvió `2026-08-16 02:47`. La conversión
+>   la hace TN y es correcta, pero al leer un cupón hay que tenerlo en cuenta.
+
 ### 6.6 El doble "Comprar"
 
 Si Tienda Nube no ofrece una URL que agregue el producto al carrito y abra el
 checkout en un paso, el WebView va a caer en la ficha del producto **dentro de la
 tienda web**, y la clienta va a tener que apretar "Comprar" de nuevo. Es feo y no
 tiene arreglo elegante. Ver §7.
+
+> **Resuelto el 15/08/2026, probado contra la tienda demo.**
+>
+> **No existe una URL que agregue al carrito.** `GET /comprar/?add_to_cart=…`
+> deja el carrito vacío. Lo que funciona es un **POST** a `/comprar/` con
+> `add_to_cart=<id de producto>` y `quantity=<n>`, que es lo que hace el propio
+> botón "Agregar al carrito" del tema.
+>
+> **Pero no hay doble "Comprar".** El WebView no necesita una URL: carga una
+> página nuestra con un formulario oculto que se auto-envía por POST. La clienta
+> ve el carrito ya armado en un paso, y no dependemos de que Tienda Nube agregue
+> nada. Es la respuesta a la pregunta 1 del §7.3, para el carrito.
+>
+> **El cupón es otra historia: no se puede pre-aplicar.** Probado contra la
+> demo, ninguna de estas vías lo aplica — `?coupon=` sobre la URL del checkout,
+> `?coupon=` / `?cupon=` / `?discount_coupon=` / `?add_coupon=` sobre el
+> carrito, ni `coupon=` dentro del POST que agrega al carrito. El total sigue
+> sin descuento en todos los casos.
+>
+> Escrito a mano en el campo "Agregar cupón de descuento" del checkout, **sí
+> funciona**: $100 → $85 con un cupón del 15%, y el resumen muestra el código.
+>
+> Así que el §5.5 tiene una decisión que tomar, y es de producto:
+>
+> 1. **Inyectar JavaScript en el WebView** para llenar el campo y aplicarlo.
+>    `injectedJavaScript` corre en la página cargada aunque sea de otro origen.
+>    Funciona, pero depende del HTML del checkout de TN: el día que lo cambien
+>    se rompe **en silencio** y la clienta paga precio de lista, que es
+>    exactamente el §6.1.
+> 2. **Que la clienta lo pegue.** Nuestra pantalla muestra el código con un
+>    botón de copiar. Un paso más, pero no se rompe nunca y si falla se ve.
+> 3. **Inyectar y verificar.** Se inyecta, y si a los pocos segundos el
+>    descuento no aparece en la página, se le muestra el código para pegar. Es
+>    la 1 sin su modo de fallar peor, a cambio de más trabajo.
 
 ### 6.7 El cupón se puede usar desde la web
 

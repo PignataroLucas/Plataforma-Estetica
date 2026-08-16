@@ -460,6 +460,10 @@ export interface Producto {
   marca: string
   codigo_barras: string
   sku: string
+  /** Producto en Tienda Nube: es lo que arma el carrito. Sin esto no se puede comprar desde la app. */
+  tiendanube_product_id?: string
+  /** Variante en Tienda Nube: identifica cuál unidad cuando el producto tiene más de una. */
+  tiendanube_variant_id?: string
   tipo: TipoProducto
   stock_actual: number
   stock_minimo: number

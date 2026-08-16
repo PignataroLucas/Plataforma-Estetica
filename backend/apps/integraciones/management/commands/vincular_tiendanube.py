@@ -103,8 +103,10 @@ class Command(BaseCommand):
                 # Tienda Nube devuelve los textos por idioma: {'es': 'Ame Demo'}
                 nombre = nombre.get('es') or next(iter(nombre.values()), '')
             integration.store_name = (nombre or '')[:200]
-            integration.save(update_fields=['store_name', 'updated_at'])
+            integration.store_url = (tienda.get('url_with_protocol') or '').rstrip('/')
+            integration.save(update_fields=['store_name', 'store_url', 'updated_at'])
             self.stdout.write(f"Tienda: {integration.store_name or 's/n'}")
+            self.stdout.write(f"URL: {integration.store_url or 's/d'}")
 
         self.stdout.write(f"Store ID: {store_id}")
         self.stdout.write(f"Permisos: {integration.scope or 's/d'}")
