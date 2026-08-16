@@ -10,6 +10,7 @@ INTEGRACION_CONTO_SPEC.md for the implementation plan.
 """
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from apps.empleados.models import CentroEstetica, Sucursal
 from apps.finanzas.models import Transaction
@@ -177,6 +178,87 @@ class ContoIntegration(models.Model):
         return self.is_active and self.is_linked
 
 
+class TiendanubeIntegration(models.Model):
+    """
+    Links one aesthetic center to its Tienda Nube store, for issuing coupons.
+
+    Separate from `ContoIntegration` on purpose: they are different channels
+    with different lifetimes. Conto is read-only and reads sales; this one
+    writes coupons and dies when the merchant uninstalls the app.
+
+    Same two uniqueness constraints as the Conto integration, and for the same
+    reason: OneToOne on `center` stops a center from having two stores, unique
+    on `store_id` stops two centers from pointing at the same store.
+    """
+    center = models.OneToOneField(
+        CentroEstetica,
+        on_delete=models.CASCADE,
+        related_name='tiendanube_integration',
+        verbose_name='Centro estética'
+    )
+
+    store_id = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name='ID de tienda',
+        help_text="El `user_id` que devuelve el OAuth de Tienda Nube"
+    )
+    store_name = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Nombre de la tienda',
+        help_text="Para que un humano confirme que se vinculó la tienda correcta"
+    )
+
+    # The token does not expire: it is valid until the merchant uninstalls the
+    # app or a new one is issued. There is no refresh flow to implement.
+    #
+    # Stored like `ContoIntegration.token`: never exposed by the API. That is
+    # the existing pattern in this app, not encryption at rest — see the note
+    # in COMPRA_EN_APP_SPEC.md §5.1.
+    token = models.CharField(
+        max_length=255,
+        verbose_name='Token',
+        help_text="Token de Tienda Nube. No se muestra en la API"
+    )
+    scope = models.CharField(
+        max_length=300,
+        blank=True,
+        verbose_name='Permisos',
+        help_text="Permisos que el centro autorizó al instalar la app"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Activa',
+        help_text="Se desactiva sola cuando el centro desinstala la app"
+    )
+    installed_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Instalada el'
+    )
+    uninstalled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Desinstalada el'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Integración con Tienda Nube'
+        verbose_name_plural = 'Integraciones con Tienda Nube'
+        ordering = ['id']
+
+    def __str__(self):
+        return f"Tienda Nube - {self.center.nombre}"
+
+    @property
+    def can_issue_coupons(self):
+        return self.is_active and bool(self.token)
+
+
 class ContoSale(models.Model):
     """
     A voucher pulled from Conto: either a sale or a credit note.
@@ -233,6 +315,45 @@ class ContoSale(models.Model):
         decimal_places=2,
         null=True,
         blank=True
+    )
+
+    # Origin and coupon, copied from the payload without being interpreted.
+    #
+    # They get columns of their own even though `payload` already holds them:
+    # attributing app sales means matching the coupon code against the codes the
+    # app issues (COMPRA_EN_APP_SPEC.md §5.6), and `payload` cannot be relied on
+    # to still be there — it carries the buyer's personal data and is a
+    # candidate for purging (INTEGRACION_CONTO_SPEC.md §14).
+    sale_origin = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Origen de la venta',
+        help_text="Campo 'origen_venta' de Conto, crudo: de dónde dice Tienda "
+                  "Nube que viene la orden (store, api, meli, form, pos)"
+    )
+    app_origin = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='App de origen',
+        help_text="Campo 'app_origen' de Conto, crudo: qué app de Tienda Nube "
+                  "creó la orden, si fue creada por una"
+    )
+    coupon_code = models.CharField(
+        max_length=200,
+        blank=True,
+        db_index=True,
+        verbose_name='Cupón',
+        help_text="Campo 'cupon' de Conto, crudo. Con más de un cupón vienen "
+                  "los códigos separados por coma"
+    )
+    coupon_discount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Descuento por cupón',
+        help_text="Campo 'descuento_cupon' de Conto. Vacío significa que Conto "
+                  "no informó el campo, que no es lo mismo que un descuento de 0"
     )
 
     payload = models.JSONField(

@@ -133,6 +133,7 @@ class ContoSaleSerializer(serializers.ModelSerializer):
             'id', 'voucher_id', 'type', 'tipo_display',
             'related_voucher_id', 'external_order_id', 'channel',
             'date', 'total',
+            'sale_origin', 'app_origin', 'coupon_code', 'coupon_discount',
             'status', 'estado_display', 'error_message',
             'cantidad_transacciones', 'monto_transacciones',
             'processed_at', 'created_at', 'updated_at',

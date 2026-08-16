@@ -15,6 +15,8 @@ import {
 import ClientesList from '@/components/clientes/ClientesList'
 import ClienteForm from '@/components/clientes/ClienteForm'
 import DuplicadosModal from '@/components/clientes/DuplicadosModal'
+import SegmentosAppModal from '@/components/clientes/SegmentosAppModal'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * ClientesPage - Container Component (Patrón Container/Presenter)
@@ -54,6 +56,11 @@ export default function ClientesPage() {
 
   // Estado del modal de duplicados
   const [isDuplicadosOpen, setIsDuplicadosOpen] = useState(false)
+
+  // Segmentos de la app: solo admin, porque el porcentaje es margen del centro
+  // y define lo que la app le cobra a cada clienta.
+  const [isSegmentosOpen, setIsSegmentosOpen] = useState(false)
+  const esAdmin = useAuthStore((s) => s.user?.rol === 'ADMIN')
 
   // Cargar clientes al montar el componente
   useEffect(() => {
@@ -191,6 +198,19 @@ export default function ClientesPage() {
               >
                 Duplicados
               </Button>
+              {esAdmin && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsSegmentosOpen(true)}
+                  leftIcon={
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                  }
+                >
+                  Segmentos de la app
+                </Button>
+              )}
               <Button
                 variant="primary"
                 onClick={handleOpenCreateModal}
@@ -286,6 +306,13 @@ export default function ClientesPage() {
         isOpen={isDuplicadosOpen}
         onClose={() => setIsDuplicadosOpen(false)}
         onMerged={fetchClientes}
+      />
+
+      {/* Segmentos de la app */}
+      <SegmentosAppModal
+        isOpen={isSegmentosOpen}
+        onClose={() => setIsSegmentosOpen(false)}
+        onCambios={fetchClientes}
       />
     </div>
   )

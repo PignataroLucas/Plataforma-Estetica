@@ -73,6 +73,25 @@ export interface Usuario {
   actualizado_en: string
 }
 
+/**
+ * Segmento de clientas de la app y el descuento que les corresponde.
+ *
+ * El porcentaje vive acá y no suelto en cada ficha: el día que VIP pase de 15%
+ * a 20% se edita un registro y no cuarenta (COMPRA_EN_APP_SPEC.md §5.8).
+ */
+export interface SegmentoApp {
+  id: number
+  nombre: string
+  porcentaje_descuento: string
+  /** El descuento general: le toca a toda clienta sin segmento propio. */
+  es_predeterminado: boolean
+  activo: boolean
+  /** Fichas que lo tienen asignado a mano (el general cuenta 0). */
+  cantidad_clientes: number
+  creado_en: string
+  actualizado_en: string
+}
+
 export interface Cliente {
   id: number
   centro_estetica: number
@@ -130,6 +149,12 @@ export interface Cliente {
   diagnostico_corporal?: string
   // Preferencias y marketing
   preferencias?: string
+  // App de clientas
+  /** Segmento asignado a mano. Vacío = le toca el general. */
+  segmento_app?: number | null
+  segmento_app_nombre?: string | null
+  /** Descuento que le corresponde de verdad, ya resuelta la caída al general. */
+  descuento_app?: string
   foto?: string
   acepta_promociones: boolean
   acepta_whatsapp: boolean

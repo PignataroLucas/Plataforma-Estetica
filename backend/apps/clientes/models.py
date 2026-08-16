@@ -1,10 +1,71 @@
 import secrets
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from apps.empleados.models import CentroEstetica
+
+
+class SegmentoApp(models.Model):
+    """
+    Grupo de clientas de la app con el descuento que les corresponde.
+
+    El porcentaje vive acá y no suelto en cada ficha: el día que VIP pase de 15%
+    a 20% hay que editar un registro y no cuarenta (COMPRA_EN_APP_SPEC.md §5.8).
+
+    La segmentación es de la plataforma y no de Tienda Nube, y no por gusto: la
+    API de TN no permite atar un cupón a un cliente, así que allá no existe ni
+    puede existir el concepto de "esta clienta es VIP". TN solo recibe un
+    porcentaje ya resuelto.
+    """
+    centro_estetica = models.ForeignKey(
+        CentroEstetica,
+        on_delete=models.CASCADE,
+        related_name='segmentos_app'
+    )
+    nombre = models.CharField(max_length=60)
+    porcentaje_descuento = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Descuento',
+        help_text="Porcentaje que se le descuenta a las clientas de este segmento"
+    )
+    es_predeterminado = models.BooleanField(
+        default=False,
+        verbose_name='Es el general de la app',
+        help_text="El descuento que le corresponde a toda clienta sin segmento propio"
+    )
+    activo = models.BooleanField(default=True)
+
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Segmento de la app'
+        verbose_name_plural = 'Segmentos de la app'
+        ordering = ['-es_predeterminado', 'nombre']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['centro_estetica', 'nombre'],
+                name='segmento_app_nombre_unico_por_centro',
+            ),
+            # Un solo general por centro: con dos, cuál gana lo decidiría el
+            # orden de la tabla, y el precio de la app dependería de eso.
+            models.UniqueConstraint(
+                fields=['centro_estetica'],
+                condition=models.Q(es_predeterminado=True),
+                name='segmento_app_un_solo_predeterminado_por_centro',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.porcentaje_descuento}%)"
 
 
 class Cliente(models.Model):
@@ -204,6 +265,17 @@ class Cliente(models.Model):
     acepta_promociones = models.BooleanField(default=True)
     acepta_whatsapp = models.BooleanField(default=True)
 
+    # App
+    segmento_app = models.ForeignKey(
+        SegmentoApp,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='clientes',
+        verbose_name='Segmento de la app',
+        help_text="Vacío significa que le corresponde el descuento general de la app"
+    )
+
     # Estado
     activo = models.BooleanField(default=True)
 
@@ -232,6 +304,48 @@ class Cliente(models.Model):
     @property
     def nombre_completo(self):
         return f"{self.nombre} {self.apellido}"
+
+    def clean(self):
+        """El segmento tiene que ser del mismo centro que la ficha."""
+        super().clean()
+        if (
+            self.segmento_app_id
+            and self.centro_estetica_id
+            and self.segmento_app.centro_estetica_id != self.centro_estetica_id
+        ):
+            raise ValidationError({
+                'segmento_app': 'El segmento pertenece a otro centro de estética'
+            })
+
+    @property
+    def segmento_app_efectivo(self):
+        """
+        El segmento que manda para esta clienta: el suyo, o el general del centro.
+
+        Un segmento desactivado cae al general en vez de a cero: apagar "VIP" es
+        dejar de tratarlas distinto, no dejarlas sin el descuento que tiene
+        cualquiera que use la app.
+        """
+        if self.segmento_app and self.segmento_app.activo:
+            return self.segmento_app
+        return SegmentoApp.objects.filter(
+            centro_estetica_id=self.centro_estetica_id,
+            es_predeterminado=True,
+            activo=True,
+        ).first()
+
+    @property
+    def descuento_app(self):
+        """
+        Porcentaje de descuento de la app para esta clienta.
+
+        Es EL número, y tiene un solo origen a propósito: el mismo que la app
+        usa para mostrar los precios es el que después se materializa como cupón
+        en Tienda Nube. Si se calculara en dos lados, la clienta vería un precio
+        y pagaría otro, que es la trampa del §6.1.
+        """
+        segmento = self.segmento_app_efectivo
+        return segmento.porcentaje_descuento if segmento else Decimal('0.00')
 
 
 class HistorialCliente(models.Model):

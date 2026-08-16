@@ -208,6 +208,36 @@ class PerfilView(ClienteScopeMixin, APIView):
         return Response(PerfilSerializer(usuario).data)
 
 
+class DescuentoAppView(ClienteScopeMixin, APIView):
+    """
+    GET /api/client/descuento/ — el descuento de la app para esta clienta.
+
+    Existe porque el catálogo público no puede resolverlo: devuelve precio de
+    lista para cualquiera, y el descuento no es del producto sino de la clienta
+    (COMPRA_EN_APP_SPEC.md §5.8). La app pide este número con la sesión iniciada
+    y lo aplica a los precios que muestra.
+
+    **Es el mismo número que después se emite como cupón en Tienda Nube.** Un
+    solo origen para lo que se muestra, lo que se emite y lo que se cobra: si
+    esto y la emisión del cupón calcularan cada uno por su lado, la clienta
+    vería un precio y pagaría otro, que es la trampa del §6.1.
+    """
+
+    def get(self, request):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        cliente = vinc.cliente
+        segmento = cliente.segmento_app_efectivo
+        return Response({
+            'porcentaje': f"{cliente.descuento_app:.2f}",
+            # Solo informativo: la app no decide nada con el nombre.
+            'segmento': segmento.nombre if segmento else None,
+            'centro': cliente.centro_estetica_id,
+        })
+
+
 class MiRutinaView(ClienteScopeMixin, APIView):
     """GET /api/client/mi-rutina/ — rutina activa + plan del cliente vinculado."""
 

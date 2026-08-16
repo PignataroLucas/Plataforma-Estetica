@@ -9,7 +9,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import ContoIntegration, ContoSale
+from .models import ContoIntegration, ContoSale, TiendanubeIntegration
 from .services import ContoClient, ContoError
 from .sync import SalesImporter, StockSynchronizer
 
@@ -262,7 +262,9 @@ class ContoSaleAdmin(admin.ModelAdmin):
         'external_order_id',
     ]
     list_filter = ['status', 'type', 'channel', 'integration']
-    search_fields = ['voucher_id', 'external_order_id', 'related_voucher_id']
+    search_fields = [
+        'voucher_id', 'external_order_id', 'related_voucher_id', 'coupon_code',
+    ]
     ordering = ['-date', '-created_at']
     date_hierarchy = 'date'
 
@@ -275,6 +277,10 @@ class ContoSaleAdmin(admin.ModelAdmin):
         'channel',
         'date',
         'total',
+        'sale_origin',
+        'app_origin',
+        'coupon_code',
+        'coupon_discount',
         'total_discrepancy',
         'payload',
         'status',
@@ -332,3 +338,27 @@ class ContoSaleAdmin(admin.ModelAdmin):
             obj.get_status_display()
         )
     status_badge.short_description = 'Estado'
+
+
+@admin.register(TiendanubeIntegration)
+class TiendanubeIntegrationAdmin(admin.ModelAdmin):
+    """
+    Read-only view of the Tienda Nube link.
+
+    Not editable by hand on purpose: the token comes from the OAuth exchange,
+    and one typed by a human is a token that works until the first coupon.
+    Para vincular, `python manage.py vincular_tiendanube`.
+    """
+    list_display = ['center', 'store_id', 'store_name', 'is_active', 'installed_at']
+    list_filter = ['is_active']
+    search_fields = ['store_id', 'store_name', 'center__nombre']
+
+    readonly_fields = [
+        'center', 'store_id', 'store_name', 'scope',
+        'installed_at', 'uninstalled_at', 'created_at', 'updated_at',
+    ]
+    # El token no se muestra nunca, ni siquiera como readonly.
+    exclude = ['token']
+
+    def has_add_permission(self, request):
+        return False

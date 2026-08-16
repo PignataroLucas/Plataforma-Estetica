@@ -1,5 +1,5 @@
 import api from './api'
-import type { Cliente, PlanTratamiento, RutinaCuidado, NotaCliente, PaginatedResponse, DuplicadoGrupo } from '@/types/models'
+import type { Cliente, PlanTratamiento, RutinaCuidado, NotaCliente, PaginatedResponse, DuplicadoGrupo, SegmentoApp } from '@/types/models'
 
 /**
  * Cliente Services - API calls for patient tracking system
@@ -29,6 +29,32 @@ export const updateCliente = async (id: number, data: Partial<Cliente>) => {
 
 export const deleteCliente = async (id: number) => {
   await api.delete(`/clientes/clientes/${id}/`)
+}
+
+// ==================== SEGMENTOS DE LA APP ====================
+
+/**
+ * Segmentos de la app. Solo admin: el porcentaje define lo que la app le cobra
+ * a cada clienta.
+ */
+export const getSegmentosApp = async () => {
+  const response = await api.get<PaginatedResponse<SegmentoApp>>('/clientes/segmentos-app/')
+  return response.data
+}
+
+export const createSegmentoApp = async (data: Partial<SegmentoApp>) => {
+  const response = await api.post<SegmentoApp>('/clientes/segmentos-app/', data)
+  return response.data
+}
+
+export const updateSegmentoApp = async (id: number, data: Partial<SegmentoApp>) => {
+  const response = await api.patch<SegmentoApp>(`/clientes/segmentos-app/${id}/`, data)
+  return response.data
+}
+
+/** El general no se puede borrar: el backend responde 400. */
+export const deleteSegmentoApp = async (id: number) => {
+  await api.delete(`/clientes/segmentos-app/${id}/`)
 }
 
 // ==================== DUPLICADOS ====================

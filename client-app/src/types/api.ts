@@ -83,6 +83,20 @@ export interface ProductoPublico {
   frecuencia_uso: string;
 }
 
+/**
+ * Descuento de la app para la clienta logueada (GET /client/descuento/).
+ *
+ * Es EL número: el mismo que se muestra en los precios y el que el backend va a
+ * emitir como cupón en Tienda Nube. Ver COMPRA_EN_APP_SPEC.md §5.8.
+ */
+export interface DescuentoApp {
+  /** Porcentaje, como string decimal ('15.00'). 0 = sin descuento. */
+  porcentaje: string;
+  /** Nombre del segmento, solo informativo. */
+  segmento: string | null;
+  centro: number;
+}
+
 /* ------------------------------------------------------------------ *
  * client_api — cuenta de la app (UsuarioCliente) y autenticación
  * ------------------------------------------------------------------ */

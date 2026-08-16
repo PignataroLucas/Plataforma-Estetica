@@ -1,17 +1,20 @@
 from django.db import transaction
+from rest_framework.exceptions import ValidationError
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, NotaCliente
+from apps.empleados.permissions import IsAdmin
+from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, NotaCliente, SegmentoApp
 from .serializers import (
     ClienteSerializer,
     ClienteDuplicadoSerializer,
     HistorialClienteSerializer,
     PlanTratamientoSerializer,
     RutinaCuidadoSerializer,
-    NotaClienteSerializer
+    NotaClienteSerializer,
+    SegmentoAppSerializer
 )
 from .services import detectar_duplicados, fusionar_clientes
 
@@ -289,3 +292,42 @@ class NotaClienteViewSet(viewsets.ModelViewSet):
             )
 
         return NotaCliente.objects.none()
+
+
+class SegmentoAppViewSet(viewsets.ModelViewSet):
+    """
+    Segmentos de la app y el descuento de cada uno.
+
+    Solo admin: el porcentaje es margen del centro y define lo que la app le
+    cobra a cada clienta, así que no es dato de operación diaria.
+
+    Endpoints:
+    - GET/POST   /api/clientes/segmentos-app/
+    - GET/PATCH/DELETE /api/clientes/segmentos-app/{id}/
+    """
+    serializer_class = SegmentoAppSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+        centro = getattr(self.request.user, 'centro_estetica', None)
+        if centro is None:
+            return SegmentoApp.objects.none()
+        return SegmentoApp.objects.filter(centro_estetica=centro)
+
+    def perform_create(self, serializer):
+        serializer.save(centro_estetica=self.request.user.centro_estetica)
+
+    def perform_destroy(self, instance):
+        """
+        El general no se borra.
+
+        Borrarlo dejaría a todas las clientas sin segmento propio en 0% de un
+        saque, y sin nada en la pantalla que explique por qué. Para apagar el
+        descuento general está el campo: se pone en 0.
+        """
+        if instance.es_predeterminado:
+            raise ValidationError(
+                'No se puede eliminar el segmento general de la app. '
+                'Si no querés dar descuento, ponelo en 0%.'
+            )
+        instance.delete()

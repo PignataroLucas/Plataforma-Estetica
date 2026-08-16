@@ -5,6 +5,7 @@ from .models import (
     UsuarioCliente,
     VinculacionCliente,
     CodigoInvitacion,
+    SegmentoApp,
 )
 
 
@@ -65,3 +66,14 @@ class CodigoInvitacionAdmin(admin.ModelAdmin):
     autocomplete_fields = ['cliente']
     raw_id_fields = ['generado_por', 'usado_por']
     readonly_fields = ['codigo', 'generado_en', 'usado_en', 'usado_por', 'estado']
+
+
+@admin.register(SegmentoApp)
+class SegmentoAppAdmin(admin.ModelAdmin):
+    list_display = [
+        'nombre', 'porcentaje_descuento', 'es_predeterminado', 'activo',
+        'centro_estetica',
+    ]
+    list_filter = ['centro_estetica', 'activo', 'es_predeterminado']
+    search_fields = ['nombre']
+    ordering = ['centro_estetica', '-es_predeterminado', 'nombre']

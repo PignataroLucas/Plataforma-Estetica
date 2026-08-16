@@ -19,7 +19,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.db import transaction as db_transaction
 from django.utils import timezone
@@ -79,6 +79,55 @@ def to_decimal(value):
     if value is None or value == '':
         return ZERO
     return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def optional_decimal(value, voucher_id=None, label='monto'):
+    """
+    Like `to_decimal`, but keeps "not reported" apart from zero.
+
+    `to_decimal` maps a missing value to zero, which is right for amounts that
+    have to add up. For the coupon discount the absence is the information: a
+    column full of nulls is how we find out Conto never shipped the field.
+
+    An unparseable value is logged and dropped rather than raised. Conto added
+    these fields without being able to compile (COMPRA_EN_APP_SPEC.md §7.1), and
+    failing a voucher whose money is real over a field nothing reads yet would
+    be the wrong trade. The raw value stays in `payload` either way.
+    """
+    if value is None or value == '':
+        return None
+    try:
+        return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        logger.warning(
+            "Voucher %s de Conto: %s ilegible (%r), se guarda vacío",
+            voucher_id, label, value,
+        )
+        return None
+
+
+def raw_origin_fields(voucher):
+    """
+    Conto's origin and coupon fields, verbatim, as `ContoSale` column values.
+
+    Nothing here interprets them. Matching a code against the coupons the app
+    issues is COMPRA_EN_APP_SPEC.md §5.6 and does not exist yet; this only makes
+    sure the data is on the row when it does — see the model for why `payload`
+    is not enough.
+
+    Values are truncated to their column width instead of being trusted: one
+    long string would abort the import of a real sale over a field nobody reads.
+    """
+    return {
+        'sale_origin': str(voucher.get('origen_venta') or '')[:50],
+        'app_origin': str(voucher.get('app_origen') or '')[:100],
+        'coupon_code': str(voucher.get('cupon') or '')[:200],
+        'coupon_discount': optional_decimal(
+            voucher.get('descuento_cupon'),
+            voucher_id=voucher.get('id'),
+            label='descuento_cupon',
+        ),
+    }
 
 
 def get_income_category(branch, name):
@@ -325,6 +374,12 @@ class SalesImporter:
         sale.external_order_id = str(voucher.get('orden_externa_id') or '')
         sale.date = self._parse_date(voucher.get('fecha'))
         sale.total = to_decimal(voucher.get('total'))
+
+        # Copied before the early returns below on purpose: a voucher that is
+        # skipped or still pending today may be reprocessed once the attribution
+        # exists, and it should carry its origin by then.
+        for name, value in raw_origin_fields(voucher).items():
+            setattr(sale, name, value)
 
         if channel not in (self.integration.channels_to_import or []):
             self._set_status(sale, ContoSale.Status.SKIPPED)
@@ -710,6 +765,7 @@ class SalesImporter:
             defaults={
                 'payload': voucher,
                 'channel': voucher.get('canal') or '',
+                **raw_origin_fields(voucher),
                 'status': ContoSale.Status.ERROR,
                 'error_message': str(exc)[:2000],
             },

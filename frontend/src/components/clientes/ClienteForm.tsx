@@ -1,5 +1,6 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react'
-import { Cliente } from '@/types/models'
+import { Cliente, SegmentoApp } from '@/types/models'
+import { getSegmentosApp } from '@/services/clienteService'
 import { Button, Input, Select, DateInput } from '@/components/ui'
 
 /**
@@ -71,7 +72,15 @@ export default function ClienteForm({
     preferencias: '',
     acepta_promociones: true,
     acepta_whatsapp: true,
+    segmento_app: null,
   })
+
+  /**
+   * Segmentos de la app. Solo los ve un admin (el endpoint es admin-only), así
+   * que si la lista viene vacía el selector no se muestra en vez de ofrecer
+   * algo que la respuesta va a rechazar.
+   */
+  const [segmentos, setSegmentos] = useState<SegmentoApp[]>([])
 
   const [errors, setErrors] = useState<Partial<Record<keyof Cliente, string>>>({})
   const [expandedSections, setExpandedSections] = useState({
@@ -134,9 +143,17 @@ export default function ClienteForm({
         preferencias: cliente.preferencias,
         acepta_promociones: cliente.acepta_promociones,
         acepta_whatsapp: cliente.acepta_whatsapp,
+        segmento_app: cliente.segmento_app ?? null,
       })
     }
   }, [cliente])
+
+  useEffect(() => {
+    getSegmentosApp()
+      .then((data) => setSegmentos(data.results.filter((s) => s.activo)))
+      // Un 403 (no es admin) o una caída no pueden impedir editar la ficha.
+      .catch(() => setSegmentos([]))
+  }, [])
 
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof Cliente, string>> = {}
@@ -168,7 +185,12 @@ export default function ClienteForm({
       return
     }
 
-    await onSubmit(formData)
+    await onSubmit({
+      ...formData,
+      // El <select> devuelve string y "" cuando es el general; el backend
+      // espera el id o null.
+      segmento_app: formData.segmento_app ? Number(formData.segmento_app) : null,
+    })
   }
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -889,6 +911,34 @@ export default function ClienteForm({
                 placeholder="Ej: Prefiere turnos por la mañana, aceites esenciales de lavanda..."
               />
             </div>
+
+            {segmentos.length > 0 && (
+              <div>
+                <Select
+                  label="Segmento de la app"
+                  name="segmento_app"
+                  value={formData.segmento_app ?? ''}
+                  onChange={handleChange}
+                  fullWidth
+                  // Sin placeholder: "General de la app" es una opción válida,
+                  // no un "elegí algo".
+                  placeholder=""
+                  options={[
+                    { value: '', label: 'General de la app' },
+                    ...segmentos
+                      .filter((s) => !s.es_predeterminado)
+                      .map((s) => ({
+                        value: String(s.id),
+                        label: `${s.nombre} (${s.porcentaje_descuento}%)`,
+                      })),
+                  ]}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Define el descuento que ve y paga esta clienta en la app.
+                  {cliente?.descuento_app && ` Hoy: ${cliente.descuento_app}%.`}
+                </p>
+              </div>
+            )}
 
             <div className="space-y-3">
               <label className="flex items-center">

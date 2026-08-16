@@ -1,5 +1,32 @@
 from rest_framework import serializers
-from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, RutinaItem, NotaCliente
+from .models import (
+    Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, RutinaItem,
+    NotaCliente, SegmentoApp
+)
+
+
+class SegmentoAppSerializer(serializers.ModelSerializer):
+    """Segmentos de la app y su descuento. El centro sale del usuario, nunca del body."""
+    cantidad_clientes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SegmentoApp
+        fields = [
+            'id', 'nombre', 'porcentaje_descuento', 'es_predeterminado',
+            'activo', 'cantidad_clientes', 'creado_en', 'actualizado_en',
+        ]
+        read_only_fields = ['id', 'creado_en', 'actualizado_en', 'cantidad_clientes']
+
+    def get_cantidad_clientes(self, obj):
+        """Cuántas fichas lo tienen asignado a mano. El general suma 0 y está bien:
+        las que caen en él es por no tener ninguno."""
+        return obj.clientes.count()
+
+    def validate_nombre(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('El nombre no puede estar vacío')
+        return value
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -11,6 +38,14 @@ class ClienteSerializer(serializers.ModelSerializer):
     - DIP: Depende de abstracciones (ModelSerializer)
     """
     nombre_completo = serializers.ReadOnlyField()
+    segmento_app_nombre = serializers.CharField(
+        source='segmento_app.nombre', read_only=True, default=None
+    )
+    # El descuento que le corresponde de verdad, contando la caída al general.
+    # Es el mismo número que la app le muestra y el que se va a cobrar.
+    descuento_app = serializers.DecimalField(
+        max_digits=5, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = Cliente
@@ -75,13 +110,30 @@ class ClienteSerializer(serializers.ModelSerializer):
             'foto',
             'acepta_promociones',
             'acepta_whatsapp',
+            # App
+            'segmento_app',
+            'segmento_app_nombre',
+            'descuento_app',
             # Estado
             'activo',
             'creado_en',
             'actualizado_en',
             'ultima_visita',
         ]
-        read_only_fields = ['id', 'centro_estetica', 'creado_en', 'actualizado_en', 'nombre_completo']
+        read_only_fields = [
+            'id', 'centro_estetica', 'creado_en', 'actualizado_en',
+            'nombre_completo', 'segmento_app_nombre', 'descuento_app',
+        ]
+
+    def validate_segmento_app(self, value):
+        """Un segmento de otro centro sería una fuga de datos entre inquilinos."""
+        if value is None:
+            return value
+        request = self.context.get('request')
+        centro = getattr(getattr(request, 'user', None), 'centro_estetica', None)
+        if centro and value.centro_estetica_id != centro.id:
+            raise serializers.ValidationError('El segmento pertenece a otro centro de estética')
+        return value
 
     def create(self, validated_data):
         """

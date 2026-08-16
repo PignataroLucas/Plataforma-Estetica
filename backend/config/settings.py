@@ -305,6 +305,13 @@ if not DEBUG:
         cast=Csv()
     )
 
+# Tienda Nube — credenciales de la app de partners.
+# Salen de «Claves de Acceso» en el panel; solo se usan para emitir cupones
+# (ver COMPRA_EN_APP_SPEC.md §5.1). Sin ellas la vinculación falla con un
+# mensaje explícito en vez de intentar el intercambio.
+TIENDANUBE_CLIENT_ID = config('TIENDANUBE_CLIENT_ID', default='')
+TIENDANUBE_CLIENT_SECRET = config('TIENDANUBE_CLIENT_SECRET', default='')
+
 # Twilio WhatsApp Configuration
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')

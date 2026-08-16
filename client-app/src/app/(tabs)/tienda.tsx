@@ -13,14 +13,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BotonCarrito } from '@/components/carrito/BotonCarrito';
 import { AppText } from '@/components/ui/AppText';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
+import { useDescuentoApp } from '@/hooks/useDescuentoApp';
 import { resolveMediaUrl } from '@/services/config';
 import { getProductos } from '@/services/public';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { ProductoPublico } from '@/types/api';
 import { formatPrecio } from '@/utils/format';
+import { conDescuento } from '@/utils/precios';
 
 const TODAS = '__todas__';
 const COLUMNAS = 2;
@@ -34,6 +37,7 @@ const COLUMNAS = 2;
  */
 export default function TiendaScreen() {
   const { centroId } = useCentroActivo();
+  const { porcentaje: descuento } = useDescuentoApp();
   const [busqueda, setBusqueda] = useState('');
   const [filtro, setFiltro] = useState<string>(TODAS);
 
@@ -72,6 +76,7 @@ export default function TiendaScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <AppText variant="section">Tienda</AppText>
+        <BotonCarrito />
       </View>
 
       {isPending ? (
@@ -113,7 +118,7 @@ export default function TiendaScreen() {
           ) : (
             <View style={styles.grilla}>
               {visibles.map((p) => (
-                <ProductoCard key={p.id} producto={p} />
+                <ProductoCard key={p.id} producto={p} descuento={descuento} />
               ))}
             </View>
           )}
@@ -123,7 +128,13 @@ export default function TiendaScreen() {
   );
 }
 
-function ProductoCard({ producto }: { producto: ProductoPublico }) {
+function ProductoCard({
+  producto,
+  descuento,
+}: {
+  producto: ProductoPublico;
+  descuento: number;
+}) {
   const { width } = useWindowDimensions();
   // Dos columnas: el ancho útil menos los márgenes laterales y el hueco del medio.
   const ancho = (width - spacing.xl * 2 - spacing.md) / COLUMNAS;
@@ -173,7 +184,18 @@ function ProductoCard({ producto }: { producto: ProductoPublico }) {
         <AppText variant="cardTitle" numberOfLines={2} style={styles.nombre}>
           {producto.nombre}
         </AppText>
-        <AppText variant="price">{formatPrecio(producto.precio)}</AppText>
+        {descuento > 0 ? (
+          <View style={styles.precios}>
+            <AppText variant="price">
+              {formatPrecio(conDescuento(producto.precio, descuento))}
+            </AppText>
+            <AppText variant="meta" style={styles.precioLista}>
+              {formatPrecio(producto.precio)}
+            </AppText>
+          </View>
+        ) : (
+          <AppText variant="price">{formatPrecio(producto.precio)}</AppText>
+        )}
       </View>
     </Pressable>
   );
@@ -211,7 +233,16 @@ function Vacio({ conFiltro }: { conFiltro: boolean }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.ivory },
-  header: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    // Alto fijo: el botón del carrito aparece y desaparece según haya items, y
+    // sin esto el título salta cuando se agrega el primero.
+    minHeight: 52,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -267,6 +298,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   info: { padding: spacing.md, gap: 2 },
+  precios: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  precioLista: { textDecorationLine: 'line-through' },
   nombre: { fontSize: 15, lineHeight: 18 },
 
   vacio: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
