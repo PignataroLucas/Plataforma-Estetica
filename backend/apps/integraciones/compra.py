@@ -64,7 +64,6 @@ def preparar_compra(cliente, items):
         lineas.append({
             'producto_tiendanube': producto.tiendanube_product_id,
             'cantidad': cantidad,
-            'nombre': producto.nombre,
         })
         subtotal += producto.precio_venta_final * cantidad
 

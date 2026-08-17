@@ -27,7 +27,7 @@ from django.utils import timezone
 from apps.clientes.models import Cliente
 from apps.finanzas.models import Transaction, TransactionCategory
 
-from .models import ContoSale
+from .models import ContoSale, CuponApp
 from .services import ContoClient, ContoError, ContoScope
 
 logger = logging.getLogger(__name__)
@@ -381,6 +381,8 @@ class SalesImporter:
         for name, value in raw_origin_fields(voucher).items():
             setattr(sale, name, value)
 
+        self._atribuir(sale)
+
         if channel not in (self.integration.channels_to_import or []):
             self._set_status(sale, ContoSale.Status.SKIPPED)
             result.skipped += 1
@@ -440,7 +442,7 @@ class SalesImporter:
     def _process_sale(self, sale, voucher):
         branch = self.integration.branch
         payment_method = self._payment_method(voucher)
-        client = self._resolve_client(voucher.get('cliente'))
+        client = self._resolve_client(voucher.get('cliente')) or self._clienta_del_cupon(sale)
         date = sale.date or timezone.localdate()
 
         items = voucher.get('items') or []
@@ -691,6 +693,55 @@ class SalesImporter:
 
         # `card` with an unknown or absent gateway, or a value Conto adds later.
         return self.integration.default_payment_method
+
+    def _clienta_del_cupon(self, sale):
+        """
+        La clienta a la que se le emitió el cupón.
+
+        Solo se usa cuando el email y el teléfono del comprador no resolvieron
+        nada: esos datos son de quien compró de verdad, y el cupón dice a quién
+        se lo dimos. Cuando difieren gana el comprador — el código pudo haber
+        circulado (§6.7) —, pero la atribución de la venta a la app sigue
+        siendo correcta igual, porque va por `cupon_app`.
+        """
+        return sale.cupon_app.cliente if sale.cupon_app_id else None
+
+    def _atribuir(self, sale):
+        """
+        Marcar la venta como originada en la app, si trae uno de nuestros cupones.
+
+        Es todo el mecanismo del §5.6, y descansa en una sola premisa: **los
+        únicos que emiten estos códigos somos nosotros**, así que una venta que
+        llega con uno es, por definición, una venta de la app.
+
+        Se corre antes de los early returns porque el cupón se usó igual, aunque
+        la venta quede pendiente de pago o de un canal que no importamos. Y es
+        idempotente: reprocesar un voucher no vuelve a marcar el cupón como
+        usado ni pisa la fecha original.
+        """
+        if not sale.coupon_code or sale.cupon_app_id:
+            return
+
+        # Con más de un cupón, Conto los manda separados por coma.
+        codigos = [c.strip() for c in sale.coupon_code.split(',') if c.strip()]
+        cupon = (
+            CuponApp.objects
+            .filter(code__in=codigos, integration__center=self.integration.center)
+            .select_related('cliente')
+            .first()
+        )
+        if cupon is None:
+            return
+
+        sale.cupon_app = cupon
+        if cupon.used_at is None:
+            cupon.used_at = timezone.now()
+            cupon.save(update_fields=['used_at'])
+
+        logger.info(
+            "Venta %s atribuida a la app por el cupón %s (clienta %s)",
+            sale.voucher_id, cupon.code, cupon.cliente_id,
+        )
 
     def _resolve_client(self, data):
         if not data:

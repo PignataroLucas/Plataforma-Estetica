@@ -85,9 +85,9 @@ class PrepararCompraTests(APITestCase):
         datos = respuesta.data
         self.assertEqual(datos['checkout']['url'], 'https://amedemo.mitiendanube.com/comprar/')
         # Una línea por producto: Tienda Nube agrega de a uno por POST.
-        self.assertEqual(datos['checkout']['items'], [{
-            'producto_tiendanube': '361410527', 'cantidad': 2, 'nombre': 'Serum',
-        }])
+        self.assertEqual(datos['checkout']['items'], [
+            {'producto_tiendanube': '361410527', 'cantidad': 2},
+        ])
         self.assertEqual(datos['cupon']['porcentaje'], '15.00')
         self.assertTrue(datos['cupon']['codigo'].startswith('APP-'))
 

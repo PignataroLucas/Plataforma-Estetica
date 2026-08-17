@@ -134,17 +134,16 @@ export default function CarritoScreen() {
               <AppText variant="cardTitle">Total</AppText>
               <AppText variant="cardTitle">{formatPrecio(total)}</AppText>
             </View>
-            {/*
-              Deshabilitado hasta que exista el checkout: la emisión del cupón y
-              el WebView de Tienda Nube dependen del alta como partner
-              (COMPRA_EN_APP_SPEC.md §5.1 y §5.5).
-            */}
-            <Button label="Comprar" disabled />
-            <AppText variant="meta" style={styles.aviso}>
-              {hayComprables
-                ? 'Estamos terminando la compra desde la app. Muy pronto vas a poder pagar tu pedido acá.'
-                : 'Los productos de tu carrito ya no están disponibles.'}
-            </AppText>
+            <Button
+              label="Comprar"
+              disabled={!hayComprables}
+              onPress={() => router.push('/checkout')}
+            />
+            {hayComprables ? null : (
+              <AppText variant="meta" style={styles.aviso}>
+                Los productos de tu carrito ya no están disponibles.
+              </AppText>
+            )}
           </View>
         </>
       )}

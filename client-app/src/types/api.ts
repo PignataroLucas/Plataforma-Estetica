@@ -102,6 +102,22 @@ export interface DescuentoApp {
   centro: number;
 }
 
+/**
+ * Lo que devuelve POST /client/comprar/: todo lo que el WebView necesita para
+ * armar el carrito en Tienda Nube (COMPRA_EN_APP_SPEC.md §4).
+ */
+export interface CompraPreparada {
+  checkout: {
+    /** URL a la que se postea, una vez por producto. */
+    url: string;
+    items: { producto_tiendanube: string; cantidad: number }[];
+  };
+  /** Null cuando a la clienta no le corresponde descuento. */
+  cupon: { codigo: string; porcentaje: string } | null;
+  subtotal: string;
+  total: string;
+}
+
 /* ------------------------------------------------------------------ *
  * client_api — cuenta de la app (UsuarioCliente) y autenticación
  * ------------------------------------------------------------------ */

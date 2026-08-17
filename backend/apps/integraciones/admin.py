@@ -259,6 +259,7 @@ class ContoSaleAdmin(admin.ModelAdmin):
         'total_formatted',
         'status_badge',
         'descuadre',
+        'origen',
         'external_order_id',
     ]
     list_filter = ['status', 'type', 'channel', 'integration']
@@ -281,6 +282,7 @@ class ContoSaleAdmin(admin.ModelAdmin):
         'app_origin',
         'coupon_code',
         'coupon_discount',
+        'cupon_app',
         'total_discrepancy',
         'payload',
         'status',
@@ -321,6 +323,21 @@ class ContoSaleAdmin(admin.ModelAdmin):
             f'{obj.total_discrepancy:+,.2f}'
         )
     descuadre.short_description = 'Descuadre'
+
+    def origen(self, obj):
+        """
+        Si la venta vino de la app.
+
+        No sale de `origen_venta` —una compra desde la app llega como `store`,
+        igual que una del navegador— sino del cupón (§6.3).
+        """
+        if not obj.cupon_app_id:
+            return '—'
+        return format_html(
+            '<span style="background-color: #E8D1CD; color: #1F1F1F; '
+            'padding: 3px 8px; border-radius: 4px;">app</span>'
+        )
+    origen.short_description = 'Origen'
 
     def status_badge(self, obj):
         colors = {

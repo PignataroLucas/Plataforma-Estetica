@@ -459,6 +459,20 @@ class ContoSale(models.Model):
                   "no informó el campo, que no es lo mismo que un descuento de 0"
     )
 
+    # La atribución del §5.6: si la venta trae uno de nuestros códigos, es una
+    # venta de la app y sabemos de qué clienta. El vínculo se guarda en vez de
+    # recalcularlo, porque el cupón se borra de Tienda Nube al vencer y los
+    # códigos viejos dejarían de resolverse.
+    cupon_app = models.ForeignKey(
+        'integraciones.CuponApp',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ventas',
+        verbose_name='Cupón de la app',
+        help_text="Cargado al importar, cuando el código de la venta es uno nuestro"
+    )
+
     payload = models.JSONField(
         help_text="Respuesta cruda de Conto. Permite reprocesar sin volver a consultar"
     )
@@ -509,3 +523,14 @@ class ContoSale(models.Model):
 
     def __str__(self):
         return f"{self.get_type_display()} {self.voucher_id} - {self.get_status_display()}"
+
+    @property
+    def es_venta_de_la_app(self):
+        """
+        Verdadero cuando la venta trae un cupón emitido por la app.
+
+        Es la definición del §3.2, y no depende de `origen_venta`: una compra
+        hecha desde la app llega igual que una del navegador (`store`), así que
+        el único rastro es el código.
+        """
+        return self.cupon_app_id is not None

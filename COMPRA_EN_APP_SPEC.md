@@ -1,8 +1,9 @@
 # Compra desde la app, con Tienda Nube por detrás
 
-**Estado:** en implementación — 5.4, 5.6 y 5.8 hechos; el resto espera el alta
-como partner de Tienda Nube (5.1)
-**Fecha:** 11/08/2026, con notas del 15/08/2026
+**Estado:** implementado y probado contra la tienda demo, hasta la pantalla de
+pago. Falta la atribución en analytics (5.7), el callback automático de OAuth y
+una compra real que confirme el retorno.
+**Fecha:** 11/08/2026, con notas del 15 y 17/08/2026
 
 Documento de handoff: está escrito para que se pueda implementar **sin haber
 participado de la conversación donde se decidió**. Todo lo que dice "verificado"
@@ -47,20 +48,26 @@ El catálogo de la app ya está construido; esto es lo que lo convierte en venta
 | `origen_venta` y `app_origen` | endpoint de ventas de Conto | ✅ Agregados a pedido, 08/08/2026 |
 | `cupon` y `descuento_cupon` | endpoint de ventas de Conto | ⚠️ Agregados 11/08/2026, **sin compilar** — ver 7.1 |
 
-### Lo que se construyó después de escribir esto (15/08/2026)
+### Lo que se construyó después de escribir esto
 
 | Pieza | Dónde | Punto |
 |---|---|---|
-| Campos crudos de Conto en `ContoSale` | `apps/integraciones/` | 5.6 |
+| Campos crudos de Conto en `ContoSale` | `apps/integraciones/sync.py` | 5.6 |
 | Carrito en la app | `client-app/src/stores/carrito.ts`, `src/app/carrito.tsx` | 5.4 |
 | `SegmentoApp`, descuento por clienta y endpoint autenticado | `apps/clientes/`, `apps/client_api/`, CRM y app | 5.8 |
+| App de Tienda Nube, OAuth y token por centro | `apps/integraciones/tiendanube.py`, `TiendanubeIntegration` | 5.1 |
+| Ids de Tienda Nube en `Producto` y emparejador por nombre | `emparejar_variantes_tiendanube` | 5.2 |
+| `CuponApp`, emisión y limpieza programada | `apps/integraciones/cupones.py` | 5.3 |
+| Preparación de la compra y checkout en WebView | `apps/integraciones/compra.py`, `client-app/src/app/checkout.tsx` | 5.5 |
+| Atribución de la venta al importarla | `SalesImporter._atribuir` | 5.6 |
 
 ### Lo que no existe
 
-- Cualquier integración directa con Tienda Nube (hoy se integra contra Conto).
-- Emisión de cupones.
-- Mapeo entre un `Producto` de la plataforma y su variante en Tienda Nube.
-- El checkout en sí: el botón "Comprar" del carrito está deshabilitado.
+- La agregación de analytics (5.7).
+- El callback automático de OAuth y los tres webhooks de privacidad (5.1): hoy
+  la vinculación se hace con `vincular_tiendanube`.
+- Nada que corra `limpiar_cupones_app` por cron.
+- Una compra real de punta a punta: la tienda demo no tiene medio de pago (9).
 
 ### El dato que manda sobre la arquitectura
 
@@ -359,8 +366,19 @@ Depende de que Conto exponga el código del cupón en el payload de la venta
 - Guardarlo crudo en `ContoSale`, sin interpretar, junto a `origen_venta` y
   `app_origen`. **Hecho el 15/08/2026** (7.1).
 - Al importar, si el código coincide con un `CuponApp`, marcar la venta como
-  originada en la app y vincularla a la clienta. Pendiente: depende de que
-  exista `CuponApp` (5.3).
+  originada en la app y vincularla a la clienta. **Hecho el 17/08/2026.**
+
+> Detalles que resolvió la implementación:
+>
+> - **Se atribuye antes de los early returns.** Una venta de un canal que no
+>   importamos, o todavía impaga, igual usó el cupón: si no se marcara, la
+>   limpieza lo borraría de Tienda Nube creyendo que venció sin usarse.
+> - **Es idempotente.** Reprocesar un voucher no mueve la fecha de uso, que es
+>   de donde sale cuánto tarda una clienta entre "Comprar" y pagar.
+> - **La clienta del cupón se usa solo como respaldo.** Si el email o el
+>   teléfono del comprador resuelven una ficha, gana esa: son datos de quien
+>   compró de verdad, y el código pudo haber circulado (6.7). La atribución de
+>   la venta a la app no depende de eso — va por el vínculo al cupón.
 
 ### 5.7 Analytics
 
@@ -689,6 +707,15 @@ recaudo que el resto —un uso, una hora, código impredecible—.
 
 Del lado de la app, el WebView necesita **development build** (`expo run:android`),
 no Expo Go.
+
+> **Corregido el 17/08/2026: se prueba en Expo Go.** La documentación de SDK 57
+> lista `react-native-webview` como incluido en Expo Go, y así se probó todo el
+> checkout en un teléfono. No hace falta compilar nada.
+>
+> Lo que sí falta para la prueba completa es **un medio de pago en la tienda
+> demo**: Tienda Nube sacó los medios manuales de su lista y ahora son apps de
+> su tienda de aplicaciones. Sin eso no se llega a la página de gracias y no se
+> puede verificar la detección del retorno.
 
 > **Confirmado el 15/08/2026: la tienda de demostración existe.** Se crea desde
 > el portal de partners ("Crear tienda de demostración"), así que toda la cadena
