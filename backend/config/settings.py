@@ -184,6 +184,9 @@ REST_FRAMEWORK = {
         'cliente_registro': '10/hour',
         'cliente_reserva': '20/hour',
         'public_api': '100/hour',
+        # El callback de OAuth de Tienda Nube dispara una llamada saliente por
+        # visita. Una instalación real usa una sola.
+        'tiendanube_oauth': '30/hour',
     },
 }
 

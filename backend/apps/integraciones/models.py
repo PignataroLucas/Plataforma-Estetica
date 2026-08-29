@@ -362,6 +362,151 @@ class CuponApp(models.Model):
         return timezone.now() >= self.expires_at
 
 
+class TiendanubeInstallIntent(models.Model):
+    """
+    An admin declaring, before installing, which center the store belongs to.
+
+    Exists because of a hole in Tienda Nube's OAuth: **there is no `state`**.
+    Their authorize URL takes only the app id, and the callback comes back with
+    only `code` — verified against their docs and their official PHP SDK, which
+    neither sends nor reads one. So when the token comes back there is nothing
+    in the request tying it to a tenant.
+
+    A reinstall resolves itself: the store id already has an integration. A
+    first install has no such anchor, and guessing wrong would hand one center
+    the power to issue coupons on another's store. This row is the anchor: the
+    admin opens the install from the CRM, that leaves a short-lived intent, and
+    the callback claims it.
+
+    Deliberately claimed only when there is exactly one open intent. Two centers
+    installing at the same time is ambiguous, and the right answer to an
+    ambiguous tenant is to refuse, not to pick.
+    """
+    center = models.ForeignKey(
+        CentroEstetica,
+        on_delete=models.CASCADE,
+        related_name='tiendanube_install_intents',
+        verbose_name='Centro estética'
+    )
+    created_by = models.ForeignKey(
+        'empleados.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        verbose_name='Iniciada por'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        verbose_name='Vence',
+        help_text="Ventana para completar la instalación. Corta a propósito: "
+                  "es lo que hace que solo haya un intento abierto por vez"
+    )
+    consumed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Usada',
+        help_text="Cuándo la reclamó el callback. Una intención sirve una sola vez"
+    )
+
+    class Meta:
+        verbose_name = 'Instalación de Tienda Nube iniciada'
+        verbose_name_plural = 'Instalaciones de Tienda Nube iniciadas'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['consumed_at', 'expires_at']),
+        ]
+
+    def __str__(self):
+        return f"Instalación de {self.center.nombre} ({self.created_at:%d/%m %H:%M})"
+
+    @property
+    def esta_abierta(self):
+        return self.consumed_at is None and timezone.now() < self.expires_at
+
+
+class TiendanubePrivacyRequest(models.Model):
+    """
+    A privacy request from Tienda Nube, kept so a person can answer it.
+
+    Tienda Nube requires three webhooks to homologate an app (§5.1). Two of them
+    —`customers/redact` and `customers/data_request`— are addressed to a human:
+    their own documentation says it is the app's responsibility to send the
+    report to the merchant. Answering 200 and logging a line would mean the
+    request dies in the deploy's log, so it gets a row instead.
+
+    **The handlers do not delete anything on their own, and that is on purpose.**
+    This app's permissions are read products and read/write coupons: it never
+    reads customers or orders from the store, so there is no Tienda Nube
+    customer data here to redact. What does exist —the clienta's file in the
+    CRM— is the center's own record, loaded in this platform and not sourced
+    from the store. Deleting it because Tienda Nube forwarded a request would
+    destroy the center's data on a third party's say-so.
+
+    The payload is stored whole, like `ContoSale.payload` and for the same
+    reason: it is what lets someone act on the request later. It carries the
+    buyer's personal data, so it belongs in the same purge as that one
+    (INTEGRACION_CONTO_SPEC.md §14).
+    """
+    class Event(models.TextChoices):
+        STORE_REDACT = 'store/redact', 'Borrado de la tienda'
+        CUSTOMERS_REDACT = 'customers/redact', 'Borrado de datos de un comprador'
+        CUSTOMERS_DATA_REQUEST = 'customers/data_request', 'Pedido de datos de un comprador'
+
+    # Nullable and not the only link: el pedido llega igual para una tienda que
+    # nunca vinculamos, o para una que ya se desvinculó. Se guarda el `store_id`
+    # crudo para que el pedido siga siendo legible en ese caso.
+    integration = models.ForeignKey(
+        TiendanubeIntegration,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='privacy_requests',
+        verbose_name='Integración'
+    )
+    store_id = models.CharField(
+        max_length=50,
+        db_index=True,
+        verbose_name='ID de tienda'
+    )
+    event = models.CharField(
+        max_length=40,
+        choices=Event.choices,
+        db_index=True,
+        verbose_name='Evento'
+    )
+    payload = models.JSONField(
+        verbose_name='Contenido',
+        help_text="Lo que mandó Tienda Nube, crudo"
+    )
+
+    received_at = models.DateTimeField(default=timezone.now, verbose_name='Recibido')
+    handled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Resuelto',
+        help_text="Cuándo se le respondió al centro. Los de la tienda se "
+                  "resuelven solos; los de un comprador los cierra una persona"
+    )
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Notas',
+        help_text="Qué se hizo con el pedido"
+    )
+
+    class Meta:
+        verbose_name = 'Pedido de privacidad de Tienda Nube'
+        verbose_name_plural = 'Pedidos de privacidad de Tienda Nube'
+        ordering = ['-received_at']
+        indexes = [
+            models.Index(fields=['handled_at', 'received_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_event_display()} - tienda {self.store_id}"
+
+
 class ContoSale(models.Model):
     """
     A voucher pulled from Conto: either a sale or a credit note.

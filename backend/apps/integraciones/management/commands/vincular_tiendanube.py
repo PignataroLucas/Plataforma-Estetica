@@ -11,17 +11,18 @@ It is also the manual fallback for the automatic flow: the OAuth callback does
 the same exchange when the merchant installs the app. If the callback is down
 or the redirect URL still points at the partner panel, this command finishes
 the job with the code copied from the browser.
+
+The linking itself lives in `instalacion.py`, shared with the callback.
 """
 from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
 
 from apps.empleados.models import CentroEstetica
-from apps.integraciones.models import TiendanubeIntegration
-from apps.integraciones.tiendanube import (
-    TiendanubeClient,
-    TiendanubeError,
-    exchange_code_for_token,
+from apps.integraciones.instalacion import (
+    TiendaDeOtroCentro,
+    completar_datos_tienda,
+    vincular,
 )
+from apps.integraciones.tiendanube import TiendanubeError, exchange_code_for_token
 
 
 class Command(BaseCommand):
@@ -58,58 +59,23 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Centro: {centro.nombre}")
         datos = self._obtener_token(options)
-        store_id = str(datos['user_id'])
 
-        # A store already linked to another center is a misconfiguration that
-        # would let one tenant issue coupons on another's store. The unique
-        # constraint would catch it, but not with an explanation.
-        ocupada = (
-            TiendanubeIntegration.objects
-            .filter(store_id=store_id)
-            .exclude(center=centro)
-            .select_related('center')
-            .first()
-        )
-        if ocupada:
-            raise CommandError(
-                f"La tienda {store_id} ya está vinculada al centro "
-                f"«{ocupada.center.nombre}». Desvinculala antes de reasignarla."
-            )
-
-        integration, creada = TiendanubeIntegration.objects.update_or_create(
-            center=centro,
-            defaults={
-                'store_id': store_id,
-                'token': datos['access_token'],
-                'scope': datos.get('scope', ''),
-                'is_active': True,
-                'installed_at': timezone.now(),
-                'uninstalled_at': None,
-            },
-        )
-
-        # Reading the store back is the only proof that the token actually
-        # works. Without it the command reports success on a token that could
-        # fail on the first coupon.
         try:
-            tienda = TiendanubeClient(integration).get_store() or {}
-        except TiendanubeError as exc:
+            integracion, creada = vincular(centro, datos)
+        except TiendaDeOtroCentro as exc:
+            raise CommandError(str(exc))
+
+        error = completar_datos_tienda(integracion)
+        if error:
             self.stdout.write(self.style.WARNING(
-                f"Token guardado, pero no se pudo leer la tienda: {exc}"
+                f"Token guardado, pero no se pudo leer la tienda: {error}"
             ))
         else:
-            nombre = tienda.get('name')
-            if isinstance(nombre, dict):
-                # Tienda Nube devuelve los textos por idioma: {'es': 'Ame Demo'}
-                nombre = nombre.get('es') or next(iter(nombre.values()), '')
-            integration.store_name = (nombre or '')[:200]
-            integration.store_url = (tienda.get('url_with_protocol') or '').rstrip('/')
-            integration.save(update_fields=['store_name', 'store_url', 'updated_at'])
-            self.stdout.write(f"Tienda: {integration.store_name or 's/n'}")
-            self.stdout.write(f"URL: {integration.store_url or 's/d'}")
+            self.stdout.write(f"Tienda: {integracion.store_name or 's/n'}")
+            self.stdout.write(f"URL: {integracion.store_url or 's/d'}")
 
-        self.stdout.write(f"Store ID: {store_id}")
-        self.stdout.write(f"Permisos: {integration.scope or 's/d'}")
+        self.stdout.write(f"Store ID: {integracion.store_id}")
+        self.stdout.write(f"Permisos: {integracion.scope or 's/d'}")
         self.stdout.write(self.style.SUCCESS(
             'Integración creada' if creada else 'Integración actualizada'
         ))

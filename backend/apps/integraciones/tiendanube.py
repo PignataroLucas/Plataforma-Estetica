@@ -6,9 +6,12 @@ INTEGRACION_CONTO_SPEC.md §1): this channel exists only to issue the discount
 coupons that make a purchase from the app attributable and cheaper
 (COMPRA_EN_APP_SPEC.md §5.1). Nothing here reads orders or stock.
 
-The OAuth exchange is a module-level function and not a method: it runs *before*
-there is an integration to hang it on, which is the whole point of it.
+The OAuth exchange and the webhook signature check are module-level functions
+and not methods: both run *before* there is an integration to hang them on,
+which is the whole point of them.
 """
+import hashlib
+import hmac
 import logging
 
 import requests
@@ -98,6 +101,39 @@ def exchange_code_for_token(code):
         )
 
     return payload
+
+
+def verify_webhook_signature(raw_body, signature):
+    """
+    Whether this webhook really came from Tienda Nube.
+
+    The signature is the HMAC-SHA256 of the **raw request body**, hex encoded,
+    keyed with the app's client secret, and travels in `x-linkedstore-hmac-sha256`.
+
+    Two things that look like details and are not:
+
+    - It has to be the bytes as they arrived. Parsing the JSON and dumping it
+      again changes spacing and key order, and the hash stops matching for
+      requests that were perfectly valid.
+    - The comparison is `compare_digest`, not `==`. A plain comparison returns
+      as soon as two bytes differ, and that timing is enough to guess a
+      signature one byte at a time.
+
+    Without a configured secret this returns False rather than passing the
+    request through: an endpoint that deactivates integrations is not one to
+    leave open because a variable is missing from the environment.
+    """
+    secret = getattr(settings, 'TIENDANUBE_CLIENT_SECRET', '')
+    if not secret or not signature:
+        return False
+
+    esperada = hmac.new(
+        secret.encode('utf-8'), raw_body, hashlib.sha256
+    ).hexdigest()
+    # En minúscula los dos lados: el ejemplo de Tienda Nube es el `hash_hmac` de
+    # PHP, que devuelve hexadecimal en minúscula, pero `AB` y `ab` son el mismo
+    # byte y rechazar por eso sería un no a un pedido legítimo.
+    return hmac.compare_digest(esperada, signature.strip().lower())
 
 
 def _explicar_error(error, description):

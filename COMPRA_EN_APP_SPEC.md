@@ -1,8 +1,8 @@
 # Compra desde la app, con Tienda Nube por detrás
 
 **Estado:** implementado y probado contra la tienda demo, hasta la pantalla de
-pago. Falta la atribución en analytics (5.7), el callback automático de OAuth y
-una compra real que confirme el retorno.
+pago. Falta la atribución en analytics (5.7) y una compra real que confirme el
+retorno.
 **Fecha:** 11/08/2026, con notas del 15 y 17/08/2026
 
 Documento de handoff: está escrito para que se pueda implementar **sin haber
@@ -60,13 +60,11 @@ El catálogo de la app ya está construido; esto es lo que lo convierte en venta
 | `CuponApp`, emisión y limpieza programada | `apps/integraciones/cupones.py` | 5.3 |
 | Preparación de la compra y checkout en WebView | `apps/integraciones/compra.py`, `client-app/src/app/checkout.tsx` | 5.5 |
 | Atribución de la venta al importarla | `SalesImporter._atribuir` | 5.6 |
+| Callback de OAuth y los tres webhooks de privacidad | `apps/integraciones/tiendanube_views.py`, `instalacion.py`, `privacidad.py` | 5.1 |
 
 ### Lo que no existe
 
 - La agregación de analytics (5.7).
-- El callback automático de OAuth y los tres webhooks de privacidad (5.1): hoy
-  la vinculación se hace con `vincular_tiendanube`.
-- Nada que corra `limpiar_cupones_app` por cron.
 - Una compra real de punta a punta: la tienda demo no tiene medio de pago (9).
 
 ### El dato que manda sobre la arquitectura
@@ -277,6 +275,64 @@ Dos consecuencias prácticas:
 > retiro progresivo desde el 30/10/2026. Esta app no inyecta nada —es servidor a
 > servidor para emitir el cupón, más el checkout de siempre dentro de un
 > WebView—, así que a priori no la alcanza. Confirmarlo al dar el alta.
+
+> **Hecho el 17/08/2026: el callback y los tres webhooks.**
+> `apps/integraciones/tiendanube_views.py`, con la lógica de vinculación en
+> `instalacion.py` —compartida con `vincular_tiendanube`, que sigue siendo el
+> camino de atrás— y la de privacidad en `privacidad.py`.
+>
+> **El hallazgo que le dio la forma: el OAuth de Tienda Nube no acepta un
+> `state`.** Su URL de autorización recibe solo el id de la app y el callback
+> vuelve solo con `code`. Verificado en su documentación y, sobre todo, en su
+> SDK oficial de PHP, que ni lo manda ni lo lee. O sea que **cuando el token
+> vuelve no hay nada en el pedido que diga de qué centro es**, y esto es
+> multi-inquilino.
+>
+> La salida, en dos pasos y sin adivinar nunca:
+>
+> 1. **Reinstalación o reautorización:** el `store_id` que devuelve el
+>    intercambio ya tiene integración, así que el centro está fuera de
+>    discusión. Es el caso que más va a pasar, y el que hoy rompe en silencio —
+>    reinstalar emite un token nuevo y el viejo deja de emitir cupones.
+> 2. **Primera instalación:** hay que declararla antes. Se hace desde
+>    *Instalaciones de Tienda Nube iniciadas* en el admin de Django, que
+>    redirige derecho a Tienda Nube y deja anotado qué centro está instalando.
+>    Esa anotación dura 15 minutos.
+>
+> Con cero anotaciones abiertas, o con más de una, el callback **descarta el
+> token y no vincula nada**. Adivinar costaría emitir cupones en la tienda de
+> otro centro; reinstalar cuesta un click.
+>
+> Va al admin y no al CRM porque el CRM no tiene pantalla de integraciones —el
+> token de Conto se carga por el mismo lugar—. No se expuso como endpoint: sin
+> pantalla que lo llame sería una ruta que existe solo para tener tests, y la
+> URL de autorización es una constante que se puede pasar a mano.
+>
+> **Los tres webhooks** (`store/redact`, `customers/redact`,
+> `customers/data_request`) validan HMAC-SHA256 del **cuerpo crudo** contra el
+> `client_secret`, en el header `x-linkedstore-hmac-sha256`. Sin secreto
+> configurado contestan 401 en vez de dejar pasar: son endpoints públicos y uno
+> de ellos desactiva la integración del centro. Contestan sin salir a la red,
+> porque el timeout es de 3 segundos y un no-2xx se reintenta 16 veces durante
+> 48 horas.
+>
+> Qué borra cada uno, que es la decisión de fondo:
+>
+> - `store/redact` borra el token y apaga la integración. **No borra la fila ni
+>   los `CuponApp`**: el FK es CASCADE y se llevaría puesta la historia de
+>   cupones emitidos, que es sobre lo que se apoya el §5.7. Lo que Tienda Nube
+>   pide borrar es su dato, que es la credencial.
+> - Los dos de comprador **no borran nada**, y quedan registrados en
+>   `TiendanubePrivacyRequest` para que los conteste una persona. Esta app pide
+>   leer productos y escribir cupones: nunca leyó clientes ni órdenes de la
+>   tienda, así que no hay dato de Tienda Nube acá para borrar. La ficha de la
+>   clienta en el CRM es dato del centro, no de la tienda.
+>
+> **Falta un trámite que no es código:** cambiar la URL de redirección en el
+> panel de partners, que todavía apunta a la página del panel, por
+> `https://plataforma-estetica-production.up.railway.app/api/integraciones/tiendanube/oauth/callback/`,
+> y cargar las tres URLs de webhook. Hasta que eso pase, esto no se ejercita
+> contra Tienda Nube de verdad.
 
 ### 5.2 Mapeo producto ↔ variante de Tienda Nube
 
@@ -540,6 +596,25 @@ limpieza, en unos meses hay miles. De ahí el comando del 5.3.
 >   envió 23:47 (Argentina) y la API devolvió `2026-08-16 02:47`. La conversión
 >   la hace TN y es correcta, pero al leer un cupón hay que tenerlo en cuenta.
 
+> **Hecho el 29/08/2026: la limpieza corre sola.** Task de Celery
+> `limpiar_cupones_app` en `apps/integraciones/tasks.py`, entrada horaria en el
+> `beat_schedule`, y `backend/railway.cupones.cron.json` para producción —donde
+> manda el cron, porque no hay worker de Celery levantado—. Las dos vías llaman
+> a la misma función, que es lo que evita que dev y producción se comporten
+> distinto.
+>
+> Una pasada por hora alcanza: los cupones duran una hora, así que ninguno
+> sobrevive más de dos. **Sin tope por corrida a propósito:** el orden es por
+> fecha de vencimiento, así que un cupón que falle siempre quedaría primero para
+> siempre y con un tope taparía a los que vienen atrás.
+>
+> El test del cron importa **todas** las tasks del `beat_schedule`, no solo esta
+> —Celery no valida esos nombres al arrancar, y un typo es un job que no corre
+> nunca y no avisa—. En la primera corrida encontró que `check-low-inventory`
+> apunta a `apps.inventario.tasks`, que no existe: ese job nunca corrió. Queda
+> registrado como excepción nombrada, con un test que falla el día que alguien
+> lo arregle.
+
 ### 6.6 El doble "Comprar"
 
 Si Tienda Nube no ofrece una URL que agregue el producto al carrito y abra el
@@ -704,6 +779,30 @@ centro. Las órdenes de prueba les aparecen en el panel, así que hay que avisar
 y cancelarlas para que nadie las despache. Cancelar devuelve el stock que el
 `claim` descontó. Y un cupón del 100% que se filtre es un desastre: el mismo
 recaudo que el resto —un uso, una hora, código impredecible—.
+
+**Los pasos 10 y 11 no se pueden probar contra la demo.** Conto mira la cuenta
+del centro, que está atada a la tienda real, así que una compra en la tienda de
+demostración nunca vuelve por ahí. Para eso está `simular_venta_app`:
+
+```bash
+python manage.py simular_venta_app --cupon APP-XK4M2PQR
+python manage.py simular_venta_app --cupon APP-XK4M2PQR --deshacer
+```
+
+Arma el comprobante que mandaría Conto por una venta hecha con ese cupón y lo
+pasa **por el importador de siempre**, no por un camino paralelo. Muestra la
+transacción creada, la venta marcada como originada en la app, el cupón marcado
+como usado y la clienta identificada.
+
+Dos recaudos, porque genera ingresos reales en el módulo financiero: se niega a
+correr con `DEBUG` apagado salvo que se pase `--forzar`, y `--deshacer` borra la
+venta, sus transacciones y libera el cupón. Sin eso, cada ensayo dejaría plata
+que no entró contaminando justo los números del §5.7.
+
+Lo que el simulador **no** prueba es que Conto mande el campo `cupon`. Eso lo
+contesta `verificar_conto` corrido contra producción (§7.1), que es de solo
+lectura y no necesita ninguna venta.
+
 
 Del lado de la app, el WebView necesita **development build** (`expo run:android`),
 no Expo Go.

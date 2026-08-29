@@ -5,11 +5,25 @@ This is intentionally usable on its own: it lets an admin load the Conto token
 and configure the integration before the frontend screen exists.
 """
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
+from django.http import HttpResponseRedirect
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import ContoIntegration, ContoSale, CuponApp, TiendanubeIntegration
+from .instalacion import (
+    AUTHORIZE_URL,
+    VENTANA_DE_INSTALACION,
+    cerrar_intentos_abiertos,
+)
+from .models import (
+    ContoIntegration,
+    ContoSale,
+    CuponApp,
+    TiendanubeInstallIntent,
+    TiendanubeIntegration,
+    TiendanubePrivacyRequest,
+)
 from .services import ContoClient, ContoError
 from .sync import SalesImporter, StockSynchronizer
 
@@ -364,7 +378,9 @@ class TiendanubeIntegrationAdmin(admin.ModelAdmin):
 
     Not editable by hand on purpose: the token comes from the OAuth exchange,
     and one typed by a human is a token that works until the first coupon.
-    Para vincular, `python manage.py vincular_tiendanube`.
+    Para vincular, se arranca la instalación desde «Instalaciones de Tienda
+    Nube iniciadas» y la vuelta la resuelve el callback;
+    `python manage.py vincular_tiendanube` es el camino de atrás.
     """
     list_display = ['center', 'store_id', 'store_name', 'is_active', 'installed_at']
     list_filter = ['is_active']
@@ -411,3 +427,115 @@ class CuponAppAdmin(admin.ModelAdmin):
             return format_html('<span style="color: #92400E;">vencido</span>')
         return format_html('<span style="color: #1D4ED8;">vigente</span>')
     estado.short_description = 'Estado'
+
+
+@admin.register(TiendanubePrivacyRequest)
+class TiendanubePrivacyRequestAdmin(admin.ModelAdmin):
+    """
+    Los pedidos de privacidad que llegan por webhook.
+
+    Existe porque dos de los tres los tiene que contestar una persona: Tienda
+    Nube dice que es responsabilidad de la app mandarle el informe al centro.
+    Sin una pantalla, un pedido contestado con 200 no se distingue de uno
+    atendido.
+
+    Los de tienda se resuelven solos al llegar. Los de comprador quedan abiertos
+    hasta que alguien los cierra con la acción de abajo.
+    """
+    list_display = ['received_at', 'event', 'store_id', 'integration', 'estado']
+    list_filter = ['event', 'handled_at']
+    search_fields = ['store_id', 'notes']
+    date_hierarchy = 'received_at'
+    readonly_fields = [
+        'integration', 'store_id', 'event', 'payload', 'received_at',
+    ]
+    actions = ['marcar_resuelto']
+
+    def has_add_permission(self, request):
+        """Los pedidos los crea Tienda Nube por webhook, nunca una persona."""
+        return False
+
+    def estado(self, obj):
+        if obj.handled_at:
+            return format_html('<span style="color: #065F46;">resuelto</span>')
+        return format_html('<span style="color: #92400E;">pendiente</span>')
+    estado.short_description = 'Estado'
+
+    @admin.action(description='Marcar como resuelto')
+    def marcar_resuelto(self, request, queryset):
+        actualizados = queryset.filter(handled_at__isnull=True).update(
+            handled_at=timezone.now()
+        )
+        self.message_user(
+            request,
+            f'{actualizados} pedido(s) marcados como resueltos.',
+            messages.SUCCESS,
+        )
+
+
+@admin.register(TiendanubeInstallIntent)
+class TiendanubeInstallIntentAdmin(admin.ModelAdmin):
+    """
+    Por acá se arranca una instalación de la app en la tienda de un centro.
+
+    Es la pantalla que compensa un agujero de Tienda Nube: **su OAuth no acepta
+    un `state`**, así que cuando el token vuelve no hay nada en el pedido que
+    diga de qué centro es. Guardar acá quién está instalando, antes de mandar a
+    Tienda Nube, es lo que después le permite al callback resolverlo sin
+    adivinar (`instalacion.resolver_centro`).
+
+    Vive en el admin y no en el CRM porque acá es donde se administran las
+    integraciones en este proyecto — el token de Conto se carga por el mismo
+    camino. Guardar redirige derecho a Tienda Nube.
+    """
+    list_display = ['center', 'created_by', 'created_at', 'expires_at', 'estado']
+    list_filter = ['center']
+    # Lo único que se elige es el centro; lo demás lo pone el sistema.
+    fields = ['center']
+    readonly_fields = ['created_by', 'created_at', 'expires_at', 'consumed_at']
+
+    def has_change_permission(self, request, obj=None):
+        """Una intención es un hecho con fecha, no algo que se edite."""
+        return False
+
+    def estado(self, obj):
+        if obj.consumed_at:
+            return format_html('<span style="color: #065F46;">completada</span>')
+        if obj.esta_abierta:
+            return format_html('<span style="color: #1D4ED8;">esperando a Tienda Nube</span>')
+        return format_html('<span style="color: #6B7280;">vencida</span>')
+    estado.short_description = 'Estado'
+
+    def save_model(self, request, obj, form, change):
+        obj.created_by = request.user
+        obj.expires_at = timezone.now() + VENTANA_DE_INSTALACION
+        cerrar_intentos_abiertos(obj.center)
+        super().save_model(request, obj, form, change)
+
+    def response_add(self, request, obj, post_url_continue=None):
+        """
+        Mandar a la persona directo a Tienda Nube.
+
+        El paso siguiente es autorizar la app con una cuenta que administre la
+        tienda, y la intención recién guardada dura pocos minutos: devolverla al
+        listado sería devolverla a un reloj corriendo.
+        """
+        app_id = getattr(settings, 'TIENDANUBE_CLIENT_ID', '')
+        if not app_id:
+            self.message_user(
+                request,
+                'Falta TIENDANUBE_CLIENT_ID en el entorno, así que no se puede '
+                'abrir la instalación. Sale de «Claves de Acceso» en el panel '
+                'de partners.',
+                messages.ERROR,
+            )
+            return super().response_add(request, obj, post_url_continue)
+
+        self.message_user(
+            request,
+            f'Autorizá la app con una cuenta que administre la tienda de '
+            f'«{obj.center.nombre}». Tenés hasta las '
+            f'{timezone.localtime(obj.expires_at):%H:%M}.',
+            messages.INFO,
+        )
+        return HttpResponseRedirect(AUTHORIZE_URL.format(app_id=app_id))
