@@ -7,10 +7,8 @@ import {
   TransactionCategory,
   TransactionType,
   PaymentMethod,
-  CategoryType,
-  Usuario,
 } from '@/types/models'
-import { Button, Input, Select, DateInput } from '@/components/ui'
+import { Button, DateInput } from '@/components/ui'
 import { getTodayForInput, formatDateForInput } from '@/utils/dateUtils'
 
 interface TransactionFormData {

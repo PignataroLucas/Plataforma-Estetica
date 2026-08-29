@@ -735,18 +735,6 @@ export interface AccountsReceivableSummary {
 // ==================== LEGACY TYPES (for backwards compatibility) ====================
 // TODO: Remove these after migrating all components to new types
 
-export enum TipoTransaccion {
-  INGRESO_SERVICIO = 'INCOME_SERVICE',
-  INGRESO_PRODUCTO = 'INCOME_PRODUCT',
-  INGRESO_OTRO = 'INCOME_OTHER',
-  GASTO_SUELDO = 'EXPENSE',
-  GASTO_ALQUILER = 'EXPENSE',
-  GASTO_INSUMO = 'EXPENSE',
-  GASTO_SERVICIO = 'EXPENSE',
-  GASTO_MARKETING = 'EXPENSE',
-  GASTO_OTRO = 'EXPENSE',
-}
-
 export enum MetodoPago {
   EFECTIVO = 'CASH',
   TRANSFERENCIA = 'BANK_TRANSFER',
@@ -754,27 +742,6 @@ export enum MetodoPago {
   TARJETA_CREDITO = 'CREDIT_CARD',
   MERCADOPAGO = 'MERCADOPAGO',
   OTRO = 'OTHER',
-}
-
-/** @deprecated Use Transaction instead */
-export interface Transaccion {
-  id: number
-  sucursal: number
-  categoria?: number
-  cliente?: number
-  turno?: number
-  producto?: number
-  tipo: TipoTransaccion
-  monto: number
-  metodo_pago: MetodoPago
-  fecha: string
-  descripcion: string
-  notas: string
-  numero_comprobante: string
-  archivo_comprobante?: string
-  registrado_por?: number
-  creado_en: string
-  actualizado_en: string
 }
 
 export interface Comision {

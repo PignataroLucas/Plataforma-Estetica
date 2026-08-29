@@ -20,6 +20,10 @@ export default function ServicesEvolutionChart({
   data,
   loading = false,
 }: ServicesEvolutionChartProps) {
+  // Los hooks van antes de cualquier return: React exige la misma cantidad en
+  // todos los renders y abajo hay dos salidas tempranas.
+  const [hiddenServices, setHiddenServices] = useState<Set<string>>(new Set());
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6 animate-pulse">
@@ -45,22 +49,19 @@ export default function ServicesEvolutionChart({
   // Extraer nombres de servicios (todas las keys excepto 'date')
   const serviceNames = Object.keys(data[0] || {}).filter((key) => key !== 'date');
 
-  // Estado para controlar qué servicios se muestran
-  const [visibleServices, setVisibleServices] = useState<Set<string>>(
-    new Set(serviceNames)
-  );
-
   // Colores para las líneas
   const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+  const esVisible = (serviceName: string) => !hiddenServices.has(serviceName);
+
   const toggleService = (serviceName: string) => {
-    const newVisible = new Set(visibleServices);
-    if (newVisible.has(serviceName)) {
-      newVisible.delete(serviceName);
+    const nuevosOcultos = new Set(hiddenServices);
+    if (nuevosOcultos.has(serviceName)) {
+      nuevosOcultos.delete(serviceName);
     } else {
-      newVisible.add(serviceName);
+      nuevosOcultos.add(serviceName);
     }
-    setVisibleServices(newVisible);
+    setHiddenServices(nuevosOcultos);
   };
 
   // Formatear datos para el gráfico
@@ -91,13 +92,13 @@ export default function ServicesEvolutionChart({
               className={`
                 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200
                 ${
-                  visibleServices.has(serviceName)
+                  esVisible(serviceName)
                     ? 'text-white shadow-md'
                     : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
                 }
               `}
               style={{
-                backgroundColor: visibleServices.has(serviceName)
+                backgroundColor: esVisible(serviceName)
                   ? colors[index % colors.length]
                   : undefined,
               }}
@@ -139,7 +140,7 @@ export default function ServicesEvolutionChart({
               strokeWidth={2}
               dot={{ r: 4 }}
               activeDot={{ r: 6 }}
-              hide={!visibleServices.has(serviceName)}
+              hide={!esVisible(serviceName)}
               name={serviceName}
             />
           ))}

@@ -44,7 +44,7 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
       case 'thisMonth':
         start = startOfMonth(end);
         break;
-      case 'lastMonth':
+      case 'lastMonth': {
         const lastMonth = subMonths(end, 1);
         start = startOfMonth(lastMonth);
         return {
@@ -52,6 +52,7 @@ export default function DateRangeFilter({ onChange }: DateRangeFilterProps) {
           endDate: format(endOfMonth(lastMonth), 'yyyy-MM-dd'),
           compare,
         };
+      }
       default:
         return null;
     }

@@ -2,10 +2,7 @@ import { useState, useEffect } from 'react'
 import { useFinanzas } from '@/hooks/useFinanzas'
 import {
   TransactionList,
-  TransactionCategoryList,
-  CategoryType,
   TransactionType,
-  PaymentMethod,
 } from '@/types/models'
 import {
   Button,
@@ -19,10 +16,9 @@ import {
   ModalFooter,
   Badge,
   Spinner,
-  Select,
   DateInput,
 } from '@/components/ui'
-import { formatDateArgentina, formatDateForInput, getTodayForInput } from '@/utils/dateUtils'
+import { formatDateArgentina } from '@/utils/dateUtils'
 
 interface TransactionsListProps {
   onEdit?: (transaction: TransactionList) => void

@@ -20,5 +20,17 @@ module.exports = {
     ],
     'react/prop-types': 'off',
     '@typescript-eslint/no-explicit-any': 'warn',
+    // El guion bajo adelante es la forma de decir "esto no se usa y es a
+    // proposito": handlers que reciben un argumento que no les interesa,
+    // desestructuraciones parciales. Sin esta regla el CI obliga a borrar
+    // parametros que la firma necesita igual.
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
   },
 }

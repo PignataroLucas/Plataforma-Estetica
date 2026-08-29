@@ -214,7 +214,7 @@ export const TurnosList: React.FC<TurnosListProps> = ({ turnos, onEdit, onDelete
   if (turnos.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        No hay turnos registrados. Crea el primero usando el botón "Nuevo Turno".
+        No hay turnos registrados. Crea el primero usando el botón &quot;Nuevo Turno&quot;.
       </div>
     )
   }

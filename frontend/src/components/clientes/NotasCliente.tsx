@@ -215,7 +215,7 @@ export default function NotasCliente({ clienteId }: NotasClienteProps) {
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <p className="text-gray-500">No hay notas registradas para este paciente</p>
           <p className="text-sm text-gray-400 mt-2">
-            Haz clic en "Nueva Nota" para agregar la primera nota
+            Haz clic en &quot;Nueva Nota&quot; para agregar la primera nota
           </p>
         </div>
       ) : (
