@@ -1,13 +1,15 @@
 """
-Celery tasks for the Conto integration.
+Celery tasks for the integrations module: Conto and Tienda Nube.
 
-Thin wrappers: all the logic lives in sync.py so it can be tested without a
-broker. These handle scheduling, iteration over integrations and retries.
+Thin wrappers: all the logic lives in `sync.py` and `cupones.py` so it can be
+tested without a broker. These handle scheduling, iteration over integrations
+and retries.
 """
 import logging
 
 from celery import shared_task
 
+from .cupones import limpiar_vencidos
 from .models import ContoIntegration
 from .services import (
     ContoAccountInactive,
@@ -153,3 +155,31 @@ def verify_conto_links():
         results[integration.pk] = 'OK'
 
     return results
+
+
+@shared_task
+def limpiar_cupones_app():
+    """
+    Borrar de Tienda Nube los cupones de la app que vencieron sin usarse.
+
+    Envoltorio fino sobre `cupones.limpiar_vencidos`, la misma función que corre
+    el comando `limpiar_cupones_app`. En producción manda el cron —no hay worker
+    de Celery levantado— y esta task sirve en desarrollo, donde docker-compose sí
+    levanta worker y beat. Que las dos vías compartan función es lo que evita que
+    se comporten distinto.
+
+    Sin tope por corrida a propósito. La limpieza normal son unos pocos cupones
+    por hora, y un tope haría que un cupón que falla siempre —el orden es por
+    fecha de vencimiento, así que quedaría primero para siempre— tape a los que
+    vienen atrás.
+
+    No propaga: los que no se pudieron borrar se reintentan en la corrida
+    siguiente, que es lo que ya hace `limpiar_vencidos`.
+    """
+    borrados, errores = limpiar_vencidos()
+
+    if errores:
+        logger.warning(
+            "Limpieza de cupones: %s borrados, %s con error", borrados, len(errores)
+        )
+    return {'borrados': borrados, 'errores': errores}

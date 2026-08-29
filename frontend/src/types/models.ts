@@ -73,6 +73,25 @@ export interface Usuario {
   actualizado_en: string
 }
 
+/**
+ * Segmento de clientas de la app y el descuento que les corresponde.
+ *
+ * El porcentaje vive acá y no suelto en cada ficha: el día que VIP pase de 15%
+ * a 20% se edita un registro y no cuarenta (COMPRA_EN_APP_SPEC.md §5.8).
+ */
+export interface SegmentoApp {
+  id: number
+  nombre: string
+  porcentaje_descuento: string
+  /** El descuento general: le toca a toda clienta sin segmento propio. */
+  es_predeterminado: boolean
+  activo: boolean
+  /** Fichas que lo tienen asignado a mano (el general cuenta 0). */
+  cantidad_clientes: number
+  creado_en: string
+  actualizado_en: string
+}
+
 export interface Cliente {
   id: number
   centro_estetica: number
@@ -130,6 +149,12 @@ export interface Cliente {
   diagnostico_corporal?: string
   // Preferencias y marketing
   preferencias?: string
+  // App de clientas
+  /** Segmento asignado a mano. Vacío = le toca el general. */
+  segmento_app?: number | null
+  segmento_app_nombre?: string | null
+  /** Descuento que le corresponde de verdad, ya resuelta la caída al general. */
+  descuento_app?: string
   foto?: string
   acepta_promociones: boolean
   acepta_whatsapp: boolean
@@ -435,6 +460,10 @@ export interface Producto {
   marca: string
   codigo_barras: string
   sku: string
+  /** Producto en Tienda Nube: es lo que arma el carrito. Sin esto no se puede comprar desde la app. */
+  tiendanube_product_id?: string
+  /** Variante en Tienda Nube: identifica cuál unidad cuando el producto tiene más de una. */
+  tiendanube_variant_id?: string
   tipo: TipoProducto
   stock_actual: number
   stock_minimo: number
@@ -706,18 +735,6 @@ export interface AccountsReceivableSummary {
 // ==================== LEGACY TYPES (for backwards compatibility) ====================
 // TODO: Remove these after migrating all components to new types
 
-export enum TipoTransaccion {
-  INGRESO_SERVICIO = 'INCOME_SERVICE',
-  INGRESO_PRODUCTO = 'INCOME_PRODUCT',
-  INGRESO_OTRO = 'INCOME_OTHER',
-  GASTO_SUELDO = 'EXPENSE',
-  GASTO_ALQUILER = 'EXPENSE',
-  GASTO_INSUMO = 'EXPENSE',
-  GASTO_SERVICIO = 'EXPENSE',
-  GASTO_MARKETING = 'EXPENSE',
-  GASTO_OTRO = 'EXPENSE',
-}
-
 export enum MetodoPago {
   EFECTIVO = 'CASH',
   TRANSFERENCIA = 'BANK_TRANSFER',
@@ -725,27 +742,6 @@ export enum MetodoPago {
   TARJETA_CREDITO = 'CREDIT_CARD',
   MERCADOPAGO = 'MERCADOPAGO',
   OTRO = 'OTHER',
-}
-
-/** @deprecated Use Transaction instead */
-export interface Transaccion {
-  id: number
-  sucursal: number
-  categoria?: number
-  cliente?: number
-  turno?: number
-  producto?: number
-  tipo: TipoTransaccion
-  monto: number
-  metodo_pago: MetodoPago
-  fecha: string
-  descripcion: string
-  notas: string
-  numero_comprobante: string
-  archivo_comprobante?: string
-  registrado_por?: number
-  creado_en: string
-  actualizado_en: string
 }
 
 export interface Comision {

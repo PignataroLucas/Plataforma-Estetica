@@ -1,7 +1,6 @@
 import {
   RadialBarChart,
   RadialBar,
-  Legend,
   ResponsiveContainer,
   PolarAngleAxis,
 } from 'recharts';

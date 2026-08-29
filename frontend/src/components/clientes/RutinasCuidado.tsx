@@ -308,7 +308,7 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <p className="text-gray-500">No hay rutinas de cuidado registradas</p>
           <p className="text-sm text-gray-400 mt-2">
-            Hacé clic en "Nueva Rutina" para agregar la primera rutina
+            Hacé clic en &quot;Nueva Rutina&quot; para agregar la primera rutina
           </p>
         </div>
       ) : (

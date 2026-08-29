@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Cliente } from '@/types/models'
-import { Table, Column, Badge, Button } from '@/components/ui'
+import { Table, Column, Badge } from '@/components/ui'
 
 interface ClientesListProps {
   clientes: Cliente[]

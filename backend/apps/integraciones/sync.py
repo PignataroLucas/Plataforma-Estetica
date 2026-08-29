@@ -19,7 +19,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.db import transaction as db_transaction
 from django.utils import timezone
@@ -27,7 +27,7 @@ from django.utils import timezone
 from apps.clientes.models import Cliente
 from apps.finanzas.models import Transaction, TransactionCategory
 
-from .models import ContoSale
+from .models import ContoSale, CuponApp
 from .services import ContoClient, ContoError, ContoScope
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,55 @@ def to_decimal(value):
     if value is None or value == '':
         return ZERO
     return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def optional_decimal(value, voucher_id=None, label='monto'):
+    """
+    Like `to_decimal`, but keeps "not reported" apart from zero.
+
+    `to_decimal` maps a missing value to zero, which is right for amounts that
+    have to add up. For the coupon discount the absence is the information: a
+    column full of nulls is how we find out Conto never shipped the field.
+
+    An unparseable value is logged and dropped rather than raised. Conto added
+    these fields without being able to compile (COMPRA_EN_APP_SPEC.md §7.1), and
+    failing a voucher whose money is real over a field nothing reads yet would
+    be the wrong trade. The raw value stays in `payload` either way.
+    """
+    if value is None or value == '':
+        return None
+    try:
+        return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        logger.warning(
+            "Voucher %s de Conto: %s ilegible (%r), se guarda vacío",
+            voucher_id, label, value,
+        )
+        return None
+
+
+def raw_origin_fields(voucher):
+    """
+    Conto's origin and coupon fields, verbatim, as `ContoSale` column values.
+
+    Nothing here interprets them. Matching a code against the coupons the app
+    issues is COMPRA_EN_APP_SPEC.md §5.6 and does not exist yet; this only makes
+    sure the data is on the row when it does — see the model for why `payload`
+    is not enough.
+
+    Values are truncated to their column width instead of being trusted: one
+    long string would abort the import of a real sale over a field nobody reads.
+    """
+    return {
+        'sale_origin': str(voucher.get('origen_venta') or '')[:50],
+        'app_origin': str(voucher.get('app_origen') or '')[:100],
+        'coupon_code': str(voucher.get('cupon') or '')[:200],
+        'coupon_discount': optional_decimal(
+            voucher.get('descuento_cupon'),
+            voucher_id=voucher.get('id'),
+            label='descuento_cupon',
+        ),
+    }
 
 
 def get_income_category(branch, name):
@@ -326,6 +375,14 @@ class SalesImporter:
         sale.date = self._parse_date(voucher.get('fecha'))
         sale.total = to_decimal(voucher.get('total'))
 
+        # Copied before the early returns below on purpose: a voucher that is
+        # skipped or still pending today may be reprocessed once the attribution
+        # exists, and it should carry its origin by then.
+        for name, value in raw_origin_fields(voucher).items():
+            setattr(sale, name, value)
+
+        self._atribuir(sale)
+
         if channel not in (self.integration.channels_to_import or []):
             self._set_status(sale, ContoSale.Status.SKIPPED)
             result.skipped += 1
@@ -385,7 +442,7 @@ class SalesImporter:
     def _process_sale(self, sale, voucher):
         branch = self.integration.branch
         payment_method = self._payment_method(voucher)
-        client = self._resolve_client(voucher.get('cliente'))
+        client = self._resolve_client(voucher.get('cliente')) or self._clienta_del_cupon(sale)
         date = sale.date or timezone.localdate()
 
         items = voucher.get('items') or []
@@ -637,6 +694,55 @@ class SalesImporter:
         # `card` with an unknown or absent gateway, or a value Conto adds later.
         return self.integration.default_payment_method
 
+    def _clienta_del_cupon(self, sale):
+        """
+        La clienta a la que se le emitió el cupón.
+
+        Solo se usa cuando el email y el teléfono del comprador no resolvieron
+        nada: esos datos son de quien compró de verdad, y el cupón dice a quién
+        se lo dimos. Cuando difieren gana el comprador — el código pudo haber
+        circulado (§6.7) —, pero la atribución de la venta a la app sigue
+        siendo correcta igual, porque va por `cupon_app`.
+        """
+        return sale.cupon_app.cliente if sale.cupon_app_id else None
+
+    def _atribuir(self, sale):
+        """
+        Marcar la venta como originada en la app, si trae uno de nuestros cupones.
+
+        Es todo el mecanismo del §5.6, y descansa en una sola premisa: **los
+        únicos que emiten estos códigos somos nosotros**, así que una venta que
+        llega con uno es, por definición, una venta de la app.
+
+        Se corre antes de los early returns porque el cupón se usó igual, aunque
+        la venta quede pendiente de pago o de un canal que no importamos. Y es
+        idempotente: reprocesar un voucher no vuelve a marcar el cupón como
+        usado ni pisa la fecha original.
+        """
+        if not sale.coupon_code or sale.cupon_app_id:
+            return
+
+        # Con más de un cupón, Conto los manda separados por coma.
+        codigos = [c.strip() for c in sale.coupon_code.split(',') if c.strip()]
+        cupon = (
+            CuponApp.objects
+            .filter(code__in=codigos, integration__center=self.integration.center)
+            .select_related('cliente')
+            .first()
+        )
+        if cupon is None:
+            return
+
+        sale.cupon_app = cupon
+        if cupon.used_at is None:
+            cupon.used_at = timezone.now()
+            cupon.save(update_fields=['used_at'])
+
+        logger.info(
+            "Venta %s atribuida a la app por el cupón %s (clienta %s)",
+            sale.voucher_id, cupon.code, cupon.cliente_id,
+        )
+
     def _resolve_client(self, data):
         if not data:
             return None
@@ -710,6 +816,7 @@ class SalesImporter:
             defaults={
                 'payload': voucher,
                 'channel': voucher.get('canal') or '',
+                **raw_origin_fields(voucher),
                 'status': ContoSale.Status.ERROR,
                 'error_message': str(exc)[:2000],
             },

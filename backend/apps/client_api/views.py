@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from django.db import transaction
@@ -17,6 +18,8 @@ from apps.clientes.models import (
     UsuarioCliente,
     VinculacionCliente,
 )
+from apps.integraciones.compra import CompraInvalida, preparar_compra, resolver_items
+from apps.integraciones.tiendanube import TiendanubeError
 from apps.notificaciones.models import DispositivoPush, PreferenciaNotificacion
 from apps.servicios.models import Servicio
 from apps.turnos.models import Turno
@@ -35,6 +38,7 @@ from apps.turnos.services import (
 from .authentication import ClienteJWTAuthentication
 from .serializers import (
     ClienteTokenRefreshSerializer,
+    CompraSerializer,
     LoginSerializer,
     PerfilSerializer,
     PerfilUpdateSerializer,
@@ -48,6 +52,8 @@ from .serializers import (
     TurnoAppSerializer,
 )
 from .tokens import tokens_para_usuario_cliente
+
+logger = logging.getLogger(__name__)
 
 # Cantidad de turnos pasados que devuelve el historial de la app.
 LIMITE_HISTORICO = 30
@@ -206,6 +212,75 @@ class PerfilView(ClienteScopeMixin, APIView):
         serializer.save()
         usuario = self.get_queryset().get(pk=request.user.pk)
         return Response(PerfilSerializer(usuario).data)
+
+
+class DescuentoAppView(ClienteScopeMixin, APIView):
+    """
+    GET /api/client/descuento/ — el descuento de la app para esta clienta.
+
+    Existe porque el catálogo público no puede resolverlo: devuelve precio de
+    lista para cualquiera, y el descuento no es del producto sino de la clienta
+    (COMPRA_EN_APP_SPEC.md §5.8). La app pide este número con la sesión iniciada
+    y lo aplica a los precios que muestra.
+
+    **Es el mismo número que después se emite como cupón en Tienda Nube.** Un
+    solo origen para lo que se muestra, lo que se emite y lo que se cobra: si
+    esto y la emisión del cupón calcularan cada uno por su lado, la clienta
+    vería un precio y pagaría otro, que es la trampa del §6.1.
+    """
+
+    def get(self, request):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        cliente = vinc.cliente
+        segmento = cliente.segmento_app_efectivo
+        return Response({
+            'porcentaje': f"{cliente.descuento_app:.2f}",
+            # Solo informativo: la app no decide nada con el nombre.
+            'segmento': segmento.nombre if segmento else None,
+            'centro': cliente.centro_estetica_id,
+        })
+
+
+class PrepararCompraView(ClienteScopeMixin, APIView):
+    """
+    POST /api/client/comprar/ — prepara la compra y devuelve qué abrir.
+
+    Emite el cupón de la clienta y responde con lo que el WebView necesita para
+    armar el carrito en Tienda Nube: la URL de la tienda, una línea por producto
+    y el código del cupón (COMPRA_EN_APP_SPEC.md §4, pasos 2 a 5).
+
+    No crea la orden ni cobra: eso lo hace el checkout de Tienda Nube, que es
+    toda la decisión del §3.1.
+    """
+
+    def post(self, request):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        serializer = CompraSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        cliente = vinc.cliente
+        try:
+            items = resolver_items(cliente, serializer.validated_data['items'])
+            datos = preparar_compra(cliente, items)
+        except CompraInvalida as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except TiendanubeError as exc:
+            # La tienda no contestó o rechazó el cupón. La compra no se puede
+            # abrir a medias: sin cupón la clienta pagaría el precio de lista
+            # después de haber visto el de la app, que es el §6.1.
+            logger.exception("No se pudo preparar la compra de la clienta %s", cliente.pk)
+            return Response(
+                {'detail': 'No pudimos preparar tu compra. Probá de nuevo en un momento.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(datos)
 
 
 class MiRutinaView(ClienteScopeMixin, APIView):

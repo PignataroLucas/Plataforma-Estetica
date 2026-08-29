@@ -775,3 +775,155 @@ class TestGuards:
         assert len(result.errors) == 1
         assert Transaction.objects.count() == 0
         assert ContoSale.objects.get().status == ContoSale.Status.ERROR
+
+
+# --------------------------------------------------------------------------- #
+# Origin and coupon
+# --------------------------------------------------------------------------- #
+
+def voucher_with(**extra):
+    """`voucher()` plus the origin keys Conto added in August 2026."""
+    payload = voucher()
+    payload.update(extra)
+    return payload
+
+
+@pytest.mark.django_db
+class TestRawOriginFields:
+    """
+    Conto's origin and coupon fields get copied onto the row, uninterpreted.
+
+    Nothing reads them yet — attributing a sale to the app means matching the
+    coupon code against the codes the app issues, and that does not exist
+    (COMPRA_EN_APP_SPEC.md §5.6). What these tests protect is the copy itself:
+    the only other place the data lives is `payload`, which carries the buyer's
+    personal data and is a candidate for purging (INTEGRACION_CONTO_SPEC.md §14).
+    So whatever is not copied here is gone when that purge lands.
+    """
+
+    def test_a_sale_with_a_coupon_lands_on_the_row(self):
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher_with(
+            origen_venta='store',
+            app_origen=None,
+            cupon='BIENVENIDA10',
+            descuento_cupon=1500.00,
+        )])
+        SalesImporter(integration, client=client).run()
+
+        sale = ContoSale.objects.get()
+        assert sale.sale_origin == 'store'
+        assert sale.app_origin == ''
+        assert sale.coupon_code == 'BIENVENIDA10'
+        assert sale.coupon_discount == Decimal('1500.00')
+
+    def test_several_coupons_are_kept_as_conto_sends_them(self):
+        """
+        Conto joins multiple codes with a comma. Splitting them is a decision
+        for whoever reads the field, not for the import: guessing here would
+        bury the raw value under a format nobody agreed on.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher_with(cupon='APP-K3F9XQ,ENVIOGRATIS')])
+        SalesImporter(integration, client=client).run()
+
+        assert ContoSale.objects.get().coupon_code == 'APP-K3F9XQ,ENVIOGRATIS'
+
+    def test_a_payload_without_the_fields_leaves_the_discount_empty(self):
+        """
+        The tripwire for COMPRA_EN_APP_SPEC.md §7.1: Conto shipped these fields
+        without being able to compile. If they never arrive, `coupon_discount`
+        stays null on every sale, which is a question anyone can ask of the
+        database. Defaulting it to zero would make a broken deploy look like a
+        month of sales without coupons.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        SalesImporter(integration, client=FakeClient(sales=[voucher()])).run()
+
+        sale = ContoSale.objects.get()
+        assert sale.coupon_discount is None
+        assert sale.coupon_code == ''
+        assert sale.sale_origin == ''
+
+    def test_a_sale_with_no_discount_is_not_a_sale_with_no_field(self):
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher_with(cupon=None, descuento_cupon=0)])
+        SalesImporter(integration, client=client).run()
+
+        assert ContoSale.objects.get().coupon_discount == Decimal('0.00')
+
+    def test_an_unreadable_discount_does_not_cost_us_the_sale(self):
+        """
+        The money is real; the field is decoration until the attribution exists.
+        A voucher must not land in ERROR because Conto sent something odd in it.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher_with(descuento_cupon='mil quinientos')])
+        result = SalesImporter(integration, client=client).run()
+
+        sale = ContoSale.objects.get()
+        assert result.processed == 1
+        assert sale.status == ContoSale.Status.PROCESSED
+        assert sale.coupon_discount is None
+        # Nothing was lost: the raw value is still in the payload.
+        assert sale.payload['descuento_cupon'] == 'mil quinientos'
+
+    def test_a_coupon_longer_than_its_column_is_truncated_not_rejected(self):
+        """Same trade as above: Postgres would reject the row and kill the import."""
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher_with(cupon='APP-' + 'X' * 400)])
+        result = SalesImporter(integration, client=client).run()
+
+        assert result.processed == 1
+        assert len(ContoSale.objects.get().coupon_code) == 200
+
+    def test_a_skipped_voucher_still_records_them(self):
+        """
+        Skipped is not discarded: the row stays, and widening the channels or
+        the import window brings it back (see TestNonPaidStates). It should not
+        come back stripped of where it came from.
+        """
+        _, _, integration = make_syncable_center('A', 'cnt_aaa')
+
+        client = FakeClient(sales=[voucher_with(
+            canal='presencial', cupon='APP-K3F9XQ', origen_venta='pos',
+        )])
+        SalesImporter(integration, client=client).run()
+
+        sale = ContoSale.objects.get()
+        assert sale.status == ContoSale.Status.SKIPPED
+        assert sale.coupon_code == 'APP-K3F9XQ'
+        assert sale.sale_origin == 'pos'
+
+    def test_a_failed_voucher_still_records_them(self):
+        """
+        The failure path writes its own row, outside the rolled-back
+        transaction, so it has to copy the fields itself. A voucher that fails
+        and gets reprocessed a week later is exactly the one whose origin
+        someone will want to know.
+        """
+        _, branch, integration = make_syncable_center('A', 'cnt_aaa')
+        make_product(branch, 'SER-VITC-30')
+
+        client = FakeClient(sales=[voucher_with(
+            fecha='04/08/2026', cupon='APP-K3F9XQ', descuento_cupon='1500.00',
+        )])
+        result = SalesImporter(integration, client=client).run()
+
+        sale = ContoSale.objects.get()
+        assert len(result.errors) == 1
+        assert sale.status == ContoSale.Status.ERROR
+        assert sale.coupon_code == 'APP-K3F9XQ'
+        assert sale.coupon_discount == Decimal('1500.00')

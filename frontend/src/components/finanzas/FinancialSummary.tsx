@@ -19,7 +19,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 /**

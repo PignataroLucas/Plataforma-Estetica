@@ -146,7 +146,7 @@ export const EmpleadosList: React.FC<EmpleadosListProps> = ({
   if (empleados.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        No hay empleados registrados. Crea el primero usando el botón "Nuevo Empleado".
+        No hay empleados registrados. Crea el primero usando el botón &quot;Nuevo Empleado&quot;.
       </div>
     )
   }

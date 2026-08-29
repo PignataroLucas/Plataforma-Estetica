@@ -10,6 +10,7 @@ INTEGRACION_CONTO_SPEC.md for the implementation plan.
 """
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from apps.empleados.models import CentroEstetica, Sucursal
 from apps.finanzas.models import Transaction
@@ -177,6 +178,335 @@ class ContoIntegration(models.Model):
         return self.is_active and self.is_linked
 
 
+class TiendanubeIntegration(models.Model):
+    """
+    Links one aesthetic center to its Tienda Nube store, for issuing coupons.
+
+    Separate from `ContoIntegration` on purpose: they are different channels
+    with different lifetimes. Conto is read-only and reads sales; this one
+    writes coupons and dies when the merchant uninstalls the app.
+
+    Same two uniqueness constraints as the Conto integration, and for the same
+    reason: OneToOne on `center` stops a center from having two stores, unique
+    on `store_id` stops two centers from pointing at the same store.
+    """
+    center = models.OneToOneField(
+        CentroEstetica,
+        on_delete=models.CASCADE,
+        related_name='tiendanube_integration',
+        verbose_name='Centro estética'
+    )
+
+    store_id = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name='ID de tienda',
+        help_text="El `user_id` que devuelve el OAuth de Tienda Nube"
+    )
+    store_name = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Nombre de la tienda',
+        help_text="Para que un humano confirme que se vinculó la tienda correcta"
+    )
+    # La dirección pública de la tienda, que es contra la que se arma el carrito.
+    # Sale de `url_with_protocol` al vincular y no se escribe a mano: un dominio
+    # tipeado mal manda a la clienta a una tienda que no es.
+    store_url = models.URLField(
+        blank=True,
+        verbose_name='URL de la tienda',
+        help_text="Dirección pública, para armar el carrito y el checkout"
+    )
+
+    # The token does not expire: it is valid until the merchant uninstalls the
+    # app or a new one is issued. There is no refresh flow to implement.
+    #
+    # Stored like `ContoIntegration.token`: never exposed by the API. That is
+    # the existing pattern in this app, not encryption at rest — see the note
+    # in COMPRA_EN_APP_SPEC.md §5.1.
+    token = models.CharField(
+        max_length=255,
+        verbose_name='Token',
+        help_text="Token de Tienda Nube. No se muestra en la API"
+    )
+    scope = models.CharField(
+        max_length=300,
+        blank=True,
+        verbose_name='Permisos',
+        help_text="Permisos que el centro autorizó al instalar la app"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Activa',
+        help_text="Se desactiva sola cuando el centro desinstala la app"
+    )
+    # Acá vive la decisión del §7.2, que es del centro y no técnica: si el
+    # descuento de la app se suma al 10% de transferencia o lo reemplaza.
+    # Arranca en True porque es lo que hace Tienda Nube por defecto (verificado
+    # contra la API): dejarlo en False sin que nadie lo haya decidido cambiaría
+    # el comportamiento actual de la tienda por omisión.
+    coupons_combine_with_other_discounts = models.BooleanField(
+        default=True,
+        verbose_name='Los cupones se combinan con otras promociones',
+        help_text="Si está activo, el descuento de la app se suma a los del "
+                  "medio de pago. Si no, lo reemplaza"
+    )
+    installed_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Instalada el'
+    )
+    uninstalled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Desinstalada el'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Integración con Tienda Nube'
+        verbose_name_plural = 'Integraciones con Tienda Nube'
+        ordering = ['id']
+
+    def __str__(self):
+        return f"Tienda Nube - {self.center.nombre}"
+
+    @property
+    def can_issue_coupons(self):
+        return self.is_active and bool(self.token)
+
+
+class CuponApp(models.Model):
+    """
+    A single-use coupon issued to one clienta for one purchase from the app.
+
+    It is the whole mechanism of COMPRA_EN_APP_SPEC.md §3.2 in one row: it
+    applies the discount, it locks it to a single use so the code cannot leak
+    into a WhatsApp group, and it is what makes the sale attributable — a sale
+    that comes back from Conto carrying one of these codes is, by definition, a
+    sale from the app.
+
+    The row outlives the coupon in Tienda Nube on purpose. The cleanup deletes
+    the coupon there but keeps this, because the analytics of §5.7 are built
+    against it: which code, to which clienta, when, and for how much.
+    """
+    integration = models.ForeignKey(
+        TiendanubeIntegration,
+        on_delete=models.CASCADE,
+        related_name='cupones'
+    )
+    # SET_NULL and not CASCADE: borrar una ficha no puede borrar el rastro de un
+    # descuento que se dio y que quizás ya se cobró.
+    cliente = models.ForeignKey(
+        'clientes.Cliente',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cupones_app',
+        verbose_name='Clienta'
+    )
+
+    code = models.CharField(
+        max_length=30,
+        unique=True,
+        verbose_name='Código',
+        help_text="Código con prefijo APP-, impredecible y de un solo uso"
+    )
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Descuento',
+        help_text="Porcentaje que se le aplicó, resuelto por el segmento de la clienta"
+    )
+    tiendanube_coupon_id = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        verbose_name='ID en Tienda Nube',
+        help_text="Necesario para borrarlo cuando vence sin usarse"
+    )
+
+    issued_at = models.DateTimeField(default=timezone.now, verbose_name='Emitido')
+    expires_at = models.DateTimeField(verbose_name='Vence')
+    used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Usado',
+        help_text="Se completa al importar la venta que lo trae"
+    )
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Borrado de Tienda Nube',
+        help_text="Cuándo lo borró la limpieza por haber vencido sin usarse"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Cupón de la app'
+        verbose_name_plural = 'Cupones de la app'
+        ordering = ['-issued_at']
+        indexes = [
+            # La limpieza busca por acá: vencidos, sin usar y todavía vivos en TN.
+            models.Index(fields=['expires_at', 'used_at', 'revoked_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.code} ({self.percentage}%)"
+
+    @property
+    def esta_vencido(self):
+        return timezone.now() >= self.expires_at
+
+
+class TiendanubeInstallIntent(models.Model):
+    """
+    An admin declaring, before installing, which center the store belongs to.
+
+    Exists because of a hole in Tienda Nube's OAuth: **there is no `state`**.
+    Their authorize URL takes only the app id, and the callback comes back with
+    only `code` — verified against their docs and their official PHP SDK, which
+    neither sends nor reads one. So when the token comes back there is nothing
+    in the request tying it to a tenant.
+
+    A reinstall resolves itself: the store id already has an integration. A
+    first install has no such anchor, and guessing wrong would hand one center
+    the power to issue coupons on another's store. This row is the anchor: the
+    admin opens the install from the CRM, that leaves a short-lived intent, and
+    the callback claims it.
+
+    Deliberately claimed only when there is exactly one open intent. Two centers
+    installing at the same time is ambiguous, and the right answer to an
+    ambiguous tenant is to refuse, not to pick.
+    """
+    center = models.ForeignKey(
+        CentroEstetica,
+        on_delete=models.CASCADE,
+        related_name='tiendanube_install_intents',
+        verbose_name='Centro estética'
+    )
+    created_by = models.ForeignKey(
+        'empleados.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        verbose_name='Iniciada por'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        verbose_name='Vence',
+        help_text="Ventana para completar la instalación. Corta a propósito: "
+                  "es lo que hace que solo haya un intento abierto por vez"
+    )
+    consumed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Usada',
+        help_text="Cuándo la reclamó el callback. Una intención sirve una sola vez"
+    )
+
+    class Meta:
+        verbose_name = 'Instalación de Tienda Nube iniciada'
+        verbose_name_plural = 'Instalaciones de Tienda Nube iniciadas'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['consumed_at', 'expires_at']),
+        ]
+
+    def __str__(self):
+        return f"Instalación de {self.center.nombre} ({self.created_at:%d/%m %H:%M})"
+
+    @property
+    def esta_abierta(self):
+        return self.consumed_at is None and timezone.now() < self.expires_at
+
+
+class TiendanubePrivacyRequest(models.Model):
+    """
+    A privacy request from Tienda Nube, kept so a person can answer it.
+
+    Tienda Nube requires three webhooks to homologate an app (§5.1). Two of them
+    —`customers/redact` and `customers/data_request`— are addressed to a human:
+    their own documentation says it is the app's responsibility to send the
+    report to the merchant. Answering 200 and logging a line would mean the
+    request dies in the deploy's log, so it gets a row instead.
+
+    **The handlers do not delete anything on their own, and that is on purpose.**
+    This app's permissions are read products and read/write coupons: it never
+    reads customers or orders from the store, so there is no Tienda Nube
+    customer data here to redact. What does exist —the clienta's file in the
+    CRM— is the center's own record, loaded in this platform and not sourced
+    from the store. Deleting it because Tienda Nube forwarded a request would
+    destroy the center's data on a third party's say-so.
+
+    The payload is stored whole, like `ContoSale.payload` and for the same
+    reason: it is what lets someone act on the request later. It carries the
+    buyer's personal data, so it belongs in the same purge as that one
+    (INTEGRACION_CONTO_SPEC.md §14).
+    """
+    class Event(models.TextChoices):
+        STORE_REDACT = 'store/redact', 'Borrado de la tienda'
+        CUSTOMERS_REDACT = 'customers/redact', 'Borrado de datos de un comprador'
+        CUSTOMERS_DATA_REQUEST = 'customers/data_request', 'Pedido de datos de un comprador'
+
+    # Nullable and not the only link: el pedido llega igual para una tienda que
+    # nunca vinculamos, o para una que ya se desvinculó. Se guarda el `store_id`
+    # crudo para que el pedido siga siendo legible en ese caso.
+    integration = models.ForeignKey(
+        TiendanubeIntegration,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='privacy_requests',
+        verbose_name='Integración'
+    )
+    store_id = models.CharField(
+        max_length=50,
+        db_index=True,
+        verbose_name='ID de tienda'
+    )
+    event = models.CharField(
+        max_length=40,
+        choices=Event.choices,
+        db_index=True,
+        verbose_name='Evento'
+    )
+    payload = models.JSONField(
+        verbose_name='Contenido',
+        help_text="Lo que mandó Tienda Nube, crudo"
+    )
+
+    received_at = models.DateTimeField(default=timezone.now, verbose_name='Recibido')
+    handled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Resuelto',
+        help_text="Cuándo se le respondió al centro. Los de la tienda se "
+                  "resuelven solos; los de un comprador los cierra una persona"
+    )
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Notas',
+        help_text="Qué se hizo con el pedido"
+    )
+
+    class Meta:
+        verbose_name = 'Pedido de privacidad de Tienda Nube'
+        verbose_name_plural = 'Pedidos de privacidad de Tienda Nube'
+        ordering = ['-received_at']
+        indexes = [
+            models.Index(fields=['handled_at', 'received_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_event_display()} - tienda {self.store_id}"
+
+
 class ContoSale(models.Model):
     """
     A voucher pulled from Conto: either a sale or a credit note.
@@ -235,6 +565,59 @@ class ContoSale(models.Model):
         blank=True
     )
 
+    # Origin and coupon, copied from the payload without being interpreted.
+    #
+    # They get columns of their own even though `payload` already holds them:
+    # attributing app sales means matching the coupon code against the codes the
+    # app issues (COMPRA_EN_APP_SPEC.md §5.6), and `payload` cannot be relied on
+    # to still be there — it carries the buyer's personal data and is a
+    # candidate for purging (INTEGRACION_CONTO_SPEC.md §14).
+    sale_origin = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Origen de la venta',
+        help_text="Campo 'origen_venta' de Conto, crudo: de dónde dice Tienda "
+                  "Nube que viene la orden (store, api, meli, form, pos)"
+    )
+    app_origin = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='App de origen',
+        help_text="Campo 'app_origen' de Conto, crudo: qué app de Tienda Nube "
+                  "creó la orden, si fue creada por una"
+    )
+    coupon_code = models.CharField(
+        max_length=200,
+        blank=True,
+        db_index=True,
+        verbose_name='Cupón',
+        help_text="Campo 'cupon' de Conto, crudo. Con más de un cupón vienen "
+                  "los códigos separados por coma"
+    )
+    coupon_discount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Descuento por cupón',
+        help_text="Campo 'descuento_cupon' de Conto. Vacío significa que Conto "
+                  "no informó el campo, que no es lo mismo que un descuento de 0"
+    )
+
+    # La atribución del §5.6: si la venta trae uno de nuestros códigos, es una
+    # venta de la app y sabemos de qué clienta. El vínculo se guarda en vez de
+    # recalcularlo, porque el cupón se borra de Tienda Nube al vencer y los
+    # códigos viejos dejarían de resolverse.
+    cupon_app = models.ForeignKey(
+        'integraciones.CuponApp',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ventas',
+        verbose_name='Cupón de la app',
+        help_text="Cargado al importar, cuando el código de la venta es uno nuestro"
+    )
+
     payload = models.JSONField(
         help_text="Respuesta cruda de Conto. Permite reprocesar sin volver a consultar"
     )
@@ -285,3 +668,14 @@ class ContoSale(models.Model):
 
     def __str__(self):
         return f"{self.get_type_display()} {self.voucher_id} - {self.get_status_display()}"
+
+    @property
+    def es_venta_de_la_app(self):
+        """
+        Verdadero cuando la venta trae un cupón emitido por la app.
+
+        Es la definición del §3.2, y no depende de `origen_venta`: una compra
+        hecha desde la app llega igual que una del navegador (`store`), así que
+        el único rastro es el código.
+        """
+        return self.cupon_app_id is not None

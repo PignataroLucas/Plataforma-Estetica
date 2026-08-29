@@ -5,7 +5,8 @@ from .views import (
     HistorialClienteViewSet,
     PlanTratamientoViewSet,
     RutinaCuidadoViewSet,
-    NotaClienteViewSet
+    NotaClienteViewSet,
+    SegmentoAppViewSet
 )
 
 router = DefaultRouter()
@@ -14,6 +15,7 @@ router.register(r'historial', HistorialClienteViewSet, basename='historial-clien
 router.register(r'planes-tratamiento', PlanTratamientoViewSet, basename='plan-tratamiento')
 router.register(r'rutinas-cuidado', RutinaCuidadoViewSet, basename='rutina-cuidado')
 router.register(r'notas-cliente', NotaClienteViewSet, basename='nota-cliente')
+router.register(r'segmentos-app', SegmentoAppViewSet, basename='segmento-app')
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -18,6 +18,7 @@ import { configureHttpAuth } from '@/services/http';
 import { darDeBajaDispositivo } from '@/services/push';
 import { limpiarCacheDeDatos } from '@/services/queryClient';
 import { deleteItem, getItem, setItem } from '@/services/storage';
+import { vaciarCarrito } from '@/stores/carrito';
 import type { AuthResponse, Perfil, RegistroPayload, TokenPair } from '@/types/api';
 
 const ACCESS_KEY = 'ame.access';
@@ -84,6 +85,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setSession: async (auth) => {
     // Arranca una identidad nueva: nada de lo cacheado antes le corresponde.
     limpiarCacheDeDatos();
+    vaciarCarrito();
     await Promise.all([setItem(ACCESS_KEY, auth.access), setItem(REFRESH_KEY, auth.refresh)]);
     set({
       status: 'authenticated',
@@ -112,6 +114,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // donde un refetch volvería a cachear datos de la cuenta que se está yendo.
     set({ status: 'unauthenticated', access: null, refresh: null, usuario: null });
     limpiarCacheDeDatos();
+    // El carrito vive en memoria: sin esto, la próxima clienta que entre en este
+    // teléfono se encuentra con el pedido de la anterior.
+    vaciarCarrito();
     await Promise.all([deleteItem(ACCESS_KEY), deleteItem(REFRESH_KEY)]);
   },
 }));

@@ -93,6 +93,7 @@ class ProductoPublicoSerializer(serializers.ModelSerializer):
     )
     porcentaje_descuento = serializers.ReadOnlyField()
     categoria_nombre = serializers.SerializerMethodField()
+    comprable = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
@@ -103,10 +104,21 @@ class ProductoPublicoSerializer(serializers.ModelSerializer):
             'precio', 'en_oferta', 'precio_oferta', 'porcentaje_descuento',
             # `foto_thumb` es para la grilla y `foto` para la ficha: la grilla
             # nunca debería bajar 31 originales por datos móviles.
-            'foto', 'foto_thumb', 'categoria_nombre', 'sucursal',
+            'foto', 'foto_thumb', 'categoria_nombre', 'sucursal', 'comprable',
             # Datos para el motor de recompra (app mobile)
             'contenido_ml', 'duracion_estimada_dias', 'pao_meses', 'frecuencia_uso',
         ]
 
     def get_categoria_nombre(self, obj):
         return obj.categoria.nombre if obj.categoria else None
+
+    def get_comprable(self, obj):
+        """
+        Si el producto se puede comprar desde la app.
+
+        Es falso mientras no esté emparejado con Tienda Nube: sin el id de
+        producto no se puede armar el carrito (COMPRA_EN_APP_SPEC.md §5.2). Va
+        como booleano y no como el id porque la app no necesita el id, y lo que
+        no se expone no se filtra.
+        """
+        return bool(obj.tiendanube_product_id)

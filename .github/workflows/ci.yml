@@ -11,9 +11,15 @@
 # cuando no encuentra el proyecto, en vez de mantener dos workflows que se van
 # a desincronizar.
 #
-# El lint todavía NO entra: el CRM arrastra 40 errores y 152 warnings. Sumarlo
-# ahora sería nacer en rojo, que es la forma más rápida de que un equipo aprenda
-# a ignorar el CI. Se agrega cuando esa deuda esté saldada.
+# El lint del CRM ya entra y bloquea, pero solo por **errores**: los 39 que
+# arrastraba se saldaron (entre ellos un `useState` después de un early return
+# que rompía el dashboard de analytics al llegar los datos). Los 152 warnings
+# quedan visibles sin frenar el merge; se van pagando de a poco. Por eso el job
+# llama a `eslint` directo y no a `npm run lint`, que trae `--max-warnings 0`.
+#
+# El lint de la app mobile es informativo por ahora: `eslint-config-expo` 57
+# sumó las reglas del React Compiler y marca 4 errores en los flujos de reserva
+# y checkout. Arreglarlos es refactor de código que anda, no trabajo de CI.
 
 name: CI
 
@@ -21,7 +27,7 @@ on:
   push:
     branches: [main, 'Mobile/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'Mobile/**']
 
 # Un push nuevo sobre la misma rama cancela la corrida anterior: no tiene
 # sentido gastar minutos validando un commit que ya quedó viejo.
@@ -106,6 +112,26 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit
 
+  crm-lint:
+    name: CRM · lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        # `eslint` directo y no `npm run lint`: ese script lleva
+        # `--max-warnings 0` y hoy hay 152 warnings. Acá bloquean los errores,
+        # que son los que rompen algo; los warnings se ven en el log.
+        run: npx eslint . --ext ts,tsx
+
   crm-tests:
     name: CRM · tests
     runs-on: ubuntu-latest
@@ -128,6 +154,30 @@ jobs:
         # `npm test` es `vitest run`: sin `run`, vitest se queda en modo watch y
         # el job cuelga hasta el timeout.
         run: npm test
+
+  crm-build:
+    name: CRM · build
+    runs-on: ubuntu-latest
+
+    # `tsc --noEmit` no prueba que el bundle salga: los fallos de resolución de
+    # imports, los assets que no existen y los plugins de Vite mal configurados
+    # solo aparecen al empaquetar de verdad. Se despliega el build, no el tsc.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+      - name: Build
+        working-directory: frontend
+        # `vite build` pelado y no `npm run build`: ese script es `tsc && vite
+        # build`, y el typecheck ya tiene su propio job. Correrlo dos veces solo
+        # gasta minutos y ensucia de cuál de los dos vino la falla.
+        run: npx vite build
 
   app:
     name: App mobile · typecheck
@@ -164,3 +214,14 @@ jobs:
         if: steps.proyecto.outputs.existe == 'true'
         working-directory: client-app
         run: npx tsc --noEmit
+
+      - name: Lint (informativo)
+        # No bloquea todavía. `eslint-config-expo` 57 trajo las reglas del React
+        # Compiler y hay 4 errores abiertos en reservar.tsx y checkout.tsx:
+        # `setState` sincrónico dentro de un efecto y una lectura de ref durante
+        # el render. Los tres son refactors de flujos que hoy funcionan, así que
+        # se corrigen aparte y recién ahí se saca este `continue-on-error`.
+        if: steps.proyecto.outputs.existe == 'true'
+        continue-on-error: true
+        working-directory: client-app
+        run: npx expo lint

@@ -185,7 +185,7 @@ export const ProductosList: React.FC<ProductosListProps> = ({
   if (productos.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        No hay productos registrados. Crea el primero usando el botón "Nuevo Producto".
+        No hay productos registrados. Crea el primero usando el botón &quot;Nuevo Producto&quot;.
       </div>
     )
   }

@@ -70,14 +70,15 @@ export default function TurnosPage() {
 
     // Si estamos en vista lista, aplicar filtros por tab
     switch (activeTab) {
-      case 'hoy':
+      case 'hoy': {
         // Solo turnos de hoy que NO han pasado (desde ahora hasta fin del día)
         const endOfToday = `${todayStr}T23:59:59`
         return {
           fecha_desde: nowISO,
           fecha_hasta: endOfToday,
         }
-      case 'proximos':
+      }
+      case 'proximos': {
         // Todos los turnos desde mañana en adelante (sin tope superior)
         const tomorrow = new Date(now)
         tomorrow.setDate(now.getDate() + 1)
@@ -85,7 +86,8 @@ export default function TurnosPage() {
         return {
           fecha_desde: tomorrow.toISOString(),
         }
-      case 'historial':
+      }
+      case 'historial': {
         // Turnos que ya pasaron (últimos 30 días hasta ahora)
         const ago30Days = new Date(now)
         ago30Days.setDate(now.getDate() - 30)
@@ -95,6 +97,7 @@ export default function TurnosPage() {
           ordering: '-fecha_hora_inicio',
           page_size: 200,
         }
+      }
       default:
         return {}
     }

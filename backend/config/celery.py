@@ -45,6 +45,15 @@ app.conf.beat_schedule = {
         'task': 'apps.integraciones.tasks.verify_conto_links',
         'schedule': crontab(hour=7, minute=30),
     },
+    # Borrar de Tienda Nube los cupones de la app que vencieron sin usarse.
+    # Cada "Comprar" que no termina en compra deja uno vivo en la tienda del
+    # centro. Los cupones duran una hora, así que una pasada por hora alcanza:
+    # ninguno sobrevive más de dos. En minuto 25 para no pisar los jobs que
+    # arrancan en punto y a la media.
+    'limpiar-cupones-app': {
+        'task': 'apps.integraciones.tasks.limpiar_cupones_app',
+        'schedule': crontab(minute=25),
+    },
     # Push notifications. These mirror what the `procesar_notificaciones`
     # command does; production runs the command from Railway cron because the
     # deploy has no Celery worker. Keeping both wired to the same functions

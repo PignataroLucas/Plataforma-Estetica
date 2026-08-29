@@ -252,6 +252,11 @@ class Command(BaseCommand):
             ('items', True), ('relacionada_con', False),
             ('orden_externa_id', False), ('medio_pago', False),
             ('gateway_origen', False), ('cliente', False),
+            # Added by Conto in August 2026 and not verified against a real
+            # sale yet (COMPRA_EN_APP_SPEC.md §7.1). Optional here so this
+            # command answers whether they arrive instead of failing over it.
+            ('origen_venta', False), ('app_origen', False),
+            ('cupon', False), ('descuento_cupon', False),
         ]:
             if field in voucher:
                 value = voucher[field]

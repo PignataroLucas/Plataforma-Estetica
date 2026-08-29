@@ -362,3 +362,20 @@ class ReservaSerializer(serializers.Serializer):
             if motivo:
                 raise serializers.ValidationError({'fecha_hora_inicio': motivo})
         return attrs
+
+
+class ItemCompraSerializer(serializers.Serializer):
+    """Una línea del carrito que manda la app."""
+    producto = serializers.IntegerField()
+    cantidad = serializers.IntegerField(min_value=1, max_value=20)
+
+
+class CompraSerializer(serializers.Serializer):
+    """
+    El carrito completo.
+
+    El tope de 20 líneas no es una regla de negocio: es lo que evita que un
+    carrito absurdo dispare 20 POST contra Tienda Nube (uno por producto, ver
+    apps/integraciones/compra.py).
+    """
+    items = ItemCompraSerializer(many=True, allow_empty=False, max_length=20)

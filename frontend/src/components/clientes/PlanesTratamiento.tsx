@@ -207,7 +207,7 @@ export default function PlanesTratamiento({ clienteId }: PlanesTratamientoProps)
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <p className="text-gray-500">No hay planes de tratamiento registrados</p>
           <p className="text-sm text-gray-400 mt-2">
-            Haz clic en "Nuevo Plan" para agregar el primer plan
+            Haz clic en &quot;Nuevo Plan&quot; para agregar el primer plan
           </p>
         </div>
       ) : (
