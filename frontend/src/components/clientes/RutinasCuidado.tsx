@@ -57,7 +57,13 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
 
   const loadProductos = async () => {
     try {
-      const response = await api.get('/inventario/productos/', { params: { activo: true } })
+      // Sin page_size la API pagina de a 20 y el desplegable muestra solo los
+      // primeros productos por orden alfabético. El catálogo entra cómodo en una
+      // sola página; si algún día pasa de unos cientos, conviene agregar búsqueda
+      // en vez de seguir subiendo este número (el backend topea page_size en 1000).
+      const response = await api.get('/inventario/productos/', {
+        params: { activo: true, page_size: 200 },
+      })
       setProductos(response.data.results ?? response.data)
     } catch (error) {
       console.error('Error loading products:', error)
