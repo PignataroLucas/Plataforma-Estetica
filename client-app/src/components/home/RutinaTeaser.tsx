@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
+import { Presionable } from '@/components/ui/Presionable';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { RutinaApp } from '@/types/api';
 
@@ -12,9 +13,9 @@ export function RutinaTeaser({ rutina }: { rutina: RutinaApp }) {
   const resumen = total ? `Día y noche · ${total} pasos` : 'Ver los pasos de tu rutina';
 
   return (
-    <Pressable
+    <Presionable
       onPress={() => router.push('/mi-rutina')}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={styles.card}
       accessibilityRole="button">
       <View style={styles.icon}>
         <Feather name="feather" size={17} color={colors.ink} />
@@ -27,7 +28,7 @@ export function RutinaTeaser({ rutina }: { rutina: RutinaApp }) {
         <AppText variant="meta">{resumen}</AppText>
       </View>
       <Feather name="chevron-right" size={20} color={colors.muted} />
-    </Pressable>
+    </Presionable>
   );
 }
 
@@ -40,7 +41,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.lg,
   },
-  pressed: { opacity: 0.9 },
   icon: {
     width: 40,
     height: 40,

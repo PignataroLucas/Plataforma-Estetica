@@ -1,7 +1,8 @@
 import { Feather } from '@expo/vector-icons';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
+import { Presionable } from '@/components/ui/Presionable';
 import { colors, radius, spacing } from '@/theme/ame';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -37,12 +38,12 @@ export function TreatmentRow({ nombre, meta, precio, icon = 'droplet', onPress }
   if (!onPress) return <View style={styles.row}>{contenido}</View>;
 
   return (
-    <Pressable
+    <Presionable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.row, pressed && styles.presionada]}>
+      style={styles.row}>
       {contenido}
-    </Pressable>
+    </Presionable>
   );
 }
 
@@ -66,7 +67,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  presionada: { backgroundColor: colors.cream },
   info: { flex: 1, minWidth: 0 },
   nombre: { fontSize: 16, lineHeight: 18 },
 });

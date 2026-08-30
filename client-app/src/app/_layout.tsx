@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { TransicionEntrada } from '@/components/TransicionEntrada';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { queryClient } from '@/services/queryClient';
 import { useAuthStore } from '@/stores/auth';
@@ -54,6 +55,9 @@ export default function RootLayout() {
         <View style={styles.page}>
           <View style={styles.shell}>
             <RootNavigator authenticated={status === 'authenticated'} />
+            {/* Va acá, último y dentro del shell, para quedar por encima de las
+                tabs y tapar el montaje de Inicio. */}
+            <TransicionEntrada />
           </View>
         </View>
       </SafeAreaProvider>

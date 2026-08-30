@@ -53,7 +53,10 @@ export function usePushNotifications() {
     (datos: DatosDeAviso) => {
       const evento = datos.evento ?? '';
       if (evento.startsWith('turno')) {
-        queryClient.invalidateQueries({ queryKey: ['turnos'] });
+        // 'mis-turnos' y no 'turnos': React Query matchea por prefijo, y con la
+        // clave equivocada esta invalidación no alcanzaba a ninguna query. El
+        // aviso llegaba y la lista seguía mostrando el estado viejo.
+        queryClient.invalidateQueries({ queryKey: ['mis-turnos'] });
       } else if (evento.startsWith('rutina')) {
         queryClient.invalidateQueries({ queryKey: ['mi-rutina'] });
       }
