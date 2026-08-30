@@ -18,8 +18,10 @@
 # llama a `eslint` directo y no a `npm run lint`, que trae `--max-warnings 0`.
 #
 # El lint de la app mobile es informativo por ahora: `eslint-config-expo` 57
-# sumó las reglas del React Compiler y marca 4 errores en los flujos de reserva
-# y checkout. Arreglarlos es refactor de código que anda, no trabajo de CI.
+# sumó las reglas del React Compiler y quedan 2 errores en el flujo de reserva
+# (`set-state-in-effect` en reservar.tsx). Eran 4 y los de checkout.tsx se
+# cayeron solos al alinear las dependencias con el SDK el 30/08/2026.
+# Arreglar los que quedan es refactor de código que anda, no trabajo de CI.
 
 name: CI
 

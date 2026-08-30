@@ -60,7 +60,7 @@ export const AVISOS_DE_MUESTRA: AvisoDeMuestra[] = [
     titulo: '¡Feliz cumple, Sofía!',
     cuerpo: 'Que lo pases hermoso. Te esperamos en AME.',
     categoria: 'novedades',
-    ruta: '/promos',
+    ruta: '/',
   },
   {
     clave: 'oferta_nueva',
@@ -68,7 +68,7 @@ export const AVISOS_DE_MUESTRA: AvisoDeMuestra[] = [
     titulo: 'Nueva promo en AME',
     cuerpo: '2x1 en faciales. Hasta el 30 de agosto.',
     categoria: 'promociones',
-    ruta: '/promos',
+    ruta: '/tienda',
   },
 ];
 
