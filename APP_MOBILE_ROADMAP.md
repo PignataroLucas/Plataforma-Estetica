@@ -409,58 +409,119 @@ Implementar sobre el admin existente las palancas baratas para medir si hay señ
 
 ---
 
-## 6. Build y distribución (APK)
+## 6. Build y distribución
 
-### Generación de APK para testers
+> Reescrita el 30/08/2026, cuando se armó la configuración de verdad. Lo que
+> había acá antes era el plan a priori: perfiles inventados de memoria y ninguna
+> mención a iOS. Esto es lo que está en el repo.
 
-**Setup inicial**:
+### Qué ya está en el repo
+
+- **`client-app/eas.json`** con cuatro perfiles (abajo el detalle).
+- **Identidad definitiva** en `client-app/app.json`: la app se llama **AME
+  esencial**, slug `ame-esencial`, y el identificador es **`com.ameesencial.app`**
+  en las dos plataformas. El package de Android **no se puede cambiar** una vez
+  que se sube a Play Store, por eso se definió antes del primer build y no
+  después.
+- `userInterfaceStyle` pasó a `"light"`: el diseño es claro y el `StatusBar` está
+  fijo en `dark`. Con `"automatic"`, un teléfono en modo oscuro pintaba de negro
+  las superficies nativas (teclado, action sheets, los controles de formulario
+  del WebView del checkout) contra fondos marfil.
+
+### Qué falta antes del primer build
+
+1. **`eas init`** — es lo que crea el proyecto en EAS y escribe
+   `extra.eas.projectId` en `app.json`. Sin ese id, `registrarDispositivo()` se
+   saltea el registro y no llega ninguna notificación remota
+   (`client-app/src/services/push.ts`).
+2. **El arte de marca.** El ícono y el splash siguen siendo los de la plantilla
+   de Expo: `splash-icon.png` es byte a byte el mismo archivo que
+   `expo-logo.png`, y `icon.png` es el cuadrado azul con la "A". Hace falta el
+   logo de AME en **1024×1024**. Para iOS tiene que ir **sin canal alfa y sin
+   esquinas redondeadas** — Apple rechaza el envío si el ícono tiene
+   transparencia, y las esquinas las pone el sistema.
+3. **Credenciales de FCM** (Android): `google-services.json` cargado con
+   `eas credentials`. El token se emite igual sin esto, pero Expo no puede
+   entregar el mensaje.
+
+### Setup por única vez
+
 ```bash
 npm install -g eas-cli
 eas login
 cd client-app
-eas build:configure
+eas init
 ```
 
-**eas.json** (perfiles clave):
-```json
-{
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "android": { "buildType": "apk" }
-    },
-    "preview": {
-      "distribution": "internal",
-      "android": { "buildType": "apk" }
-    },
-    "production": {
-      "android": { "buildType": "app-bundle" },
-      "autoIncrement": true
-    }
-  }
-}
-```
+### Los perfiles de `eas.json`
 
-**Generar APK para beta testers**:
+| Perfil | Para qué | Artefacto |
+|---|---|---|
+| `development` | Dev build con Metro adjunto: es lo único que permite probar push remoto en Android (Expo Go no lo soporta desde SDK 53) | APK / app de simulador iOS |
+| `preview` | **El que se reparte a las testers.** Standalone, se instala y anda como app de verdad | APK |
+| `preview-simulador-ios` | Igual que `preview` pero para el simulador de iOS. No pide cuenta de Apple | `.app` de simulador |
+| `production` | Play Store / App Store | AAB |
+
+Dos decisiones que conviene no tocar sin entender por qué están:
+
+- **`EXPO_PUBLIC_API_URL` solo en `preview` y `production`.** Expo *inlinea* esa
+  variable al compilar, así que en un build standalone tiene que venir del perfil
+  (apunta a Railway). En `development` no va: ahí el JS lo sirve Metro desde tu
+  máquina, y el valor sale del `.env` local. Si la ponés en `development`, la
+  variable del perfil no se usa y solo confunde.
+- **Ningún perfil declara `channel`.** Ese campo es de EAS Update y todavía no
+  está instalado `expo-updates`. Se agregan las dos cosas juntas o el build falla
+  pidiendo el paquete.
+
+### Android — el camino de esta semana
+
 ```bash
 eas build --platform android --profile preview
 ```
 
-**Distribución**:
-- Fase 2 (5-10 testers): link directo del dashboard EAS, compartir por WhatsApp
-- Fase 3+ (10-50 testers): Google Play Internal Testing (requiere `.aab`)
-- Producción: Google Play Store (`production` profile)
+Sale un APK con link en el dashboard de EAS; se comparte por WhatsApp y se
+instala habilitando "orígenes desconocidos". Android 13+ pide el permiso de
+notificaciones en runtime, y de eso ya se ocupa `expo-notifications`.
 
-**OTA Updates** con `expo-updates`:
-```bash
-eas update --branch preview  # para fixes sin rebuild
-```
+> **Ojo con la carpeta `android/` local.** Quedó de un `expo run:android` viejo,
+> con el package anterior (`com.anonymous.clientapp`). Está en `.gitignore` y EAS
+> no la usa —construye desde la config—, pero si volvés a correr en el emulador,
+> primero `npx expo prebuild --clean`.
+
+### iOS — qué se puede hacer sin cuenta de Apple y qué no
+
+Esta es la parte que define el cronograma. **Cualquier instalación en un iPhone
+físico exige la cuenta paga de Apple Developer (US$99/año)**: no hay atajo, ni
+por TestFlight ni por ad-hoc.
+
+| Camino | ¿Cuenta paga? | Qué valida |
+|---|---|---|
+| **Expo Go** en el iPhone | No | Layout, safe areas, gestos, el WebView del checkout. No valida ícono, splash ni push remoto |
+| **Build de simulador** (`preview-simulador-ios`) | No, pero **necesita una Mac** | La app compilada de verdad, con su ícono y su splash. Sin push (el simulador no recibe push remoto) |
+| **Ad-hoc** (UDIDs con `eas device:create`) | **Sí** — máximo 100 iPhones por año, y hay que rebuildear al sumar un aparato | Todo, en un teléfono real |
+| **TestFlight interno** | **Sí**, más el registro de la app en App Store Connect | Todo. Hasta 100 testers por Apple ID, sin review para el grupo interno |
+
+**Plan para esta semana**, dado que la cuenta todavía no está:
+
+1. **Hoy, gratis:** Expo Go en el iPhone para mirar diseño y recorrido. Si hay
+   una Mac a mano, además `eas build -p ios --profile preview-simulador-ios`,
+   que ya da la app compilada.
+2. **En paralelo:** sacar la cuenta de Apple Developer. La aprobación suele
+   tardar 24–48 h; la modalidad **individual** es la rápida, la de *organización*
+   pide número D-U-N-S y puede sumar días. Es el camino crítico de todo lo iOS.
+3. **Cuando la cuenta esté activa:** `eas build -p ios --profile production` →
+   `eas submit -p ios` → grupo interno de TestFlight. El bundle id ya está
+   definido, así que ese paso no vuelve a discutirse.
+
+Mientras tanto, **todo el testeo serio arranca por Android**: es donde se puede
+instalar hoy, gratis y en cualquier teléfono.
 
 ### Costos EAS
 
-- **Free**: 30 builds Android/mes — alcanza para Fase 1-2
-- **Production** ($29/mes): ilimitado + cola prioritaria — desde Fase 3 conviene
+El plan gratuito tiene un tope mensual de builds y cola compartida (una build
+puede esperar bastante en hora pico). Alcanza de sobra para esta etapa; el plan
+pago se justifica recién cuando la espera moleste o el tope se quede corto.
+Conviene mirar el precio actual en el dashboard antes de decidir, que cambia.
 
 ---
 

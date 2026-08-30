@@ -1,24 +1,25 @@
 {
   "expo": {
-    "name": "client-app",
-    "slug": "client-app",
+    "name": "AME esencial",
+    "slug": "ame-esencial",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "clientapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "ameesencial",
+    "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "com.ameesencial.app",
       "icon": "./assets/expo.icon"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F2ECE6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.clientapp"
+      "package": "com.ameesencial.app"
     },
     "web": {
       "output": "static",
@@ -29,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F2ECE6",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

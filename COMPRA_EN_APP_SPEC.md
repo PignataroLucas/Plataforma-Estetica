@@ -76,7 +76,6 @@ El catálogo de la app ya está construido; esto es lo que lo convierte en venta
 - **El ensayo del OAuth contra la demo**: desinstalar y reinstalar la app,
   que es lo que hace disparar el callback con un código real y el webhook de
   borrado. Ojo: reinstalar emite un token nuevo y mata el de desarrollo.
-- **El total del envío en la pantalla de confirmación** de la app (6.1).
 
 ### El dato que manda sobre la arquitectura
 
@@ -367,6 +366,31 @@ que ocultar el botón, no fallar al tocarlo.
 > `tiendanube_variant_id` identifica cuál unidad cuando el producto tiene más de
 > una. El emparejador escribe ambos.
 
+> **Mejorado el 30/08/2026: el emparejador ya no depende solo del nombre.**
+> Ahora mira, en este orden:
+>
+> 1. **SKU exacto.** Es certeza, no parecido: dos productos con el mismo SKU son
+>    el mismo producto, sin importar cómo esté escrito el nombre de cada lado.
+>    Estos no pasan por similitud ni por el testigo del precio. El SKU **ya se
+>    leía de Tienda Nube y no se usaba** — se imprimía en el reporte de dudosos y
+>    nada más. Un SKU repetido del otro lado no se usa: si el identificador que
+>    debía ser único aparece dos veces, elegir uno es adivinar.
+> 2. **Nombre**, con los mismos dos escalones de siempre.
+> 3. **El precio como testigo.** No empareja: solo desconfía. Un match que
+>    convence por nombre pero cuyo precio difiere más del 50% baja a decisión
+>    humana. La tolerancia es amplia a propósito, porque los precios se desfasan
+>    solos (§6.2) y en Tienda Nube puede haber una promoción; solo tiene que
+>    atajar disparates. **Nunca frena un match por SKU.**
+>
+> Probado contra la tienda de demostración: **pasó de 4 a 5 emparejamientos**, y
+> el quinto es el que el nombre no podía resolver —`Bruma Hidratante Y Calmante
+> - 150 ML` contra `Bruma Descongestiva x150ml`—, unidos por SKU. El reporte
+> ahora distingue `SKU` de `100%`: una coincidencia de identificador y un
+> parecido perfecto de nombre no valen lo mismo para quien revisa la lista.
+>
+> Esto importa sobre todo para el catálogo real de AME, donde los nombres de los
+> dos lados casi nunca coinciden palabra por palabra.
+
 ### 5.3 Emisión de cupones
 
 Un modelo nuevo, `CuponApp`, con: código, clienta, porcentaje, fecha de emisión,
@@ -609,7 +633,8 @@ precio con el descuento que **el backend va a materializar como cupón**, no un
 > O sea que la pantalla de confirmación de la app afirma un total que no puede
 > conocer, y que siempre va a ser **menor** que el real. Lo correcto es no
 > afirmar ningún número: el detalle con el total verdadero se lo manda Tienda
-> Nube por mail igual. **Sin resolver.**
+> Nube por mail igual. **Resuelto el 30/08/2026:** la pantalla de confirmación
+> ya no muestra ningún monto.
 
 ### 6.2 El retraso del sync sobre el precio base
 
