@@ -31,6 +31,12 @@ interface AuthState {
   access: string | null;
   refresh: string | null;
   usuario: Perfil | null;
+  /**
+   * Recién entró por login o registro y todavía se está mostrando la pantalla
+   * de transición. No lo enciende `hydrate`: al abrir la app con sesión guardada
+   * ya hay un splash, y encadenar dos pantallas de marca sería redundante.
+   */
+  entrando: boolean;
 
   /** Carga los tokens persistidos y valida la sesión trayendo el perfil. */
   hydrate: () => Promise<void>;
@@ -46,6 +52,8 @@ interface AuthState {
   setUsuario: (usuario: Perfil) => void;
   /** Cierra sesión y limpia el almacenamiento. */
   logout: () => Promise<void>;
+  /** La pantalla de transición terminó: se puede mostrar la app. */
+  terminarEntrada: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -53,6 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   access: null,
   refresh: null,
   usuario: null,
+  entrando: false,
 
   hydrate: async () => {
     const [access, refresh] = await Promise.all([getItem(ACCESS_KEY), getItem(REFRESH_KEY)]);
@@ -92,6 +101,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       access: auth.access,
       refresh: auth.refresh,
       usuario: auth.usuario,
+      entrando: true,
     });
   },
 
@@ -101,6 +111,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setUsuario: (usuario) => set({ usuario }),
+
+  terminarEntrada: () => set({ entrando: false }),
 
   logout: async () => {
     // Antes que nada: la baja del dispositivo push necesita el token que estamos
@@ -112,7 +124,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // y deja el access en null), después se limpia el cache. Al revés queda una
     // ventana —el await a SecureStore— con las pantallas vivas y el token válido,
     // donde un refetch volvería a cachear datos de la cuenta que se está yendo.
-    set({ status: 'unauthenticated', access: null, refresh: null, usuario: null });
+    set({
+      status: 'unauthenticated',
+      access: null,
+      refresh: null,
+      usuario: null,
+      // Si se cierra sesión con la transición en pantalla, queda colgada tapando
+      // la app: no hay nada detrás a lo que dar paso.
+      entrando: false,
+    });
     limpiarCacheDeDatos();
     // El carrito vive en memoria: sin esto, la próxima clienta que entre en este
     // teléfono se encuentra con el pedido de la anterior.

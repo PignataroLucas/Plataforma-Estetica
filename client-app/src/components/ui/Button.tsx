@@ -1,10 +1,11 @@
-import { ActivityIndicator, Pressable, PressableProps, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme/ame';
 
 import { AppText } from './AppText';
+import { Presionable, type PresionableProps } from './Presionable';
 
-interface ButtonProps extends Omit<PressableProps, 'children'> {
+interface ButtonProps extends Omit<PresionableProps, 'children'> {
   label: string;
   variant?: 'primary' | 'ghost';
   loading?: boolean;
@@ -22,17 +23,11 @@ export function Button({
   const isDisabled = disabled || loading;
 
   return (
-    <Pressable
+    <Presionable
       accessibilityRole="button"
       accessibilityState={{ disabled: !!isDisabled, busy: loading }}
       disabled={isDisabled}
-      style={(state) => [
-        styles.base,
-        isGhost ? styles.ghost : styles.primary,
-        state.pressed && styles.pressed,
-        isDisabled && styles.disabled,
-        typeof style === 'function' ? style(state) : style,
-      ]}
+      style={[styles.base, isGhost ? styles.ghost : styles.primary, isDisabled && styles.disabled, style]}
       {...rest}>
       <View style={styles.inner}>
         {loading ? (
@@ -43,7 +38,7 @@ export function Button({
           </AppText>
         )}
       </View>
-    </Pressable>
+    </Presionable>
   );
 }
 
@@ -58,6 +53,5 @@ const styles = StyleSheet.create({
   inner: { minHeight: 18, justifyContent: 'center' },
   primary: { backgroundColor: colors.ink },
   ghost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.line },
-  pressed: { opacity: 0.85 },
   disabled: { opacity: 0.5 },
 });

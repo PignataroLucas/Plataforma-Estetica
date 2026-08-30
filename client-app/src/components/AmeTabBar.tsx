@@ -2,10 +2,11 @@ import { Feather } from '@expo/vector-icons';
 // expo-router vendoriza React Navigation: el tipo sale de acá y no del paquete
 // `@react-navigation/bottom-tabs`, que este stack no tiene como dependencia.
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
+import { Presionable } from '@/components/ui/Presionable';
 import { colors, radius, spacing } from '@/theme/ame';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -35,22 +36,22 @@ export function AmeTabBar({ state, navigation }: BottomTabBarProps) {
 
         if (cfg.central) {
           return (
-            <Pressable key={route.key} style={styles.centralItem} onPress={onPress}>
+            <Presionable key={route.key} style={styles.centralItem} onPress={onPress}>
               <View style={styles.plus}>
                 <Feather name={cfg.icon} size={20} color={colors.onDark} />
               </View>
               <AppText style={styles.centralLabel}>{cfg.label}</AppText>
-            </Pressable>
+            </Presionable>
           );
         }
 
         return (
-          <Pressable key={route.key} style={styles.item} onPress={onPress}>
+          <Presionable key={route.key} style={styles.item} onPress={onPress}>
             <Feather name={cfg.icon} size={20} color={focused ? colors.ink : colors.muted} />
             <AppText style={[styles.label, { color: focused ? colors.ink : colors.muted }]}>
               {cfg.label}
             </AppText>
-          </Pressable>
+          </Presionable>
         );
       })}
     </View>

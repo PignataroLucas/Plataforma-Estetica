@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
+import { Presionable } from '@/components/ui/Presionable';
 import { colors, radius, spacing } from '@/theme/ame';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -35,20 +36,16 @@ export function CategoryGrid({ categorias }: Props) {
   return (
     <View style={styles.grid}>
       {categorias.map((nombre, i) => (
-        <Pressable
+        <Presionable
           key={nombre}
           accessibilityRole="button"
           onPress={() => router.push({ pathname: '/servicios', params: { categoria: nombre } })}
-          style={({ pressed }) => [
-            styles.cell,
-            { backgroundColor: FONDOS[i % FONDOS.length] },
-            pressed && styles.presionada,
-          ]}>
+          style={[styles.cell, { backgroundColor: FONDOS[i % FONDOS.length] }]}>
           <Feather name={iconoDe(nombre)} size={22} color={colors.ink} />
           <AppText variant="body" style={styles.label} numberOfLines={1}>
             {nombre}
           </AppText>
-        </Pressable>
+        </Presionable>
       ))}
     </View>
   );
@@ -70,6 +67,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  presionada: { opacity: 0.75 },
   label: { fontSize: 12 },
 });
