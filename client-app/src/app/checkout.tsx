@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -13,26 +13,39 @@ import { prepararCompra } from '@/services/compra';
 import { useCarritoStore } from '@/stores/carrito';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { CompraPreparada } from '@/types/api';
-import { formatPrecio } from '@/utils/format';
-import { aNumero } from '@/utils/precios';
+import { aNumero, formatPorcentaje } from '@/utils/precios';
 
 /**
  * Trozos de URL que indican que Tienda Nube terminó la compra.
  *
- * **Sin verificar contra una compra real**: no se puede llegar acá sin pagar.
- * Es lo primero a confirmar en la prueba end-to-end del §9. Si no matchea, la
- * clienta ve la página de gracias de Tienda Nube en vez de la nuestra — feo,
- * pero no rompe la compra, que ya está hecha.
+ * **Verificado con una compra real el 30/08/2026**: el retorno se detectó y la
+ * clienta vio la confirmación de AME, no la página de gracias de Tienda Nube.
+ *
+ * Lo que falta saber es **cuál de las tres matcheó**. Las otras dos siguen
+ * siendo adivinanzas, y una adivinanza de más es peor que de menos: si alguna
+ * matchea una URL intermedia del checkout, el WebView se cierra antes de que la
+ * clienta pague. Con el dato de una compra hay que dejar solo la buena.
  */
 const URLS_DE_EXITO = ['/checkout/v3/success', '/success', '/gracias'];
 
 /**
- * Cuánto se espera al cupón antes de pedirle a la clienta que lo pegue.
+ * Red de contención, no el camino normal.
  *
- * Generoso a propósito: el script reintenta hasta tres veces, y mostrar el
- * cartel mientras todavía está por aplicarse es peor que esperar un poco más.
+ * Lo que decide es el mensaje del script: `cupon-ok` o `cupon-falló`. Este
+ * temporizador solo cubre el caso de que el script muera sin avisar.
+ *
+ * **Tiene que ser más largo que el presupuesto del script**, o la app se rinde
+ * mientras el script todavía está trabajando y le muestra el código a una
+ * clienta a la que el cupón se le iba a aplicar solo. Ese presupuesto es
+ * grande: 15 s para encontrar el link, 8 para el campo y 10 para verificar,
+ * por hasta tres intentos.
+ *
+ * Medido en el emulador: una compra normal tarda **unos 18 segundos** desde
+ * "Comprar" hasta el cupón aplicado —dos cargas de página, un pedido por
+ * producto y el arranque del checkout de Tienda Nube—. Con los 20 s que había
+ * antes, el margen era de dos segundos.
  */
-const ESPERA_CUPON_MS = 20000;
+const ESPERA_CUPON_MS = 45000;
 
 /**
  * Checkout de Tienda Nube, dentro del marco de AME.
@@ -60,10 +73,6 @@ export default function CheckoutScreen() {
   const [pasoFallido, setPasoFallido] = useState<string | null>(null);
   const [listo, setListo] = useState(false);
 
-  // El carrito se vacía al confirmar, pero el pedido preparado tiene que
-  // sobrevivir a eso para poder mostrar el total en la confirmación.
-  const pedido = useRef<CompraPreparada | null>(null);
-
   useEffect(() => {
     let cancelado = false;
     const lineas = items.map((i) => ({ producto: i.productoId, cantidad: i.cantidad }));
@@ -71,7 +80,6 @@ export default function CheckoutScreen() {
     prepararCompra(lineas, centroId)
       .then((datos) => {
         if (cancelado) return;
-        pedido.current = datos;
         setCompra(datos);
       })
       .catch((e) => {
@@ -136,7 +144,7 @@ export default function CheckoutScreen() {
     else router.replace('/tienda');
   };
 
-  if (listo) return <Confirmacion total={pedido.current?.total} />;
+  if (listo) return <Confirmacion />;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -166,11 +174,24 @@ export default function CheckoutScreen() {
         </View>
       ) : (
         <>
+          {/*
+            El WebView se monta y trabaja detrás de esta cortina. Sin ella, la
+            clienta ve el total SIN descuento durante los segundos que tarda
+            aplicar el cupón —el checkout de TN carga, el script busca el campo,
+            escribe y confirma— y después lo ve bajar solo. Es una versión suave
+            del §6.1: mostrarle un precio que no es el que va a pagar. Acá baja,
+            así que no pierde la venta, pero la acostumbra a ver el número alto
+            primero, y el día que el cupón falle no va a notar que no bajó.
+
+            Se levanta cuando el descuento está aplicado, o cuando se agota la
+            espera y hay que mostrarle el código para que lo pegue a mano. Nunca
+            queda trabada: el temporizador de `pedirCupon` la destapa igual.
+          */}
           {pedirCupon && compra.cupon ? (
             <View style={styles.aviso}>
               <AppText variant="meta" style={styles.avisoTxt}>
                 Ingresá este código en “Agregar cupón de descuento” para tu{' '}
-                {compra.cupon.porcentaje}% off:
+                {formatPorcentaje(aNumero(compra.cupon.porcentaje))} off:
               </AppText>
               <Pressable onPress={copiar} style={styles.codigo} accessibilityRole="button">
                 <AppText variant="price" style={styles.codigoTxt}>
@@ -184,7 +205,17 @@ export default function CheckoutScreen() {
             </View>
           ) : null}
 
-          <Tienda compra={compra} onMessage={onMessage} onNavegacion={onNavegacion} />
+          {/*
+            El WebView va dentro de un contenedor propio para que la cortina
+            pueda taparlo sin desmontarlo: tiene que seguir cargando, agregando
+            al carrito y aplicando el cupón por detrás.
+          */}
+          <View style={styles.lienzo}>
+            <Tienda compra={compra} onMessage={onMessage} onNavegacion={onNavegacion} />
+            {compra.cupon && !cuponAplicado && !pedirCupon ? (
+              <Preparando porcentaje={compra.cupon.porcentaje} />
+            ) : null}
+          </View>
         </>
       )}
     </SafeAreaView>
@@ -229,15 +260,49 @@ function Tienda({
   );
 }
 
-function Confirmacion({ total }: { total?: string }) {
+/**
+ * La cortina que tapa el checkout mientras se aplica el cupón.
+ *
+ * Dice el porcentaje a propósito: convierte una espera muda en una promesa
+ * concreta, y cuando se levanta la clienta ya sabe qué número tiene que ver.
+ *
+ * Los segundos que tapa son inherentes al camino, no un defecto que se pueda
+ * optimizar: son dos cargas de página, un pedido por producto —Tienda Nube
+ * descarta los que van juntos—, el arranque de su checkout, y recién ahí la
+ * escritura del cupón.
+ */
+function Preparando({ porcentaje }: { porcentaje: string }) {
+  return (
+    <View style={styles.cortina}>
+      <ActivityIndicator color={colors.muted} />
+      <AppText variant="section">Preparando tu compra</AppText>
+      <AppText variant="body" color={colors.muted} style={styles.centrado}>
+        Estamos aplicando tu {formatPorcentaje(aNumero(porcentaje))} de descuento.
+      </AppText>
+    </View>
+  );
+}
+
+/**
+ * Sin monto, y es a propósito.
+ *
+ * Acá se mostraba el total que calculó el backend al preparar la compra, y ese
+ * número **no incluye el envío**: la clienta lo elige adentro del WebView,
+ * después. En la primera compra real la app dijo $10.625 y Tienda Nube cobró
+ * $10.675 (§6.1).
+ *
+ * Afirmar un número que no controlamos es peor que no afirmar ninguno, sobre
+ * todo cuando el nuestro siempre va a ser **menor** que el verdadero. El
+ * detalle con el total real se lo manda Tienda Nube por mail igual.
+ */
+function Confirmacion() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.centro}>
         <Feather name="check-circle" size={40} color={colors.ink} />
         <AppText variant="title">¡Listo!</AppText>
         <AppText variant="body" style={styles.centrado}>
-          Recibimos tu compra{total ? ` por ${formatPrecio(aNumero(total))}` : ''}. Te
-          llega el detalle por mail.
+          Recibimos tu compra. Te llega el detalle por mail.
         </AppText>
         <Button label="Volver a la tienda" onPress={() => router.replace('/tienda')} />
       </View>
@@ -409,6 +474,24 @@ const styles = StyleSheet.create({
   },
   centrado: { textAlign: 'center', lineHeight: 20 },
   web: { flex: 1 },
+
+  // El WebView y su cortina comparten este espacio; la cortina va encima.
+  lienzo: { flex: 1 },
+  cortina: {
+    // Escrito a mano en vez de `absoluteFill`: los tipos de esta versión no
+    // exponen `absoluteFillObject`, y cuatro propiedades no ameritan la duda.
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    // Opaco, no translúcido: la idea es que el precio de atrás no se vea.
+    backgroundColor: colors.ivory,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
 
   aviso: {
     marginHorizontal: spacing.xl,

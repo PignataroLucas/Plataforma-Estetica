@@ -17,6 +17,7 @@ import TopClientsTable from '../components/analytics/dashboard/TopClientsTable';
 import LTVDistributionChart from '../components/analytics/dashboard/LTVDistributionChart';
 import SeasonalTrendsChart from '../components/analytics/dashboard/SeasonalTrendsChart';
 import InventoryRotationChart from '../components/analytics/dashboard/InventoryRotationChart';
+import VentasAppSection from '../components/analytics/dashboard/VentasAppSection';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<{
@@ -28,7 +29,7 @@ export default function AnalyticsPage() {
     endDate: '',
   });
 
-  const { summary, revenue, services, products, employees, clients, ocupacion, seasonalTrends, loading, error } =
+  const { summary, revenue, services, products, employees, clients, ocupacion, seasonalTrends, ventasApp, loading, error } =
     useAnalytics(dateRange);
 
   if (error) {
@@ -203,6 +204,9 @@ export default function AnalyticsPage() {
                 loading={loading}
               />
             </div>
+
+            {/* Ventas desde la app de las clientas (§5.7) */}
+            <VentasAppSection data={ventasApp} loading={loading} />
 
             {/* Top Clients */}
             <TopClientsTable
