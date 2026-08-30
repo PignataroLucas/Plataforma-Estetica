@@ -1,8 +1,99 @@
 # App Mobile Cliente - Roadmap de Implementación
 
 **Fecha de creación**: Abril 2026
-**Estado**: Planificación
+**Última actualización**: 30/08/2026
+**Estado**: Fases 1 y 2 construidas y verificadas en producción. Fase 0 salteada
+por decisión. Fases 3 y 4 pendientes — ver la sección 0.
 **Supersedes parcialmente**: `CLIENTE_APP_ROADMAP.md` (web app, estrategia diferente)
+
+---
+
+## 0. Estado al 30/08/2026
+
+> Esta sección es la verdad; el resto del documento es el plan de abril y se
+> conserva porque explica **por qué** cada cosa es como es. Donde los dos se
+> contradigan, mandá esta.
+
+### Lo que está funcionando en producción
+
+El 30/08/2026 la app corrió en un teléfono contra el backend de producción, con
+una cuenta vinculada por código de invitación a una ficha real de AME, mostrando
+turnos y datos reales del CRM.
+
+**Backend** — `public_api` (catálogo) y `client_api` (14 endpoints: auth,
+perfil, rutina, descuento, compra, turnos, disponibilidad, push, preferencias).
+Vinculación de cuentas por código de invitación, auto-match por teléfono+email y
+auto-registro. Compra con cupón contra Tienda Nube. Analytics de ventas de la
+app en el CRM. Suite en verde.
+
+**App** (`client-app/`, Expo SDK 57) — 15 rutas. Bienvenida, login, registro y
+código de invitación; catálogo y ficha de producto; carrito y checkout en
+WebView; turnos con reserva, cancelación e historial; mi rutina; perfil con
+preferencias de avisos. Sistema de diseño propio derivado del manual de marca.
+
+**Distribución** — proyecto EAS `@lucaspignataro/ame-esencial`, identidad
+`com.ameesencial.app`, cuatro perfiles de build, EAS Update con política
+`fingerprint`, y un workflow manual en GitHub Actions.
+
+### Lo que falta para repartir a las primeras testers
+
+En orden de lo que más duele:
+
+1. **Credenciales de FCM** (`google-services.json` por `eas credentials`). Sin
+   esto el push está construido de punta a punta y no llega ninguna
+   notificación. Es lo único que queda del circuito.
+2. **El logo real.** Los íconos de hoy son provisorios, generados con Cormorant.
+   Cuando llegue se reemplazan cinco archivos y `app.json` no se toca.
+3. **Recuperar contraseña.** No existe ni la pantalla ni el endpoint, y el
+   backend **no tiene ningún proveedor de email configurado** — no hay `EMAIL_*`
+   en settings y WhatsApp está caído. La primera tester que se olvide la
+   contraseña queda afuera. Requiere elegir proveedor (Resend, SendGrid, SES).
+
+### Decisiones de negocio que bloquean valor, no código
+
+Ninguna la puede resolver el equipo técnico, y las tres cambian lo que la app
+vale para una clienta:
+
+- **¿El descuento de la app se apila con el 10% de transferencia?** Mientras no
+  se responda, el segmento general queda en 0% y **la app no descuenta nada**,
+  que era el motivo del proyecto. Se puede medir en vez de preguntar: ver
+  `COMPRA_EN_APP_SPEC.md` §7.2.
+- **Instalar la app en la tienda real de AME**, bloqueado por la pregunta al
+  panel de partners sobre si una app "en desarrollo" se puede instalar en una
+  tienda real. Hasta que pase, ningún producto tiene variante mapeada, `comprable`
+  da `false` y **no se puede comprar desde la app**.
+- **¿Las ofertas del CRM existen también en Tienda Nube?** Si no, la app muestra
+  un precio que el checkout no respeta. Hoy no muerde porque no hay ofertas
+  activas.
+
+### Lo que sigue, en features
+
+- **Motor de recompra** (Fase 3). Es lo próximo con mayor retorno y los datos ya
+  están: `Producto` tiene `duracion_estimada_dias`, `pao_meses`, `contenido_ml` y
+  `frecuencia_uso`, que es exactamente lo que come el algoritmo. Falta el cálculo,
+  el Celery beat y el push con deep link.
+- **Historial de compras y editar perfil.** Hoy Perfil solo muestra centros y
+  cierra sesión. El `PATCH` de perfil ya existe en el backend pero solo admite
+  nombre y apellido; historial no tiene endpoint.
+- **Multi-centro de verdad.** `useCentroActivo` usa la primera vinculación; el
+  modelo ya soporta varias. Es un solo punto a cambiar.
+- **Vinculación por QR**, que evita dictar el código. Requiere `expo-camera`.
+- **Puntos y referidos** (Fase 3), sin modelos todavía.
+
+### Deuda técnica anotada, ninguna urgente
+
+- `cache_page` cachea por URL y no por usuario en las vistas viejas de analytics:
+  una llamada sin `sucursal_id` deja los números del primer centro cacheados para
+  el siguiente.
+- El job `check-low-inventory` del `beat_schedule` apunta a `apps.inventario.tasks`,
+  que no existe. Nunca corrió. Hay un test que falla el día que alguien lo escriba.
+- El blacklist de JWT está configurado pero **inerte**: falta
+  `rest_framework_simplejwt.token_blacklist` en `INSTALLED_APPS`, así que no hay
+  revocación de sesiones del lado del servidor.
+- El admin de Django **no filtra por centro** (ningún `get_queryset` en 23
+  ModelAdmin). Hoy no filtra datos porque ningún usuario de centro tiene
+  `is_staff` y nada en el código se lo asigna, pero es un invariante tácito.
+- Dos errores de lint abiertos en `reservar.tsx` (`set-state-in-effect`).
 
 ---
 
@@ -44,26 +135,37 @@ El centro de estética AME (cliente piloto) tiene dos problemas:
 
 ### Mobile (Expo + React Native)
 
+Lo que está instalado de verdad, al 30/08/2026. La tabla original de abril
+pedía bastante más; abajo está lo que se descartó y por qué.
+
 | Capa | Librería | Rol |
 |------|----------|-----|
-| Framework | **Expo SDK 52+** | Builds, OTA, EAS |
-| Lenguaje | TypeScript | Tipos compartidos con admin |
-| Routing | Expo Router v4 | File-based, deep linking |
-| Estilos | NativeWind v4 | Tailwind en RN |
-| Animaciones | Reanimated 3 + Moti | 60fps en UI thread |
-| Gestos | React Native Gesture Handler | Nativo, sin bridge |
-| Efectos visuales | React Native Skia | Blurs, gradientes premium |
-| Estado servidor | TanStack Query | Cache + refetch |
-| Estado global | Zustand | Auth, carrito |
-| Forms | React Hook Form + Zod | Validación tipada |
-| Imágenes | Expo Image | Cache + blur hash |
-| Fuentes | expo-font (Inter + Fraunces display) | Look premium |
-| Bottom sheets | @gorhom/bottom-sheet | UX moderna |
-| Haptics | expo-haptics | Feedback táctil en acciones clave |
-| Push | expo-notifications | APNs + FCM unificado |
-| Pagos | MercadoPago Checkout Pro (WebView) | MVP — evita KYC nativo |
-| Errores | Sentry | Crash reporting |
-| Analytics | PostHog | Embudos, retention, feature flags |
+| Framework | **Expo SDK 57** | Builds, OTA, EAS |
+| Lenguaje | TypeScript | Tipos espejados a mano desde los serializers |
+| Routing | Expo Router 57 | File-based, deep linking desde los push |
+| Estilos | **Theme tipado propio** (`src/theme/ame.ts`) | Paleta, tipografía, spacing y radios del manual de marca |
+| Animaciones | Reanimated 4 | |
+| Gestos | React Native Gesture Handler | |
+| Estado servidor | TanStack Query 5 | Cache + invalidación desde los avisos |
+| Estado global | Zustand 5 | Sesión y carrito |
+| Imágenes | Expo Image | Cache + miniaturas WebP del backend |
+| Fuentes | **Cormorant Garamond + Inter** | Reemplazos libres de Roseritta y Optima |
+| Push | expo-notifications | Canal por categoría en Android |
+| WebView | react-native-webview | El checkout de Tienda Nube vive acá |
+| Pagos | **Ninguno en la app** | Cobra Tienda Nube; la app aplica un cupón |
+| OTA | expo-updates | Política de runtime `fingerprint` |
+| Sesión | expo-secure-store | Tokens JWT |
+
+**Planeado y no usado:** NativeWind (se prefirió un theme tipado, sin build step
+extra), Skia y Moti (no hizo falta), React Hook Form + Zod (los formularios son
+chicos y validan a mano), `@gorhom/bottom-sheet`, expo-haptics, y MercadoPago
+—reemplazado por el checkout de Tienda Nube, ver la decisión 5 de la sección 7—.
+
+**Planeado y todavía pendiente:** **Sentry** (hoy un crash en el teléfono de una
+tester es invisible) y **PostHog**. Los dos siguen teniendo sentido.
+
+> Quedaron además tres dependencias de la plantilla que no usa nadie: `@expo/ui`,
+> `expo-glass-effect` y `expo-symbols`. Se pueden sacar.
 
 ### Backend (extensiones sobre Django existente)
 
@@ -71,13 +173,13 @@ El centro de estética AME (cliente piloto) tiene dos problemas:
 |-------------|-----------|-----|
 | App `public_api` | `backend/apps/public_api/` | Endpoints sin auth (info centro, catálogo público) |
 | App `client_api` | `backend/apps/client_api/` | Endpoints para clientes autenticados |
-| App `fidelidad` | `backend/apps/fidelidad/` | Puntos, canjes, referidos |
-| App `rutinas` | `backend/apps/rutinas/` | Rutinas de cuidado personalizadas |
+| ~~App `fidelidad`~~ | — | **No existe.** Puntos y referidos siguen sin construirse (Fase 3) |
+| ~~App `rutinas`~~ | `backend/apps/clientes/models.py` | **Resuelto distinto:** `PlanTratamiento`, `RutinaCuidado` y `RutinaItem` viven en `clientes`, sin app propia |
 | Extensiones a `Producto` | Modelo existente | `duracion_estimada_dias`, `pao_meses`, `contenido_ml`, `frecuencia_uso` |
 | Modelo `UsuarioCliente` | `backend/apps/clientes/` | Auth separada del `Usuario` (staff) |
 | Modelo `VinculacionCliente` | `backend/apps/clientes/` | M2M entre `UsuarioCliente` y `Cliente` |
 | Modelo `CodigoInvitacion` | `backend/apps/clientes/` | Códigos únicos para vinculación privada |
-| Job Celery `predecir_recompras` | `backend/apps/fidelidad/tasks.py` | Cálculo diario + disparo de push |
+| Job Celery `predecir_recompras` | (pendiente) | Cálculo diario + disparo de push — **Fase 3, sin empezar** |
 | Expo Push integration | `backend/apps/notificaciones/push.py` | Envío multi-plataforma |
 
 ### Infraestructura
@@ -176,7 +278,17 @@ class CodigoInvitacion(models.Model):
 
 ## 4. Roadmap por fases
 
+> Las casillas de abajo son el plan de abril y **nunca se marcaron**: el estado
+> real de cada fase está en el bloque que sigue a su título, y el resumen
+> completo en la sección 0. Se conservan sin tocar porque el detalle de cada
+> entregable sigue siendo útil, aunque algunos se hayan resuelto distinto.
+
 ### ⚠️ Fase 0 — Validación sin app (2-3 semanas) — NO SALTEAR
+
+> **SALTEADA por decisión.** Se arrancó directo en Fase 1 porque la integración
+> de WhatsApp/Twilio, sobre la que se apoyaba casi toda esta fase, estaba caída.
+> Ninguno de sus entregables se hizo, y **el riesgo que señalaba sigue vigente**:
+> se construyó sobre una hipótesis de retención que no se validó antes.
 
 Implementar sobre el admin existente las palancas baratas para medir si hay señal real antes de invertir en la app.
 
@@ -214,6 +326,12 @@ Implementar sobre el admin existente las palancas baratas para medir si hay señ
 ---
 
 ### Fase 1 — Fundaciones de backend (2 semanas)
+
+> **HECHA, completa.** `public_api` y `client_api` en producción, los tres
+> modelos de vinculación, las cuatro extensiones a `Producto` que alimentan el
+> motor de recompra, y Expo Push de punta a punta. Única diferencia: los códigos
+> de invitación se generan con una **acción del admin de Django**, no con un
+> botón en el CRM.
 
 **Objetivo**: preparar la infraestructura para que la app pueda existir.
 
@@ -255,6 +373,17 @@ Implementar sobre el admin existente las palancas baratas para medir si hay señ
 
 ### Fase 2 — Mobile MVP (4 semanas)
 
+> **HECHA, con cuatro desvíos.** La app está en producción y verificada en un
+> teléfono. Lo que se resolvió distinto:
+>
+> - **El checkout no es MercadoPago.** Se usa el de Tienda Nube con un cupón por
+>   compra. Es el cambio de arquitectura más grande respecto de este plan y tiene
+>   su propio documento: `COMPRA_EN_APP_SPEC.md`.
+> - **No se usó NativeWind.** El sistema de diseño es un theme tipado propio
+>   (`src/theme/ame.ts`) derivado del manual de marca.
+> - **No hay Sentry** ni QR scanner para vincular.
+> - **No hay historial de compras** ni edición de perfil.
+
 **Objetivo**: primera versión funcional de la app con e-commerce y auth.
 
 **Semana 1 — Setup y sistema de diseño**
@@ -293,6 +422,12 @@ Implementar sobre el admin existente las palancas baratas para medir si hay señ
 
 ### Fase 3 — Motor de recompra y fidelidad (3 semanas)
 
+> **NO EMPEZADA. Es lo próximo con mayor retorno.** Los datos que come el
+> algoritmo ya están cargados en `Producto` desde la Fase 1
+> (`duracion_estimada_dias`, `pao_meses`, `contenido_ml`, `frecuencia_uso`):
+> falta el cálculo, el Celery beat y el push con deep link. Puntos y referidos no
+> tienen modelos todavía.
+
 **Objetivo**: el diferencial real que justifica la app.
 
 **Semana 1 — Motor de recompra**
@@ -320,6 +455,11 @@ Implementar sobre el admin existente las palancas baratas para medir si hay señ
 ---
 
 ### Fase 4 — Cross-sell, contenido y pulido (2 semanas)
+
+> **PARCIAL, y adelantada.** Las rutinas ya existen (`PlanTratamiento`,
+> `RutinaCuidado`, `RutinaItem`) y la app las muestra en "Mi rutina". Faltan el
+> feed de contenido, las valoraciones de servicios y los push segmentados de
+> producto a servicio.
 
 **Objetivo**: features que elevan engagement y conversión a servicios.
 
@@ -572,33 +712,48 @@ incluido, un build de Android medium sale US$1.
 
 ---
 
-## 7. Decisiones pendientes antes de arrancar
+## 7. Decisiones
 
-Estas definiciones cambian arquitectura, resolverlas con el cliente antes de código:
+Actualizado el 30/08/2026. Las seis de abril están resueltas salvo una.
 
-1. **¿Fase 0 sí o no?**
-   - Recomendación fuerte: sí
-   - Si no, arrancar directo en Fase 1 — pero asumir riesgo de construir sobre problema no validado
+### Tomadas
 
-2. **Identidad multi-centro**
-   - ¿`UsuarioCliente` puede pertenecer a múltiples centros o uno solo?
-   - Recomendación: M2M (Argentina/LatAm es común ser cliente de varios spas)
+1. **Fase 0** → **salteada.** WhatsApp/Twilio estaba caído y casi toda la fase
+   dependía de eso. Se asumió el riesgo a conciencia.
+2. **Identidad multi-centro** → **M2M**, como recomendaba. `VinculacionCliente`
+   admite varias fichas por cuenta. La app todavía usa la primera
+   (`useCentroActivo`), que es el único punto a cambiar el día que haga falta.
+3. **Centro piloto** → **AME**, confirmado y en producción.
+4. **Diseñador de producto** → **no se contrató.** El sistema se derivó del
+   manual de marca existente, con Cormorant Garamond e Inter como reemplazos
+   libres de Roseritta y Optima, que no son cross-platform.
+5. **Gateway de pago** → **ninguno.** Cambió de raíz: no se cobra en la app. Se
+   usa el checkout de Tienda Nube con un cupón por compra, así el centro cobra
+   por donde ya cobra y la plataforma no toca dinero ni datos de tarjeta. El
+   panel de la tienda demo mostró un costo por transacción del 2% para medios de
+   pago personalizados, lo que terminó de cerrar la decisión. Todo el detalle en
+   `COMPRA_EN_APP_SPEC.md` §3.1.
 
-3. **Centro piloto**
-   - ¿AME Banfield es definitivo? ¿Hay acuerdo con el dueño?
-   - Necesitamos datos reales para diseñar sistema de puntos y rutinas
+### Abierta
 
-4. **Política de seña para turnos online**
-   - ¿Reserva libre o seña obligatoria?
-   - Impacto directo en no-shows
+6. **Política de seña para turnos online.** Sigue sin definirse. Hoy la app
+   **reserva sin seña**, que es la opción permisiva: si el centro quiere seña
+   obligatoria, hay que tocar el flujo de reserva y sumar un medio de cobro, que
+   es justo lo que la decisión 5 evitó. Impacto directo sobre los no-shows.
 
-5. **Diseñador de producto**
-   - ¿Contratamos diseñador freelance 2 semanas para sistema en Figma?
-   - Muy recomendable — app de belleza sin diseño premium fracasa
+### Nuevas, que aparecieron construyendo
 
-6. **Gateway de pago definitivo**
-   - Roadmap dice: MercadoPago primero, MODO después
-   - Confirmar con cliente modelo: ¿cuenta del centro o plataforma?
+Ninguna es técnica; las tres las tiene que responder el centro o Tienda Nube, y
+están detalladas en la sección 0 y en `COMPRA_EN_APP_SPEC.md` §7:
+
+- Si el descuento de la app se apila con el 10% de transferencia. **Mientras no
+  se responda, la app no descuenta nada.**
+- Si se puede instalar una app "en desarrollo" en la tienda real de AME. **Hasta
+  que se resuelva, no se puede comprar desde la app.**
+- Si las ofertas del CRM existen también en Tienda Nube.
+
+Y una que sí es nuestra: **qué proveedor de email** se usa para recuperar
+contraseña. El backend no tiene ninguno configurado.
 
 ---
 
@@ -642,6 +797,10 @@ Estas definiciones cambian arquitectura, resolverlas con el cliente antes de có
 
 ## 10. Por dónde empezamos: primer sprint
 
+> **Histórico.** Este sprint se ejecutó y quedó atrás: todo lo que lista está en
+> producción. Se conserva porque muestra el orden en que se armaron las
+> fundaciones. **Lo que sigue ahora está en la sección 0.**
+
 Si la decisión es arrancar ya, el **sprint 1 (2 semanas)** debería cubrir:
 
 **Semana 1**:
@@ -662,4 +821,8 @@ Esto es antes de tocar una línea de código mobile. Si saltamos directo a Expo 
 
 ---
 
-**Próximo paso concreto**: confirmar las decisiones pendientes (sección 7) con el cliente piloto y arrancar Sprint 1 del backend.
+**Próximo paso concreto** (30/08/2026): cargar las credenciales de FCM para
+cerrar el circuito de push, y en paralelo empujar las tres preguntas al centro y
+a Tienda Nube que hoy mantienen a la app sin descuento y sin poder vender. Una
+vez repartido el APK a las primeras testers, el trabajo con mayor retorno es el
+motor de recompra de la Fase 3, que tiene los datos listos desde la Fase 1.
