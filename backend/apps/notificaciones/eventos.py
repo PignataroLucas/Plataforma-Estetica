@@ -45,6 +45,13 @@ class Evento:
     puede previsualizar sin datos reales --``manage.py simular_notificacion
     --listar``-- que es como se revisa la redacción con el centro antes de que
     exista un teléfono al que mandarle nada.
+
+    ``ruta`` tiene que **existir en la app instalada**: el teléfono la usa tal
+    cual para navegar cuando alguien toca el aviso. Una ruta inventada no falla
+    acá ni al despachar --se descubre recién en el teléfono de la clienta, y
+    tarde--, así que solo se ponen rutas del árbol de ``client-app/src/app/``.
+    Ojo también con las viejas: una ruta nueva no existe en las apps que ya
+    están instaladas, y ahí cae en la pantalla de "no encontramos eso".
     """
     clave: str
     categoria: str
@@ -144,7 +151,7 @@ EVENTOS: dict[str, Evento] = {
             categoria=Categoria.NOVEDADES,
             titulo='¡Feliz cumple, {nombre}!',
             cuerpo='Que lo pases hermoso. Te esperamos en {centro}.',
-            ruta='/promos',
+            ruta='/',
             variables=('nombre', 'centro'),
             ejemplo={'nombre': 'Sofía', 'centro': 'AME'},
         ),
@@ -164,7 +171,7 @@ EVENTOS: dict[str, Evento] = {
             categoria=Categoria.PROMOCIONES,
             titulo='Nueva promo en {centro}',
             cuerpo='{oferta}. Hasta el {vence}.',
-            ruta='/promos',
+            ruta='/tienda',
             variables=('centro', 'oferta', 'vence'),
             ejemplo={'centro': 'AME', 'oferta': '2x1 en faciales', 'vence': '30 de agosto'},
         ),

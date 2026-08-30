@@ -1,0 +1,105 @@
+# Build de la app mobile, a pedido.
+#
+# Se dispara a mano desde la pestaña Actions de GitHub (botón "Run workflow"),
+# nunca sola. Es deliberado: el plan gratuito de EAS tiene tope mensual de
+# builds, y en esta etapa se itera mucho --ícono, splash, FCM, la URL de la
+# API--, así que una build por push quemaría la cuota en dos días. Cuando haya
+# ritmo de release se agrega un disparo por tag; hasta entonces, el commit que
+# reciben las testers se elige a mano.
+#
+# Lo que hace este job es SOLO encolar. La compilación corre en los servidores
+# de EAS, no en el runner: el paso termina en segundos y devuelve el link al
+# dashboard. Por eso no hay `--wait` ni timeouts largos, y por eso correrlo acá
+# no gasta minutos de Actions.
+#
+# Se usa `npx eas-cli` con `EXPO_TOKEN` en el entorno, en vez de la action de
+# Expo: es un paso menos que versionar y la autenticación es la misma.
+#
+# Requisitos, los dos de una sola vez:
+#   1. `eas init` corrido en client-app/, con el `projectId` commiteado.
+#   2. Un secret `EXPO_TOKEN` en el repo (Settings → Secrets → Actions), que es
+#      un access token de la cuenta de Expo dueña del proyecto.
+# Si falta cualquiera de los dos, el job corta en el primer paso con el motivo.
+
+name: EAS Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      plataforma:
+        description: Plataforma
+        type: choice
+        default: android
+        options: [android, ios, all]
+      perfil:
+        description: Perfil de eas.json
+        type: choice
+        default: preview
+        options:
+          - preview                 # APK para las testers
+          - development             # dev build (se conecta a Metro)
+          - preview-simulador-ios   # .app de simulador; no necesita cuenta de Apple
+          - production              # AAB / envío a tiendas
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Encolar build (${{ inputs.plataforma }} · ${{ inputs.perfil }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Las tres formas de fallar que no se explican solas. Sin esto, el error
+      # aparece recién adentro del CLI y es críptico.
+      - name: Chequeos previos
+        env:
+          HAY_TOKEN: ${{ secrets.EXPO_TOKEN != '' }}
+        run: |
+          if [ ! -f client-app/app.json ]; then
+            echo "::error::La app mobile no está en la rama '${{ github.ref_name }}'. Corré este workflow desde una rama Mobile/**."
+            exit 1
+          fi
+          if [ "$HAY_TOKEN" != "true" ]; then
+            echo "::error::Falta el secret EXPO_TOKEN. Se saca de expo.dev (Access tokens) y se carga en Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if ! grep -q '"projectId"' client-app/app.json; then
+            echo "::error::client-app/app.json no tiene extra.eas.projectId todavía. Corré 'eas init' dentro de client-app/ y commiteá el cambio."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: client-app/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: client-app
+        run: npm ci
+
+      # `--no-wait` sale apenas queda encolada. El progreso se mira en el
+      # dashboard, con el link que imprime acá abajo.
+      - name: Encolar la build en EAS
+        working-directory: client-app
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli build \
+            --platform "${{ inputs.plataforma }}" \
+            --profile "${{ inputs.perfil }}" \
+            --non-interactive \
+            --no-wait
+
+      # Sin `always()`: si la build no se pudo encolar, este resumen mentiría.
+      - name: Dónde seguirla
+        run: |
+          {
+            echo "### Build encolada"
+            echo ""
+            echo "El link exacto está en el log del paso anterior."
+            echo "El progreso y el artefacto se miran en expo.dev, proyecto \`ame-esencial\` → Builds."
+          } >> "$GITHUB_STEP_SUMMARY"

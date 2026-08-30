@@ -516,12 +516,59 @@ por TestFlight ni por ad-hoc.
 Mientras tanto, **todo el testeo serio arranca por Android**: es donde se puede
 instalar hoy, gratis y en cualquier teléfono.
 
+### Si el build falla en "Configure expo-updates"
+
+Pasó en el primer intento, el 30/08/2026, y va a volver a pasar.
+
+El error dice `Runtime version mismatch` y muestra dos hashes: el que calculó tu
+máquina y el que calculó EAS. Es la política `fingerprint` haciendo su trabajo —
+detecta que el árbol nativo local y el del build no son el mismo, lo que
+significaría que un update publicado desde tu máquina no le corresponde a ese
+binario.
+
+La causa típica no es el código: es que `node_modules` quedó desincronizado del
+lockfile. `npm install` actualiza de a partes y puede dejar un paquete con
+contenido viejo en disco; EAS instala con `npm ci`, que reconstruye el árbol
+entero desde el lockfile. La primera vez fue después de un `expo install --fix`,
+y el paquete que quedó viejo era `@react-native-masked-view/masked-view`.
+
+Se arregla haciendo localmente lo mismo que hace EAS:
+
+```bash
+npm ci
+```
+
+Y se comprueba **sin gastar un build**, comparando el hash contra el que el log
+de EAS dice que calculó:
+
+```bash
+npx expo-updates fingerprint:generate --platform android
+```
+
+El campo `hash` de la salida tiene que coincidir con el de EAS. Si coincide, el
+build pasa esa fase.
+
 ### Costos EAS
 
-El plan gratuito tiene un tope mensual de builds y cola compartida (una build
-puede esperar bastante en hora pico). Alcanza de sobra para esta etapa; el plan
-pago se justifica recién cuando la espera moleste o el tope se quede corto.
-Conviene mirar el precio actual en el dashboard antes de decidir, que cambia.
+Consultado el 30/08/2026. Cambia, así que conviene reconfirmarlo antes de
+decidir cualquier cosa a partir de estos números.
+
+El plan **gratuito** da **15 builds de Android y 15 de iOS por mes** —se cuentan
+por separado—, con cola de baja prioridad, una sola concurrencia y **timeout de
+45 minutos**. Ese timeout es el límite que más cerca queda: los planes pagos
+tienen dos horas.
+
+Alcanza de sobra mientras los builds sean deliberados, que es justo por lo que
+el workflow de Actions está en `workflow_dispatch` y no en cada push.
+
+**Lo que realmente estira el cupo es EAS Update.** Un cambio que es solo JS/TS
+no necesita build: sale con `eas update`, llega a los APK ya instalados y no
+consume nada del tope. Un build nuevo hace falta solamente cuando cambia lo
+nativo —una librería, `app.json`, el SDK—, que es exactamente lo que la política
+`fingerprint` del runtime version detecta sola.
+
+Si alguna vez queda corto: el plan Starter son US$19/mes y, pasado el crédito
+incluido, un build de Android medium sale US$1.
 
 ---
 

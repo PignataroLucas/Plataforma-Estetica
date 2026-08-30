@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client-app-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "client-app", "run", "web"],
+      "port": 8081
+    }
+  ]
+}

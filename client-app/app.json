@@ -7,15 +7,19 @@
     "icon": "./assets/images/icon.png",
     "scheme": "ameesencial",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/00527eb4-5f09-4dad-921b-4b587041196c"
+    },
     "ios": {
-      "bundleIdentifier": "com.ameesencial.app",
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.ameesencial.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F2ECE6",
+        "backgroundColor": "#1A1712",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -32,7 +36,7 @@
         {
           "backgroundColor": "#F2ECE6",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 200
         }
       ],
       "expo-secure-store",
@@ -49,6 +53,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "00527eb4-5f09-4dad-921b-4b587041196c"
+      }
+    },
+    "owner": "lucaspignataro"
   }
 }
