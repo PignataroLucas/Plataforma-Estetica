@@ -1,9 +1,10 @@
 # Compra desde la app, con Tienda Nube por detrás
 
-**Estado:** implementado y probado contra la tienda demo, hasta la pantalla de
-pago. Falta la atribución en analytics (5.7) y una compra real que confirme el
-retorno.
-**Fecha:** 11/08/2026, con notas del 15 y 17/08/2026
+**Estado:** terminado y **probado de punta a punta contra la tienda demo el
+30/08/2026**, incluida la detección del retorno. Falta instalarlo en la tienda
+real de AME, confirmar que Conto manda el cupón (7.1) y las dos decisiones del
+centro (7.2 y 6.1).
+**Fecha:** 11/08/2026, con notas del 15, 17 y 30/08/2026
 
 Documento de handoff: está escrito para que se pueda implementar **sin haber
 participado de la conversación donde se decidió**. Todo lo que dice "verificado"
@@ -61,11 +62,21 @@ El catálogo de la app ya está construido; esto es lo que lo convierte en venta
 | Preparación de la compra y checkout en WebView | `apps/integraciones/compra.py`, `client-app/src/app/checkout.tsx` | 5.5 |
 | Atribución de la venta al importarla | `SalesImporter._atribuir` | 5.6 |
 | Callback de OAuth y los tres webhooks de privacidad | `apps/integraciones/tiendanube_views.py`, `instalacion.py`, `privacidad.py` | 5.1 |
+| Limpieza de cupones por cron | `tasks.limpiar_cupones_app`, `railway.cupones.cron.json` | 6.5 |
+| Simulador de la vuelta de la venta | `simular_venta_app` | 5.6 |
+| Medición de ventas de la app | `apps/analytics/ventas_app.py`, `VentasAppSection` | 5.7 |
 
 ### Lo que no existe
 
-- La agregación de analytics (5.7).
-- Una compra real de punta a punta: la tienda demo no tiene medio de pago (9).
+- **La instalación en la tienda real de AME.** Todo lo demás se ejercitó
+  contra la de demostración, que ya tiene medio de pago y catálogo.
+- **La confirmación de que Conto manda el campo `cupon`** (7.1). Es lo único
+  que el simulador no puede probar, porque ahí el campo se lo ponemos
+  nosotros.
+- **El ensayo del OAuth contra la demo**: desinstalar y reinstalar la app,
+  que es lo que hace disparar el callback con un código real y el webhook de
+  borrado. Ojo: reinstalar emite un token nuevo y mata el de desarrollo.
+- **El total del envío en la pantalla de confirmación** de la app (6.1).
 
 ### El dato que manda sobre la arquitectura
 
@@ -414,6 +425,28 @@ el WebView y se muestra la confirmación de AME. **Si eso se maneja mal, la
 clienta ve un parpadeo de página web**, que es exactamente la sensación que se
 quiere evitar.
 
+> **Hecho el 30/08/2026, y medido.** Desde "Comprar" hasta el cupón aplicado
+> pasan **unos 18 segundos** en el emulador: dos cargas de página, un pedido por
+> producto, el arranque del checkout de Tienda Nube y recién ahí la escritura
+> del cupón. Son inherentes al camino, no un defecto optimizable.
+>
+> El problema no era la demora sino **qué veía la clienta durante esos
+> segundos**: el total sin descuento, que después bajaba solo. Una versión suave
+> del §6.1 — acá el precio baja, así que no pierde la venta, pero la acostumbra
+> a ver el número alto primero y el día que el cupón falle no va a notar que no
+> bajó.
+>
+> Se resolvió con una **cortina**: el WebView se monta y trabaja detrás de una
+> pantalla nuestra que dice "Preparando tu compra" con el porcentaje, y se
+> levanta cuando llega `cupon-ok`. La clienta nunca ve el precio equivocado.
+>
+> Y se corrigió un defecto que la medición destapó: **la app se rendía antes que
+> su propio script**. El temporizador que muestra el código para pegar a mano
+> estaba en 20 segundos, contra un recorrido de 18 y un presupuesto del script
+> —15 s para el link, 8 para el campo, 10 para verificar, por hasta tres
+> intentos— muy superior. Ahora son 45 segundos, y el temporizador es una red de
+> contención: lo que decide es el mensaje del script.
+
 ### 5.6 Consumir el cupón desde el sync
 
 Depende de que Conto exponga el código del cupón en el payload de la venta
@@ -461,6 +494,35 @@ Y quedarse con la métrica que ellos proponen: **ticket promedio con cupón cont
 sin cupón**. Es mejor pregunta que "cuánto vendió la app", porque distingue las
 compras que el descuento trajo de las que iban a pasar igual y solo le costaron
 margen al centro.
+
+> **Hecho el 30/08/2026.** `GET /api/analytics/dashboard/ventas-app/`, con el
+> cálculo en `apps/analytics/ventas_app.py` y la sección `VentasAppSection` en
+> la página de Analytics del CRM.
+>
+> Devuelve cuatro bloques: el **resumen** (facturado de la app contra el resto,
+> ticket promedio de cada lado, descuento otorgado y participación), los
+> **productos** que vende la app, las **clientas** que compran por ahí, y los
+> **cupones** —emitidos, usados, sin usar y conversión—.
+>
+> Detalles que resolvió la implementación:
+>
+> - **No hay campo de origen en `Transaction`.** La atribución sigue viviendo
+>   solo en `ContoSale.cupon_app`, y las consultas llegan por ahí. Copiarla a la
+>   tabla financiera daría dos lugares que discrepan al reprocesar un
+>   comprobante.
+> - **`cache_page` no se usa acá, y es a propósito.** Ese decorador cachea por
+>   URL y no por usuario; como el centro sale del usuario, la URL es idéntica
+>   para todos y el primero en pedirla le deja sus números al siguiente. Se
+>   descubrió porque los tests de este módulo se pisaban entre sí. **El resto de
+>   las vistas de analytics sí lo usan** y quedan expuestas cuando se las llama
+>   sin `sucursal_id`: es un problema anterior a este trabajo y sin resolver.
+> - **El join a `Transaction` va por subconsulta, no por `distinct`.**
+>   `conto_sales` es un many-to-many y `.distinct()` no de-duplica agregados:
+>   aplica al SELECT final, que después de `values().annotate()` ya incluye el
+>   `Sum`.
+> - La métrica de **cupones emitidos contra usados** es la única del tablero que
+>   Tienda Nube no puede dar: allá el cupón no existe hasta que se usa. Cada uno
+>   sin usar es un carrito abandonado en el checkout.
 
 ### 5.8 Los segmentos y el descuento de cada clienta
 
@@ -539,6 +601,16 @@ precio con el descuento que **el backend va a materializar como cupón**, no un
 > y no `precio_venta_final`, que es un cambio de una línea en el serializer
 > público.
 
+> **Otra puerta, encontrada el 30/08/2026 en la primera compra real.** La app
+> dijo `$10.625` y Tienda Nube cobró `$10.675`. La diferencia es el **costo de
+> envío**, que la clienta elige *dentro* del WebView, después de que el backend
+> preparó la compra.
+>
+> O sea que la pantalla de confirmación de la app afirma un total que no puede
+> conocer, y que siempre va a ser **menor** que el real. Lo correcto es no
+> afirmar ningún número: el detalle con el total verdadero se lo manda Tienda
+> Nube por mail igual. **Sin resolver.**
+
 ### 6.2 El retraso del sync sobre el precio base
 
 El precio base sale de la plataforma, que se actualiza por el sync de Conto. Si
@@ -579,6 +651,19 @@ se controla al crearlos.
 > el default juega a favor de regalar margen.
 
 Y hay que decidirlo antes de construir: cambia qué porcentaje se le pone al cupón.
+
+> **Y son dos perillas, no una. Visto el 30/08/2026** al configurar el medio de
+> pago en la tienda demo: el descuento por transferencia tiene **su propia
+> casilla** de "permitir combinar el descuento con otras promociones", del lado
+> del comercio. O sea que la decisión del §7.2 se controla desde dos lugares que
+> tienen que estar de acuerdo — el nuestro (`combines_with_other_discounts` al
+> crear el cupón) y el del centro— y todavía no sabemos cómo lo resuelve Tienda
+> Nube cuando las dos opinan.
+>
+> **La buena noticia: esto se puede medir en vez de preguntarlo.** Se pone el
+> descuento por transferencia en 10% en la tienda demo, se compra con cupón y se
+> mira el total. Si cobra 25% menos, se apilan; si cobra 15%, no. Con eso el
+> centro decide sobre un número y no sobre una hipótesis.
 
 ### 6.5 Cupones huérfanos
 
@@ -710,8 +795,13 @@ Las dos originales, sin responder:
 
 1. ¿Existe una URL que agregue un producto al carrito **con un cupón ya
    aplicado** y abra el checkout? Define si hay doble "Comprar" (6.6).
-2. Confirmar el costo por transacción del plan real del centro. Es la cifra sobre
-   la que se tomó la decisión de arquitectura (3.1).
+2. ~~Confirmar el costo por transacción del plan real del centro.~~ **Visto el
+   30/08/2026 en el panel de la tienda demo: los medios de pago personalizados
+   figuran con CPT 2%.** Es el extremo alto del rango que se había estimado, y
+   confirma la decisión del §3.1: como usamos el checkout de Tienda Nube, ese 2%
+   es un costo que el centro ya paga según el medio de pago que elija — crear las
+   órdenes por API se lo habríamos sumado a cada venta. Falta confirmarlo contra
+   el plan real de AME, que puede ser otro.
 
 Y dos que aparecieron al leer la documentación (15/08/2026), para hacer al
 momento del alta:
@@ -773,6 +863,30 @@ atribución— con la compra en $0.
 Con una salvedad: en $0 el checkout probablemente saltee el paso de pago, así que
 la detección de la URL de retorno puede comportarse distinto. Antes de lanzar,
 **una compra real** con un producto barato, y después cancelarla.
+
+> **Hecho el 30/08/2026: la compra de punta a punta salió.** Recorrido completo
+> desde la app —carrito, "Comprar", cupón emitido de verdad, checkout, pago— y
+> **la app detectó el retorno y mostró su propia confirmación**. La clienta
+> nunca vio la página de gracias de Tienda Nube.
+>
+> Lo que eso confirma, y estaba anotado como sin verificar:
+>
+> - **`URLS_DE_EXITO` funciona.** Una de las tres direcciones que estaban
+>   escritas a ojo matcheó. Falta saber cuál, para dejar solo esa y borrar las
+>   otras dos, que hoy son adivinanzas que podrían matchear de más.
+> - **La inyección del cupón anda sola.** No apareció el cartel para pegar el
+>   código a mano.
+> - Tienda Nube devuelve el cupón con `used: 1`, y la orden queda en su panel.
+>
+> Para que eso fuera posible hubo que **instalar un medio de pago en la tienda
+> demo**. Los manuales están en *Configuración → Medios de pago →
+> personalizados*: "Transferencia o depósito", "Efectivo" y "A convenir". El
+> plan Esencial habilita uno solo; los tres piden subir de plan. **No hace falta
+> Pago Nube**, que pide CUIT porque es una pasarela real.
+>
+> La tienda de demostración de socio es **gratis de por vida** y no permite
+> ventas comerciales, pero **sí simular el proceso de compra**, que es
+> exactamente lo que se ejercita acá.
 
 **Precaución operativa.** No hay ambiente aparte: esto pasa en la tienda real del
 centro. Las órdenes de prueba les aparecen en el panel, así que hay que avisarles

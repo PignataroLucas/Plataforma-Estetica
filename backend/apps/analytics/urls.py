@@ -32,6 +32,11 @@ from .export_views import (
     ExportPDFView,
 )
 
+from .ventas_app_views import (
+    # Ventas que vinieron de la app de las clientas
+    VentasDeLaAppView,
+)
+
 from .dashboard_home_views import (
     # Dashboard Home (Página Principal)
     DashboardHomeView,
@@ -55,6 +60,7 @@ urlpatterns = [
     path('dashboard/ocupacion/', OccupancyAnalyticsView.as_view(), name='dashboard-ocupacion'),
     path('dashboard/seasonal-trends/', SeasonalTrendsView.as_view(), name='dashboard-seasonal-trends'),
     path('dashboard/no-shows/', NoShowAnalyticsView.as_view(), name='dashboard-no-shows'),
+    path('dashboard/ventas-app/', VentasDeLaAppView.as_view(), name='dashboard-ventas-app'),
 
     # ========== ANALYTICS DE CLIENTE INDIVIDUAL ==========
     path('client/<int:cliente_id>/summary/', ClientSummaryView.as_view(), name='client-summary'),

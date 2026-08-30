@@ -19,6 +19,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
   const [ocupacion, setOcupacion] = useState<any>(null);
   const [seasonalTrends, setSeasonalTrends] = useState<any>(null);
   const [noShows, setNoShows] = useState<any>(null);
+  const [ventasApp, setVentasApp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +53,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
         ocupacionRes,
         seasonalTrendsRes,
         noShowsRes,
+        ventasAppRes,
       ] = await Promise.all([
         api.get(`/analytics/dashboard/summary/?${queryString}`),
         api.get(`/analytics/dashboard/revenue/?${queryString}`),
@@ -62,6 +64,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
         api.get(`/analytics/dashboard/ocupacion/?${queryString}`),
         api.get(`/analytics/dashboard/seasonal-trends/?${queryString}`),
         api.get(`/analytics/dashboard/no-shows/?${queryString}`),
+        api.get(`/analytics/dashboard/ventas-app/?${queryString}`),
       ]);
 
       setSummary(summaryRes.data);
@@ -73,6 +76,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
       setOcupacion(ocupacionRes.data);
       setSeasonalTrends(seasonalTrendsRes.data);
       setNoShows(noShowsRes.data);
+      setVentasApp(ventasAppRes.data);
     } catch (err: any) {
       console.error('Error fetching analytics:', err);
       setError(err.message || 'Error al cargar analytics');
@@ -91,6 +95,7 @@ export function useAnalytics(filters: AnalyticsFilters = {}) {
     ocupacion,
     seasonalTrends,
     noShows,
+    ventasApp,
     loading,
     error,
     refetch: fetchAnalytics,
