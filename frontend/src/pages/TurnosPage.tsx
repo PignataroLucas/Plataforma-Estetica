@@ -5,6 +5,7 @@ import { CalendarView } from '../components/turnos/CalendarView'
 import { TurnoForm } from '../components/turnos/TurnoForm'
 import { useTurnos } from '../hooks/useTurnos'
 import type { TurnoList, Turno } from '../types/models'
+import { formatDateForInput } from '@/utils/dateUtils'
 
 type TabType = 'hoy' | 'proximos' | 'historial'
 type ViewType = 'list' | 'calendar'
@@ -39,7 +40,7 @@ export default function TurnosPage() {
 
   const getDateFilters = () => {
     const now = new Date()
-    const todayStr = now.toISOString().split('T')[0]
+    const todayStr = formatDateForInput(now)
     const nowISO = now.toISOString()
 
     // Si estamos en vista calendario, usar el rango visible (o un rango inicial amplio)

@@ -177,7 +177,7 @@ class AlquilerMaquinaSerializer(serializers.ModelSerializer):
             data['costo'] = data['maquina'].costo_diario
 
         # Prevent scheduling in the past
-        if data.get('fecha') and data['fecha'] < timezone.now().date():
+        if data.get('fecha') and data['fecha'] < timezone.localdate():
             # Allow if editing existing rental
             if not self.instance:
                 raise serializers.ValidationError({

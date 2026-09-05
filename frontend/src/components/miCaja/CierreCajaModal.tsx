@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button/Button'
 import { DateInput } from '@/components/ui/DateInput/DateInput'
 import { cerrarCaja, getResumenDia } from '@/services/miCajaService'
 import type { ResumenDiario } from '@/types/miCaja'
+import { getTodayForInput } from '@/utils/dateUtils'
 
 interface CierreCajaModalProps {
   isOpen: boolean
@@ -18,7 +19,7 @@ const CierreCajaModal = ({ isOpen, onClose, onSuccess }: CierreCajaModalProps) =
   const [error, setError] = useState<string | null>(null)
 
   // Form fields
-  const [fecha, setFecha] = useState<string>(new Date().toISOString().split('T')[0])
+  const [fecha, setFecha] = useState<string>(getTodayForInput())
   const [efectivoContado, setEfectivoContado] = useState<number>(0)
   const [notas, setNotas] = useState('')
 
@@ -119,7 +120,7 @@ const CierreCajaModal = ({ isOpen, onClose, onSuccess }: CierreCajaModalProps) =
   }
 
   const resetForm = () => {
-    setFecha(new Date().toISOString().split('T')[0])
+    setFecha(getTodayForInput())
     setEfectivoContado(0)
     setNotas('')
     setError(null)
@@ -156,7 +157,7 @@ const CierreCajaModal = ({ isOpen, onClose, onSuccess }: CierreCajaModalProps) =
               label="Fecha de Cierre"
               value={fecha}
               onChange={setFecha}
-              max={new Date().toISOString().split('T')[0]}
+              max={getTodayForInput()}
               required
             />
 

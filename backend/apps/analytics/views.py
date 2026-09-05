@@ -44,7 +44,7 @@ class DashboardSummaryView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -94,7 +94,7 @@ class RevenueAnalyticsView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -177,7 +177,7 @@ class ServiceAnalyticsView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -236,7 +236,7 @@ class ProductAnalyticsView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -285,7 +285,7 @@ class EmployeePerformanceView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -376,7 +376,7 @@ class OccupancyAnalyticsView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -451,7 +451,7 @@ class NoShowAnalyticsView(APIView):
         if end_date:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
 
         if start_date:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -519,7 +519,7 @@ class ClientSummaryView(APIView):
         # Días desde última visita
         days_since_last = None
         if last_visit:
-            days_since_last = (timezone.now().date() - last_visit.fecha_hora_inicio.date()).days
+            days_since_last = (timezone.localdate() - timezone.localtime(last_visit.fecha_hora_inicio).date()).days
 
         # Ticket promedio
         avg_ticket = ltv / total_visits if total_visits > 0 else 0
@@ -542,8 +542,8 @@ class ClientSummaryView(APIView):
             'summary': {
                 'lifetime_value': ltv,
                 'total_visits': total_visits,
-                'first_visit': first_visit.fecha_hora_inicio.date().isoformat() if first_visit else None,
-                'last_visit': last_visit.fecha_hora_inicio.date().isoformat() if last_visit else None,
+                'first_visit': timezone.localtime(first_visit.fecha_hora_inicio).date().isoformat() if first_visit else None,
+                'last_visit': timezone.localtime(last_visit.fecha_hora_inicio).date().isoformat() if last_visit else None,
                 'days_since_last_visit': days_since_last,
                 'average_frequency_days': frequency,
                 'average_ticket': round(avg_ticket, 2),
@@ -568,7 +568,7 @@ class ClientSpendingView(APIView):
         from django.db.models.functions import TruncMonth
 
         # Gasto mensual últimos 12 meses
-        end_date = timezone.now().date()
+        end_date = timezone.localdate()
         start_date = end_date - timedelta(days=365)
 
         monthly_spending = Transaction.objects.filter(
@@ -789,7 +789,7 @@ class ClientPatternsView(APIView):
         from dateutil.relativedelta import relativedelta
         from django.db.models.functions import TruncMonth
 
-        end_date = timezone.now().date()
+        end_date = timezone.localdate()
         start_date = end_date - relativedelta(months=11)
 
         monthly_services = FinTransaction.objects.filter(
@@ -959,7 +959,7 @@ class ClientAlertsView(APIView):
 
         days_since_last = None
         if last_visit:
-            days_since_last = (timezone.now().date() - last_visit.fecha_hora_inicio.date()).days
+            days_since_last = (timezone.localdate() - timezone.localtime(last_visit.fecha_hora_inicio).date()).days
 
         alerts = []
         insights = []
@@ -1276,9 +1276,9 @@ class ClientBehaviorView(APIView):
             })
 
         total_visits = turnos.count()
-        first_visit = turnos.first().fecha_hora_inicio.date()
-        last_visit = turnos.last().fecha_hora_inicio.date()
-        today = timezone.now().date()
+        first_visit = timezone.localtime(turnos.first().fecha_hora_inicio).date()
+        last_visit = timezone.localtime(turnos.last().fecha_hora_inicio).date()
+        today = timezone.localdate()
 
         # Calcular LTV
         ltv = AnalyticsCalculator.get_client_lifetime_value(cliente_id)
@@ -1342,7 +1342,7 @@ class ClientBehaviorView(APIView):
         # Basado en regularidad de visitas (desviación estándar de días entre visitas)
         if total_visits >= 2:
             # Calcular días entre cada visita
-            visit_dates = [t.fecha_hora_inicio.date() for t in turnos]
+            visit_dates = [timezone.localtime(t.fecha_hora_inicio).date() for t in turnos]
             days_between_visits = []
             for i in range(1, len(visit_dates)):
                 days_diff = (visit_dates[i] - visit_dates[i-1]).days
@@ -1481,7 +1481,7 @@ class ClientBehaviorView(APIView):
         # Calcular tiempo promedio entre visitas (usar días entre visitas calculado arriba)
         avg_interval_days = 0
         if total_visits >= 2:
-            visit_dates = [t.fecha_hora_inicio.date() for t in turnos]
+            visit_dates = [timezone.localtime(t.fecha_hora_inicio).date() for t in turnos]
             days_between = []
             for i in range(1, len(visit_dates)):
                 days_between.append((visit_dates[i] - visit_dates[i-1]).days)

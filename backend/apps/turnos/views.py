@@ -5,7 +5,6 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
-from datetime import timedelta
 from .models import Turno
 from .serializers import (
     TurnoListSerializer,
@@ -77,12 +76,10 @@ class TurnoViewSet(viewsets.ModelViewSet):
         """
         Obtener turnos del día de hoy
         """
-        hoy_inicio = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        hoy_fin = hoy_inicio + timedelta(days=1)
-
+        # `timezone.now()` es UTC: recortar la hora ahí arranca el día a las 21:00
+        # del día anterior en Argentina. El lookup __date ya convierte a TIME_ZONE.
         turnos = self.get_queryset().filter(
-            fecha_hora_inicio__gte=hoy_inicio,
-            fecha_hora_inicio__lt=hoy_fin
+            fecha_hora_inicio__date=timezone.localdate()
         )
 
         serializer = self.get_serializer(turnos, many=True)

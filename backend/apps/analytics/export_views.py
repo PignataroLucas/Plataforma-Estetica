@@ -5,6 +5,7 @@ Views para exportación de Analytics (CSV, Excel, PDF)
 import csv
 import io
 from datetime import datetime
+from django.utils import timezone
 from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -50,15 +51,15 @@ class ExportCSVView(APIView):
 
         if not start_date_str or not end_date_str:
             # Default to last 30 days if not provided
-            end_date = datetime.now().date()
+            end_date = timezone.localdate()
             start_date = end_date - relativedelta(days=30)
         else:
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
             except ValueError:
-                start_date = datetime.now().date() - relativedelta(days=30)
-                end_date = datetime.now().date()
+                start_date = timezone.localdate() - relativedelta(days=30)
+                end_date = timezone.localdate()
 
         # Get user's sucursal for multi-tenancy
         sucursal = request.user.sucursal
@@ -300,15 +301,15 @@ class ExportExcelView(APIView):
 
         if not start_date_str or not end_date_str:
             # Default to last 30 days if not provided
-            end_date = datetime.now().date()
+            end_date = timezone.localdate()
             start_date = end_date - relativedelta(days=30)
         else:
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
             except ValueError:
-                start_date = datetime.now().date() - relativedelta(days=30)
-                end_date = datetime.now().date()
+                start_date = timezone.localdate() - relativedelta(days=30)
+                end_date = timezone.localdate()
 
         # Get user's sucursal for multi-tenancy
         sucursal = request.user.sucursal
@@ -602,15 +603,15 @@ class ExportPDFView(APIView):
 
         if not start_date_str or not end_date_str:
             # Default to last 30 days if not provided
-            end_date = datetime.now().date()
+            end_date = timezone.localdate()
             start_date = end_date - relativedelta(days=30)
         else:
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
             except ValueError:
-                start_date = datetime.now().date() - relativedelta(days=30)
-                end_date = datetime.now().date()
+                start_date = timezone.localdate() - relativedelta(days=30)
+                end_date = timezone.localdate()
 
         # Get user's sucursal for multi-tenancy
         sucursal = request.user.sucursal
@@ -852,7 +853,7 @@ class ExportPDFView(APIView):
 
         # Footer
         elements.append(Spacer(1, 0.5*inch))
-        footer_text = f"Generado el {datetime.now().strftime('%d/%m/%Y a las %H:%M')} - {sucursal.centro_estetica.nombre}"
+        footer_text = f"Generado el {timezone.localtime().strftime('%d/%m/%Y a las %H:%M')} - {sucursal.centro_estetica.nombre}"
         footer = Paragraph(footer_text, ParagraphStyle(
             'Footer',
             parent=normal_style,

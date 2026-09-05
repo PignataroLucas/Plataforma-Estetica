@@ -212,7 +212,7 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     def validate_date(self, value):
         """Validate transaction date"""
-        today = timezone.now().date()
+        today = timezone.localdate()
 
         # Warning for future dates (don't block, just warn in response)
         if value > today:
