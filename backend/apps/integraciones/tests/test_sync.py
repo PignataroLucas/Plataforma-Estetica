@@ -5,6 +5,7 @@ Uses a stub client instead of HTTP mocks: what matters here is the accounting
 behaviour — how many transactions get created, for how much, and what happens
 when a voucher comes back changed.
 """
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -55,10 +56,26 @@ def product_line(sku='SER-VITC-30', name='Serum', quantity=1,
     }
 
 
+def fecha_venta_reciente():
+    """
+    Fecha de un comprobante "normal": lo bastante reciente como para caer dentro
+    de la ventana de `import_from` que arma `make_syncable_center`.
+
+    Tiene que ser relativa a hoy. Con una fecha fija el comprobante se va
+    quedando afuera de la ventana de 30 días a medida que corre el calendario, y
+    la suite se cae sola un martes cualquiera sin que nadie haya tocado el
+    código: el importador lo saltea por viejo y todos los tests que buscan la
+    `Transaction` explotan con `DoesNotExist`. Ya pasó.
+    """
+    return timezone.localdate() - timedelta(days=2)
+
+
 def voucher(voucher_id='8891', items=None, total='18500.00', status='PAGADO',
             channel='tiendanube', kind='VENTA', related=None,
             payment='card', gateway='mercadopago', client=None,
-            date='2026-08-04'):
+            date=None):
+    if date is None:
+        date = fecha_venta_reciente().isoformat()
     return {
         'id': voucher_id,
         'tipo': kind,
@@ -175,7 +192,7 @@ class TestSalesImport:
         assert tx.category.name == 'Productos'
         assert tx.auto_generated is True
         assert tx.registered_by is None  # no es la caja de ningún empleado
-        assert str(tx.date) == '2026-08-04'
+        assert tx.date == fecha_venta_reciente()
 
         sale = ContoSale.objects.get()
         assert sale.status == ContoSale.Status.PROCESSED

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../../services/api';
+import { getTodayForInput } from '@/utils/dateUtils';
 
 interface ExportButtonProps {
   dateRange: {
@@ -32,7 +33,7 @@ export default function ExportButton({ dateRange }: ExportButtonProps) {
       link.href = url;
 
       // Set filename based on format
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayForInput();
       const extensions = {
         csv: 'csv',
         excel: 'xlsx',

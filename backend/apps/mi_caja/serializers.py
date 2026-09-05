@@ -222,7 +222,7 @@ class CierreCajaCreateSerializer(serializers.Serializer):
     notas = serializers.CharField(required=False, allow_blank=True)
 
     def validate_fecha(self, value):
-        from datetime import date
-        if value > date.today():
+        from django.utils import timezone
+        if value > timezone.localdate():
             raise serializers.ValidationError("No se puede cerrar caja de fecha futura")
         return value

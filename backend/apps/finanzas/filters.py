@@ -146,7 +146,7 @@ class AccountReceivableFilter(filters.FilterSet):
     def filter_is_overdue(self, queryset, name, value):
         """Filter by overdue status (using property from model)"""
         from django.utils import timezone
-        today = timezone.now().date()
+        today = timezone.localdate()
 
         if value:
             # Overdue: due_date < today AND not paid

@@ -307,7 +307,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
         - year: Year (e.g., 2024), default: current year
         """
         # Get month and year from request
-        today = timezone.now().date()
+        today = timezone.localdate()
         month = int(request.data.get('month', today.month))
         year = int(request.data.get('year', today.year))
 
@@ -440,7 +440,7 @@ class AccountReceivableViewSet(viewsets.ModelViewSet):
         """
         Get all overdue accounts (past due date and not paid)
         """
-        today = timezone.now().date()
+        today = timezone.localdate()
         queryset = self.get_queryset().filter(
             due_date__lt=today,
             is_paid=False
@@ -460,7 +460,7 @@ class AccountReceivableViewSet(viewsets.ModelViewSet):
         """
         queryset = self.filter_queryset(self.get_queryset())
 
-        today = timezone.now().date()
+        today = timezone.localdate()
 
         # Calculate totals
         totals = queryset.aggregate(

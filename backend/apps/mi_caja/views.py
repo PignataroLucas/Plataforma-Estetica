@@ -61,7 +61,7 @@ class MiCajaViewSet(viewsets.ViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
         else:
-            fecha = timezone.now().date()
+            fecha = timezone.localdate()
 
         queryset = Transaction.objects.filter(
             registered_by=request.user,
@@ -377,7 +377,7 @@ class MiCajaViewSet(viewsets.ViewSet):
             type='INCOME_SERVICE',
             amount=monto_a_cobrar,
             payment_method=payment_method,
-            date=timezone.now().date(),
+            date=timezone.localdate(),
             description=descripcion,
             notes=final_notes,
             auto_generated=False,
@@ -432,7 +432,7 @@ class MiCajaViewSet(viewsets.ViewSet):
             type='INCOME_SERVICE',
             amount=monto_final,
             payment_method=payment_method,
-            date=timezone.now().date(),
+            date=timezone.localdate(),
             description=descripcion,
             notes=". ".join(notes_parts) if notes_parts else '',
             auto_generated=False,
@@ -624,9 +624,9 @@ class MiCajaViewSet(viewsets.ViewSet):
             try:
                 fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
             except ValueError:
-                fecha = timezone.now().date()
+                fecha = timezone.localdate()
         else:
-            fecha = timezone.now().date()
+            fecha = timezone.localdate()
 
         transacciones = Transaction.objects.filter(
             registered_by=request.user,
