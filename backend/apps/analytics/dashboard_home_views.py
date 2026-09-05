@@ -54,7 +54,7 @@ class DashboardHomeView(APIView):
 
     def get(self, request):
         sucursal = request.user.sucursal
-        today = timezone.now().date()
+        today = timezone.localdate()
         now = timezone.now()
 
         # Determinar si el usuario puede ver datos financieros
@@ -292,7 +292,7 @@ class DashboardStatsView(APIView):
 
     def get(self, request):
         sucursal = request.user.sucursal
-        today = timezone.now().date()
+        today = timezone.localdate()
         inicio_mes = today.replace(day=1)
 
         # Clientes totales del centro
@@ -351,7 +351,7 @@ class DashboardAlertaDetailView(APIView):
 
     def get(self, request, tipo):
         sucursal = request.user.sucursal
-        today = timezone.now().date()
+        today = timezone.localdate()
         now = timezone.now()
         user_role = request.user.rol
         can_view_financials = user_role in ['ADMIN', 'MANAGER']

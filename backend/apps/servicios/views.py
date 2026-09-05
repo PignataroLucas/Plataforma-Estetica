@@ -235,7 +235,7 @@ class AlquilerMaquinaViewSet(viewsets.ModelViewSet):
         fechas_con_turnos = Turno.objects.filter(
             servicio__maquina_alquilada__isnull=False,
             sucursal=request.user.sucursal,
-            fecha_hora_inicio__date__gte=timezone.now().date()
+            fecha_hora_inicio__date__gte=timezone.localdate()
         ).annotate(
             fecha_local=TruncDate('fecha_hora_inicio', tzinfo=timezone.get_current_timezone())
         ).values(

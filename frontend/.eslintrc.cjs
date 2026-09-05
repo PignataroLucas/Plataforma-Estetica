@@ -32,5 +32,20 @@ module.exports = {
         caughtErrorsIgnorePattern: '^_',
       },
     ],
+    // `toISOString()` pasa a UTC antes de escribir la fecha, asi que recortarle
+    // el 'YYYY-MM-DD' adelanta un dia a partir de las 21:00 en Argentina. Con
+    // eso Mi Caja abria en la fecha de manana y los cobros de la noche se
+    // guardaban con el dia equivocado. Mandar el instante completo sigue estando
+    // bien; el problema es solo recortarlo.
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector:
+          "CallExpression[callee.object.callee.property.name='toISOString'][callee.property.name=/^(split|slice|substring|substr)$/]",
+        message:
+          'toISOString() pasa a UTC y adelanta el dia desde las 21:00 en Argentina. ' +
+          'Usar getTodayForInput() o formatDateForInput() de utils/dateUtils.',
+      },
+    ],
   },
 }

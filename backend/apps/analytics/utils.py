@@ -32,7 +32,7 @@ class AnalyticsCalculator:
         Incluye KPIs comparados con período anterior
         """
         if not start_date or not end_date:
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
             start_date = end_date - timedelta(days=30)
 
         # Calcular período anterior (misma duración)
@@ -550,7 +550,7 @@ class AnalyticsCalculator:
         if not last_visit:
             return 'INACTIVE'
 
-        days_since_last = (timezone.now().date() - last_visit.fecha_hora_inicio.date()).days
+        days_since_last = (timezone.localdate() - timezone.localtime(last_visit.fecha_hora_inicio).date()).days
 
         # Determinar estado según días desde última visita
         if days_since_last <= 30:
@@ -580,7 +580,7 @@ class AnalyticsCalculator:
         # Esto puede ser lento con muchos clientes - considerar caché
         for cliente in clientes_qs:
             # Clientes nuevos (menos de 30 días)
-            if cliente.creado_en and (timezone.now().date() - cliente.creado_en.date()).days <= 30:
+            if cliente.creado_en and (timezone.localdate() - timezone.localtime(cliente.creado_en).date()).days <= 30:
                 segmentation['NEW'] += 1
             else:
                 status = AnalyticsCalculator.get_client_status(cliente.id)
@@ -707,7 +707,7 @@ class AnalyticsCalculator:
 
         # Si no se especifica año, usar el actual
         if not year:
-            year = datetime.now().year
+            year = timezone.localdate().year
 
         # Filtrar turnos completados del año
         turnos_qs = Turno.objects.filter(
@@ -795,7 +795,7 @@ class AnalyticsCalculator:
         from django.utils import timezone
 
         # Fecha de inicio para el período de análisis
-        start_date = timezone.now().date() - timedelta(days=days)
+        start_date = timezone.localdate() - timedelta(days=days)
 
         # Obtener productos
         productos_qs = Producto.objects.filter(activo=True)

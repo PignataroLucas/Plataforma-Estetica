@@ -19,11 +19,12 @@ import {
   type TurnoPendienteCobro,
   type TransaccionMiCaja
 } from '@/types/miCaja'
+import { getTodayForInput } from '@/utils/dateUtils'
 
 const PAGE_SIZE = 10
 
 export default function MiCajaPage() {
-  const [fecha, setFecha] = useState<string>(new Date().toISOString().split('T')[0])
+  const [fecha, setFecha] = useState<string>(getTodayForInput())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -156,7 +157,7 @@ export default function MiCajaPage() {
             <DateInput
               value={fecha}
               onChange={setFecha}
-              max={new Date().toISOString().split('T')[0]}
+              max={getTodayForInput()}
             />
           </CardBody>
         </Card>

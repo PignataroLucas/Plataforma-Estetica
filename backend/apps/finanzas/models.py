@@ -283,7 +283,7 @@ class Transaction(models.Model):
     @property
     def can_be_edited(self):
         """Check if transaction can be edited (< 30 days old)"""
-        age_in_days = (timezone.now().date() - self.date).days
+        age_in_days = (timezone.localdate() - self.date).days
         return age_in_days <= 30
 
     @property
@@ -361,7 +361,7 @@ class AccountReceivable(models.Model):
     def is_overdue(self):
         """Check if payment is overdue"""
         if self.due_date and not self.is_paid:
-            return timezone.now().date() > self.due_date
+            return timezone.localdate() > self.due_date
         return False
 
     def save(self, *args, **kwargs):
@@ -372,6 +372,6 @@ class AccountReceivable(models.Model):
         if self.pending_amount <= 0:
             self.is_paid = True
             if not self.full_payment_date:
-                self.full_payment_date = timezone.now().date()
+                self.full_payment_date = timezone.localdate()
 
         super().save(*args, **kwargs)

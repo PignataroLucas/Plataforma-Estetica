@@ -220,6 +220,73 @@ const t = useTranslation();
 
 ---
 
+## 🕐 Fechas y Zona Horaria
+
+El centro opera en Argentina (UTC-3) pero el servidor corre en UTC. Entre las
+21:00 y la medianoche hora argentina, la fecha UTC **ya es la del día siguiente**.
+Calcular "hoy" en UTC rompe el dashboard, Mi Caja, los cierres de caja y guarda
+las transacciones con la fecha equivocada. Pasó en producción.
+
+### Backend
+
+```python
+# ❌ MAL: `now()` devuelve UTC, así que a las 21:00 AR el `.date()` ya es mañana
+today = timezone.now().date()
+
+# ❌ MAL, aunque hoy funcione: Django pisa el TZ del proceso al arrancar
+# (`os.environ['TZ']` + `time.tzset()`), así que en Linux estas dos devuelven
+# hora argentina. Pero `tzset()` no existe en Windows —donde desarrollamos— y
+# ahí devuelven la hora de la máquina. Depender de eso es frágil.
+today = datetime.now().date()
+today = date.today()
+
+# ✅ BIEN: `localdate()` respeta settings.TIME_ZONE, en cualquier sistema
+today = timezone.localdate()
+```
+
+Hay un test que lo hace cumplir:
+`backend/apps/finanzas/tests/test_zona_horaria.py::TestNingunArchivoCalculaHoyEnUTC`
+recorre `apps/` y falla si aparece alguno de estos patrones.
+
+Lo mismo al sacar la fecha de un `DateTimeField` de la base: los datetimes se
+guardan aware en UTC, así que hay que convertirlos antes de recortar la hora.
+
+```python
+# ❌ MAL
+fecha = turno.fecha_hora_inicio.date()
+
+# ✅ BIEN
+fecha = timezone.localtime(turno.fecha_hora_inicio).date()
+```
+
+El lookup `__date` del ORM **sí** convierte a `TIME_ZONE` solo, así que
+`filter(fecha_hora_inicio__date=timezone.localdate())` es correcto. Lo que no
+sirve es armar la ventana a mano con `timezone.now().replace(hour=0, ...)`:
+eso arranca el día a las 21:00 del día anterior.
+
+### Frontend
+
+```typescript
+// ❌ MAL: toISOString() pasa a UTC y adelanta el día desde las 21:00
+const hoy = new Date().toISOString().split('T')[0]
+
+// ✅ BIEN: helpers de utils/dateUtils.ts, que leen los componentes locales
+import { getTodayForInput, formatDateForInput } from '@/utils/dateUtils'
+const hoy = getTodayForInput()
+const fecha = formatDateForInput(algunaDate)
+```
+
+`toISOString()` sigue siendo correcto para enviar un **instante** completo
+(`fecha_desde`, `fecha_hasta` con hora). El problema es solo recortarle la parte
+de la fecha. En `client-app/` los helpers equivalentes son `fechaISOLocal()` y
+`parseFechaISOLocal()` en `src/utils/format.ts`.
+
+También hay un test que lo hace cumplir:
+`frontend/src/utils/__tests__/dateUtils.test.ts` recorre `src/` y falla si
+alguien vuelve a recortar la fecha de un `toISOString()`.
+
+---
+
 ## 📚 Common Terms Translation
 
 | English (Code)        | Spanish (UI)              |
