@@ -2,3 +2,11 @@
 *.sh text eol=lf
 entrypoint.sh text eol=lf
 Dockerfile text eol=lf
+
+# EAS calcula el runtime version hasheando los bytes de estos archivos. Con
+# core.autocrlf, un checkout en Windows los reescribe con CRLF, el fingerprint
+# cambia sin que nadie haya tocado nada, y los updates OTA dejan de alcanzar a
+# los builds ya instalados. Pasó el 30/08/2026 tras un cambio de rama.
+client-app/eas.json text eol=lf
+client-app/app.json text eol=lf
+client-app/.gitignore text eol=lf

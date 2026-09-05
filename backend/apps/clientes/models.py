@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -792,3 +793,112 @@ class CodigoInvitacion(models.Model):
         self.usado_en = timezone.now()
         self.usado_por = usuario_cliente
         self.save(update_fields=['usado_en', 'usado_por'])
+
+
+class CodigoRecuperacion(models.Model):
+    """
+    Código de un solo uso para restablecer la contraseña de una cuenta de app.
+
+    Es de seis dígitos y no un enlace, a propósito: la clienta lo tipea en la app
+    y no hace falta configurar deep links ni depender de que el cliente de mail
+    respete el esquema. Un enlace que abre el navegador equivocado no lleva a
+    ninguna parte; un número siempre se puede copiar.
+
+    **Se guarda hasheado.** Con seis dígitos el hash no es una gran barrera
+    —el espacio es chico—, así que la protección real son las otras tres: vive
+    quince minutos, admite cinco intentos y el endpoint está limitado por
+    throttle. El hash es la cuarta capa, para que un volcado de la base no
+    entregue códigos vivos en texto plano.
+
+    Pedir uno nuevo **borra los anteriores sin usar**: si no, quedan varios
+    válidos a la vez y cada uno es una puerta más. No se guarda historial porque
+    de un código quemado no hay nada que auditar.
+    """
+    VIGENCIA_MINUTOS = 15
+    MAX_INTENTOS = 5
+    LONGITUD = 6
+
+    usuario_cliente = models.ForeignKey(
+        UsuarioCliente,
+        on_delete=models.CASCADE,
+        related_name='codigos_recuperacion',
+    )
+    codigo_hash = models.CharField(max_length=128)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    expira_en = models.DateTimeField()
+    usado_en = models.DateTimeField(null=True, blank=True)
+    intentos = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Código de recuperación'
+        verbose_name_plural = 'Códigos de recuperación'
+        ordering = ['-creado_en']
+        indexes = [
+            models.Index(fields=['usuario_cliente', 'usado_en']),
+        ]
+
+    def __str__(self):
+        return f"Recuperación de {self.usuario_cliente.email} ({self.estado})"
+
+    @property
+    def esta_expirado(self):
+        return timezone.now() >= self.expira_en
+
+    @property
+    def esta_usado(self):
+        return self.usado_en is not None
+
+    @property
+    def sin_intentos(self):
+        return self.intentos >= self.MAX_INTENTOS
+
+    @property
+    def esta_vigente(self):
+        return not self.esta_usado and not self.esta_expirado and not self.sin_intentos
+
+    @property
+    def estado(self):
+        if self.esta_usado:
+            return 'USADO'
+        if self.esta_expirado:
+            return 'EXPIRADO'
+        if self.sin_intentos:
+            return 'BLOQUEADO'
+        return 'VIGENTE'
+
+    @classmethod
+    def emitir(cls, usuario_cliente):
+        """
+        Crea un código nuevo y devuelve ``(instancia, codigo_en_claro)``.
+
+        El código en claro se devuelve porque es la **única** oportunidad de
+        verlo: en la base solo queda el hash. Se manda por mail y se descarta.
+        """
+        cls.objects.filter(usuario_cliente=usuario_cliente, usado_en__isnull=True).delete()
+
+        codigo = f"{secrets.randbelow(10 ** cls.LONGITUD):0{cls.LONGITUD}d}"
+        instancia = cls.objects.create(
+            usuario_cliente=usuario_cliente,
+            codigo_hash=make_password(codigo),
+            expira_en=timezone.now() + timedelta(minutes=cls.VIGENCIA_MINUTOS),
+        )
+        return instancia, codigo
+
+    def verificar(self, codigo):
+        """
+        ¿Es este el código? Cada intento cuenta, acierte o no.
+
+        Contar también los aciertos es intencional: si no, un atacante que da con
+        el código correcto en el último intento no consumiría nada y podría
+        reusarlo. El uso lo cierra `marcar_usado`.
+        """
+        if not self.esta_vigente:
+            return False
+
+        self.intentos += 1
+        self.save(update_fields=['intentos'])
+        return check_password(codigo, self.codigo_hash)
+
+    def marcar_usado(self):
+        self.usado_en = timezone.now()
+        self.save(update_fields=['usado_en'])

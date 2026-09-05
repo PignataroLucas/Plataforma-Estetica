@@ -13,6 +13,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.clientes.models import (
     Cliente,
+    CodigoRecuperacion,
     PlanTratamiento,
     RutinaCuidado,
     UsuarioCliente,
@@ -20,6 +21,7 @@ from apps.clientes.models import (
 )
 from apps.integraciones.compra import CompraInvalida, preparar_compra, resolver_items
 from apps.integraciones.tiendanube import TiendanubeError
+from apps.notificaciones.correo import CorreoNoEnviado, enviar_correo
 from apps.notificaciones.models import DispositivoPush, PreferenciaNotificacion
 from apps.servicios.models import Servicio
 from apps.turnos.models import Turno
@@ -38,6 +40,8 @@ from apps.turnos.services import (
 from .authentication import ClienteJWTAuthentication
 from .serializers import (
     ClienteTokenRefreshSerializer,
+    OlvideMiClaveSerializer,
+    RestablecerClaveSerializer,
     CompraSerializer,
     LoginSerializer,
     PerfilSerializer,
@@ -212,6 +216,91 @@ class PerfilView(ClienteScopeMixin, APIView):
         serializer.save()
         usuario = self.get_queryset().get(pk=request.user.pk)
         return Response(PerfilSerializer(usuario).data)
+
+
+class OlvideMiClaveView(APIView):
+    """
+    POST /api/client/auth/password/olvide/ — manda un código de recuperación.
+
+    **Siempre responde 200**, exista la cuenta o no. Si contestara distinto,
+    cualquiera podría averiguar quién es clienta del centro probando emails, que
+    en un centro de estética no es un dato menor.
+
+    Que el mail falle tampoco cambia la respuesta: se registra y la clienta ve el
+    mismo mensaje. Prefiere un "no me llegó, pido otro" antes que revelar por qué.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'cliente_password'
+
+    def post(self, request):
+        serializer = OlvideMiClaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+
+        respuesta = Response(
+            {'detail': 'Si hay una cuenta con ese email, te mandamos un código.'}
+        )
+
+        try:
+            usuario = UsuarioCliente.objects.get(email=email, activo=True)
+        except UsuarioCliente.DoesNotExist:
+            return respuesta
+
+        codigo_obj, codigo = CodigoRecuperacion.emitir(usuario)
+        nombre = usuario.nombre or 'Hola'
+
+        try:
+            enviar_correo(
+                destinatario=usuario.email,
+                asunto='Tu código para recuperar la contraseña',
+                cuerpo=(
+                    f"""{nombre},
+
+Tu código para recuperar la contraseña es: {codigo}
+
+Vence en {CodigoRecuperacion.VIGENCIA_MINUTOS} minutos y se usa una sola vez.
+Si no lo pediste vos, podés ignorar este mensaje: tu contraseña
+no cambia hasta que alguien use el código.
+"""
+                ),
+            )
+        except CorreoNoEnviado:
+            # El código queda emitido igual: si el problema fue de SES, pedir
+            # otro no ayuda, y borrarlo acá dejaría a la clienta sin nada si el
+            # mail en realidad salió.
+            logger.exception('No se pudo mandar el código de recuperación a %s', usuario.pk)
+
+        return respuesta
+
+
+class RestablecerClaveView(APIView):
+    """
+    POST /api/client/auth/password/restablecer/ — consume el código y cambia la clave.
+
+    No devuelve sesión iniciada a propósito: después de cambiarla, la clienta
+    entra por login como siempre. Iniciar sesión acá convertiría un código de un
+    solo uso en un camino de autenticación alternativo.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'cliente_password'
+
+    def post(self, request):
+        serializer = RestablecerClaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        usuario = serializer.validated_data['_usuario']
+        codigo = serializer.validated_data['_codigo']
+
+        with transaction.atomic():
+            usuario.set_password(serializer.validated_data['password'])
+            usuario.save(update_fields=['password'])
+            codigo.marcar_usado()
+
+        return Response({'detail': 'Listo. Ya podés entrar con tu contraseña nueva.'})
 
 
 class DescuentoAppView(ClienteScopeMixin, APIView):
