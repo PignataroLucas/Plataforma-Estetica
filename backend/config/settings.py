@@ -113,6 +113,35 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Solo los dos campos públicos -- foto de producto y logo del centro -- optan
 # explícitamente por el storage `publico`. Ver config/storage.py.
 AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
+AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
+
+# --- Sentry (errores en producción) ---
+# Inerte sin DSN: en desarrollo no se inicializa y no manda nada.
+#
+# `send_default_pii=False` es deliberado y **no conviene cambiarlo**: este
+# backend maneja datos de salud y de belleza de personas —fichas, tratamientos,
+# alergias—, y mandarle a un tercero cuerpos de request o emails asociados a los
+# errores convierte una herramienta de diagnóstico en una fuga de datos
+# sensibles. Con el stack trace y la URL alcanza para depurar.
+SENTRY_DSN = config('SENTRY_DSN', default='')
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=config('SENTRY_ENVIRONMENT', default='production'),
+        send_default_pii=False,
+        # Sin trazas de performance: el plan gratuito se consume rápido y lo que
+        # falta hoy es ver los errores, no medir latencias.
+        traces_sample_rate=0.0,
+    )
+
+# --- Correo saliente (AWS SES) ---
+# Mismas credenciales que el bucket. `EMAIL_REMITENTE` tiene que ser una
+# dirección verificada en SES o los envíos se rechazan. Ver apps/notificaciones/correo.py
+AWS_SES_REGION_NAME = config('AWS_SES_REGION_NAME', default='sa-east-1')
+EMAIL_REMITENTE = config('EMAIL_REMITENTE', default='')
 
 STORAGES = {
     'default': {
@@ -131,8 +160,8 @@ if AWS_STORAGE_BUCKET_NAME:
             'region_name': config('AWS_S3_REGION_NAME', default='sa-east-1'),
             # Las credenciales van explícitas y no por el entorno de boto3:
             # en desarrollo decouple las lee del .env, que boto3 no mira.
-            'access_key': config('AWS_ACCESS_KEY_ID', default=None),
-            'secret_key': config('AWS_SECRET_ACCESS_KEY', default=None),
+            'access_key': AWS_ACCESS_KEY_ID or None,
+            'secret_key': AWS_SECRET_ACCESS_KEY or None,
             'querystring_auth': False,  # URLs limpias: el contenido es público
             'file_overwrite': False,    # dos subidas homónimas no se pisan
             'default_acl': None,        # los buckets nuevos tienen ACLs deshabilitadas
@@ -182,6 +211,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'cliente_auth': '20/min',
         'cliente_registro': '10/hour',
+        'cliente_password': '5/hour',
         'cliente_reserva': '20/hour',
         'public_api': '100/hour',
         # El callback de OAuth de Tienda Nube dispara una llamada saliente por

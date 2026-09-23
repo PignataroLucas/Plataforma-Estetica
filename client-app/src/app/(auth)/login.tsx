@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { AuthScaffold } from '@/components/auth/AuthScaffold';
 import { AppText } from '@/components/ui/AppText';
@@ -84,6 +84,17 @@ export default function Login() {
         onSubmitEditing={submit}
       />
       <Button label="Ingresar" onPress={submit} loading={loading} />
+      <Pressable
+        onPress={() => router.push('/recuperar')}
+        hitSlop={8}
+        style={styles.olvide}
+        accessibilityRole="button">
+        <AppText variant="meta">¿Olvidaste tu contraseña?</AppText>
+      </Pressable>
     </AuthScaffold>
   );
 }
+
+const styles = StyleSheet.create({
+  olvide: { alignItems: 'center', paddingVertical: 4 },
+});

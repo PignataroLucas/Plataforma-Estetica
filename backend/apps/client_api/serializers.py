@@ -8,6 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.clientes.models import (
     Cliente,
     CodigoInvitacion,
+    CodigoRecuperacion,
     PlanTratamiento,
     RutinaCuidado,
     RutinaItem,
@@ -379,3 +380,62 @@ class CompraSerializer(serializers.Serializer):
     apps/integraciones/compra.py).
     """
     items = ItemCompraSerializer(many=True, allow_empty=False, max_length=20)
+
+
+# ------------------------------------------------------------------ #
+# Recuperación de contraseña
+# ------------------------------------------------------------------ #
+
+class OlvideMiClaveSerializer(serializers.Serializer):
+    """
+    Pide un código de recuperación.
+
+    **No valida que la cuenta exista, y es a propósito.** Si respondiera distinto
+    para un email registrado que para uno que no, cualquiera podría averiguar
+    quién es clienta del centro probando direcciones. La vista contesta siempre
+    lo mismo; que exista o no lo decide ella en silencio.
+    """
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class RestablecerClaveSerializer(serializers.Serializer):
+    """
+    Consume el código y cambia la contraseña.
+
+    Los errores son deliberadamente vagos —"código inválido o vencido"— por lo
+    mismo que el serializer de arriba: distinguir "ese código no es" de "esa
+    cuenta no existe" convierte el endpoint en un detector de clientas.
+    """
+    email = serializers.EmailField()
+    codigo = serializers.CharField()
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def validate_codigo(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        generico = 'El código es inválido o venció. Pedí uno nuevo.'
+
+        try:
+            usuario = UsuarioCliente.objects.get(email=attrs['email'])
+        except UsuarioCliente.DoesNotExist:
+            raise serializers.ValidationError({'codigo': generico})
+
+        vigente = (
+            CodigoRecuperacion.objects
+            .filter(usuario_cliente=usuario, usado_en__isnull=True)
+            .order_by('-creado_en')
+            .first()
+        )
+        if vigente is None or not vigente.verificar(attrs['codigo']):
+            raise serializers.ValidationError({'codigo': generico})
+
+        attrs['_usuario'] = usuario
+        attrs['_codigo'] = vigente
+        return attrs

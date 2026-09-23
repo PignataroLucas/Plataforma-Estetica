@@ -31,3 +31,22 @@ export function getPerfil(): Promise<Perfil> {
 export function actualizarPerfil(datos: { nombre?: string; apellido?: string }): Promise<Perfil> {
   return authPatch<Perfil>('/client/perfil/', datos);
 }
+
+/**
+ * POST /api/client/auth/password/olvide/ — pide un código de recuperación.
+ *
+ * Responde 200 exista o no la cuenta: el backend no revela quién está
+ * registrada. Así que un 200 acá **no significa** que el mail vaya a llegar.
+ */
+export function pedirCodigoRecuperacion(email: string): Promise<{ detail: string }> {
+  return apiPost<{ detail: string }>('/client/auth/password/olvide/', { email });
+}
+
+/** POST /api/client/auth/password/restablecer/ — consume el código y cambia la clave. */
+export function restablecerClave(datos: {
+  email: string;
+  codigo: string;
+  password: string;
+}): Promise<{ detail: string }> {
+  return apiPost<{ detail: string }>('/client/auth/password/restablecer/', datos);
+}
