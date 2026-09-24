@@ -2,6 +2,7 @@ import { useState, FormEvent, ChangeEvent, useEffect } from 'react'
 import { Servicio, MaquinaAlquilada, PaginatedResponse, DIAS_SEMANA } from '@/types/models'
 import { Button, Input } from '@/components/ui'
 import CalendarioFechas from '@/components/servicios/CalendarioFechas'
+import CategoriaSelector from '@/components/servicios/CategoriaSelector'
 import api from '@/services/api'
 
 /**
@@ -68,6 +69,7 @@ export default function ServicioForm({
     nombre: '',
     duracion_minutos: 0,
     precio: 0,
+    categoria: null,
     maquina_alquilada: undefined,
     reservable_por_cliente: false,
     dias_reserva: [],
@@ -108,6 +110,7 @@ export default function ServicioForm({
         nombre: servicio.nombre,
         duracion_minutos: servicio.duracion_minutos,
         precio: servicio.precio,
+        categoria: servicio.categoria ?? null,
         maquina_alquilada: servicio.maquina_alquilada,
         reservable_por_cliente: servicio.reservable_por_cliente ?? false,
         dias_reserva: servicio.dias_reserva ?? [],
@@ -275,6 +278,11 @@ export default function ServicioForm({
             placeholder="Ej: 5000"
             min="0"
             step="0.01"
+          />
+
+          <CategoriaSelector
+            value={formData.categoria ?? null}
+            onChange={categoria => setFormData(prev => ({ ...prev, categoria }))}
           />
 
           {/* Selector de Máquina */}

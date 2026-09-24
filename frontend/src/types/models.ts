@@ -320,7 +320,8 @@ export interface AlquilerPendiente {
 export interface Servicio {
   id: number
   sucursal: number
-  categoria?: number
+  /** Agrupa el servicio en la app del cliente. null = sin categoría. */
+  categoria?: number | null
   maquina_alquilada?: number
   maquina_nombre?: string
   nombre: string
