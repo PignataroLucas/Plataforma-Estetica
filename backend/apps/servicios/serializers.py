@@ -103,11 +103,39 @@ class ServicioSerializer(serializers.ModelSerializer):
                 )
         return [fecha.isoformat() for fecha in sorted(fechas)]
 
+    def validate_categoria(self, value):
+        """
+        La FK acepta cualquier id: sin este chequeo un servicio podría quedar
+        colgado de la categoría de otro centro (y la app mostraría ese nombre).
+        """
+        sucursal = getattr(self.context['request'].user, 'sucursal', None)
+        if value is not None and value.sucursal_id != getattr(sucursal, 'id', None):
+            raise serializers.ValidationError('La categoría no pertenece a tu sucursal.')
+        return value
+
 
 class CategoriaServicioSerializer(serializers.ModelSerializer):
     """
     Serializer para CategoriaServicio
     """
+    def validate_nombre(self, value):
+        """
+        `sucursal` es read-only, así que DRF no aplica el unique_together y un
+        nombre repetido terminaría en IntegrityError (500). Se chequea acá, sin
+        distinguir mayúsculas: "Facial" y "facial" en la app serían dos chips.
+        """
+        nombre = value.strip()
+        if not nombre:
+            raise serializers.ValidationError('El nombre es requerido.')
+
+        sucursal = getattr(self.context['request'].user, 'sucursal', None)
+        repetidas = CategoriaServicio.objects.filter(sucursal=sucursal, nombre__iexact=nombre)
+        if self.instance:
+            repetidas = repetidas.exclude(pk=self.instance.pk)
+        if repetidas.exists():
+            raise serializers.ValidationError(f'Ya existe una categoría "{nombre}".')
+        return nombre
+
     class Meta:
         model = CategoriaServicio
         fields = [

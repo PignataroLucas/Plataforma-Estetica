@@ -22,8 +22,9 @@ export const useServicios = () => {
   const cleanServicioData = (data: Partial<Servicio>) => {
     const cleaned: any = { ...data }
 
-    // Campos opcionales que se deben eliminar si están vacíos
-    const optionalFields = ['descripcion', 'codigo', 'categoria', 'requiere_equipamiento',
+    // Campos opcionales que se deben eliminar si están vacíos.
+    // `categoria` no va acá: mandar null es la forma de sacarle la categoría.
+    const optionalFields = ['descripcion', 'codigo', 'requiere_equipamiento',
                             'comision_porcentaje', 'color']
 
     // Eliminar campos que están vacíos, undefined o null

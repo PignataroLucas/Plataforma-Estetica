@@ -61,7 +61,11 @@ class ServicioPublicoSerializer(serializers.ModelSerializer):
         ]
 
     def get_categoria_nombre(self, obj):
-        return obj.categoria.nombre if obj.categoria else None
+        # Desactivar una categoría la saca de la app sin tener que desasignarla
+        # servicio por servicio.
+        if obj.categoria and obj.categoria.activa:
+            return obj.categoria.nombre
+        return None
 
     def get_modo_reserva(self, obj):
         """'fechas' (fechas puntuales cargadas) o 'dias' (patrón semanal)."""
