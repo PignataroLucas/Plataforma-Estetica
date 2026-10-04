@@ -51,17 +51,23 @@ En orden de lo que más duele:
 
 ### Decisiones de negocio que bloquean valor, no código
 
-Ninguna la puede resolver el equipo técnico, y las tres cambian lo que la app
-vale para una clienta:
+Las tres cambian lo que la app vale para una clienta. La primera y la tercera
+dependen de una respuesta del centro; la segunda dejó de depender de terceros el
+01/10/2026 y hoy es trabajo propio:
 
 - **¿El descuento de la app se apila con el 10% de transferencia?** Mientras no
   se responda, el segmento general queda en 0% y **la app no descuenta nada**,
   que era el motivo del proyecto. Se puede medir en vez de preguntar: ver
   `COMPRA_EN_APP_SPEC.md` §7.2.
-- **Instalar la app en la tienda real de AME**, bloqueado por la pregunta al
-  panel de partners sobre si una app "en desarrollo" se puede instalar en una
-  tienda real. Hasta que pase, ningún producto tiene variante mapeada, `comprable`
-  da `false` y **no se puede comprar desde la app**.
+- **Instalar la app en la tienda real de AME.** Ya **no** está bloqueado por la
+  pregunta al panel de partners: el 01/10/2026 se confirmó ahí mismo que una app
+  "En desarrollo" se instala en una tienda real mediante el "Link de
+  Instalación", y que la distribución privada no pasa homologación
+  (`COMPRA_EN_APP_SPEC.md` §5.1). Lo que falta es completar *Datos básicos* en el
+  panel —subcategoría, página de la aplicación y permisos—, que es lo que
+  habilita ese link, y después que AME lo autorice. Hasta entonces ningún
+  producto tiene variante mapeada, `comprable` da `false` para los 20 productos
+  de producción y **no se puede comprar desde la app**.
 - **¿Las ofertas del CRM existen también en Tienda Nube?** Si no, la app muestra
   un precio que el checkout no respeta. Hoy no muerde porque no hay ofertas
   activas.

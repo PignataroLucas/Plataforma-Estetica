@@ -37,6 +37,16 @@ class SegmentoApp(models.Model):
         verbose_name='Descuento',
         help_text="Porcentaje que se le descuenta a las clientas de este segmento"
     )
+    tope_descuento = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Tope del descuento',
+        help_text="Máximo en pesos que puede descontar el cupón, por compra. "
+                  "Vacío = sin tope"
+    )
     es_predeterminado = models.BooleanField(
         default=False,
         verbose_name='Es el general de la app',
@@ -347,6 +357,20 @@ class Cliente(models.Model):
         """
         segmento = self.segmento_app_efectivo
         return segmento.porcentaje_descuento if segmento else Decimal('0.00')
+
+    @property
+    def tope_descuento_app(self):
+        """
+        Tope en pesos del descuento, o `None` si no tiene.
+
+        Viaja siempre pegado a `descuento_app` y por el mismo motivo: la app lo
+        necesita para que el total del carrito sea el que el checkout va a
+        cobrar. Un tope que conociera solo el backend haría que la app mostrara
+        de más en los carritos grandes y el precio le subiera a la clienta justo
+        al pagar —la trampa del §6.1, en su dirección peligrosa.
+        """
+        segmento = self.segmento_app_efectivo
+        return segmento.tope_descuento if segmento else None
 
 
 class HistorialCliente(models.Model):

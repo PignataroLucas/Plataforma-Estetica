@@ -9,6 +9,11 @@ Una sola regla manda acá: **el porcentaje sale de `Cliente.descuento_app`**, qu
 es el mismo número que la app usó para mostrar el precio (§5.8). Si esto lo
 recalculara por su cuenta, la clienta vería un precio y pagaría otro, que es la
 trampa del §6.1.
+
+Lo mismo vale para el tope en pesos (`Cliente.tope_descuento_app`): va al cupón
+como `max_discount_amount` y la app lo recibe por `/descuento/` para calcular el
+total del carrito. Un tope que conociera solo este lado haría que la app
+mostrara de más en los carritos grandes.
 """
 import logging
 import secrets
@@ -89,7 +94,7 @@ def emitir_cupon(cliente):
     codigo = _codigo_libre()
 
     cupon_tn = TiendanubeClient(integration).create_coupon(
-        _payload(codigo, porcentaje, expira, integration)
+        _payload(codigo, porcentaje, expira, integration, cliente.tope_descuento_app)
     )
 
     cupon = CuponApp.objects.create(
@@ -122,7 +127,7 @@ def _codigo_libre(intentos=5):
     raise RuntimeError('No se pudo generar un código de cupón libre')
 
 
-def _payload(codigo, porcentaje, expira, integration):
+def _payload(codigo, porcentaje, expira, integration, tope=None):
     """
     El cupón como lo espera Tienda Nube.
 
@@ -130,9 +135,13 @@ def _payload(codigo, porcentaje, expira, integration):
     Argentina. Igual la garantía real de que un cupón no sobrevive es
     `max_uses: 1` más la limpieza: no sabemos si TN trata `end_time` como
     inclusivo, y no vale la pena depender de eso.
+
+    `max_discount_amount` solo se manda si el segmento tiene tope. Mandarlo en
+    `null` sería decirle a TN algo distinto de no mencionarlo, y el default de
+    no mencionarlo es el que queremos cuando no hay tope.
     """
     vence_local = timezone.localtime(expira)
-    return {
+    payload = {
         'code': codigo,
         'type': 'percentage',
         'value': str(porcentaje),
@@ -145,6 +154,9 @@ def _payload(codigo, porcentaje, expira, integration):
         # que ellos no cambien el suyo.
         'combines_with_other_discounts': integration.coupons_combine_with_other_discounts,
     }
+    if tope is not None:
+        payload['max_discount_amount'] = str(tope)
+    return payload
 
 
 def limpiar_vencidos(limite=None):

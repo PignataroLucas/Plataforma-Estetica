@@ -325,8 +325,13 @@ class DescuentoAppView(ClienteScopeMixin, APIView):
 
         cliente = vinc.cliente
         segmento = cliente.segmento_app_efectivo
+        tope = cliente.tope_descuento_app
         return Response({
             'porcentaje': f"{cliente.descuento_app:.2f}",
+            # El tope viaja con el porcentaje porque sin él la app no puede
+            # calcular el total del carrito: con un tope de $5.000 y 15%, un
+            # carrito de $40.000 descuenta $5.000 y no $6.000. `null` = sin tope.
+            'tope': f"{tope:.2f}" if tope is not None else None,
             # Solo informativo: la app no decide nada con el nombre.
             'segmento': segmento.nombre if segmento else None,
             'centro': cliente.centro_estetica_id,

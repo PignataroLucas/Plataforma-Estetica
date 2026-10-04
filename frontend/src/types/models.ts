@@ -83,6 +83,8 @@ export interface SegmentoApp {
   id: number
   nombre: string
   porcentaje_descuento: string
+  /** Tope en pesos del descuento, por compra. null = sin tope. */
+  tope_descuento: string | null
   /** El descuento general: le toca a toda clienta sin segmento propio. */
   es_predeterminado: boolean
   activo: boolean

@@ -97,6 +97,13 @@ export interface ProductoPublico {
 export interface DescuentoApp {
   /** Porcentaje, como string decimal ('15.00'). 0 = sin descuento. */
   porcentaje: string;
+  /**
+   * Tope en pesos del descuento, como string decimal ('5000.00'), o `null` si
+   * no tiene. Hay que aplicarlo: con 15% y tope de $5.000, un carrito de
+   * $40.000 descuenta $5.000 y no $6.000. Sin esto la app mostraría de más y el
+   * precio le subiría a la clienta justo al pagar.
+   */
+  tope: string | null;
   /** Nombre del segmento, solo informativo. */
   segmento: string | null;
   centro: number;

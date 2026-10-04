@@ -12,8 +12,9 @@ class SegmentoAppSerializer(serializers.ModelSerializer):
     class Meta:
         model = SegmentoApp
         fields = [
-            'id', 'nombre', 'porcentaje_descuento', 'es_predeterminado',
-            'activo', 'cantidad_clientes', 'creado_en', 'actualizado_en',
+            'id', 'nombre', 'porcentaje_descuento', 'tope_descuento',
+            'es_predeterminado', 'activo', 'cantidad_clientes',
+            'creado_en', 'actualizado_en',
         ]
         read_only_fields = ['id', 'creado_en', 'actualizado_en', 'cantidad_clientes']
 

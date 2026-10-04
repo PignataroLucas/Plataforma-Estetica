@@ -39,11 +39,12 @@ def hacer_centro(nombre='Ame'):
     )
 
 
-def hacer_clienta(centro, porcentaje='15.00'):
+def hacer_clienta(centro, porcentaje='15.00', tope=None):
     if porcentaje is not None:
         SegmentoApp.objects.create(
             centro_estetica=centro, nombre='General de la app',
             porcentaje_descuento=Decimal(porcentaje), es_predeterminado=True,
+            tope_descuento=Decimal(tope) if tope is not None else None,
         )
     return Cliente.objects.create(
         centro_estetica=centro, nombre='Ana', apellido='Gómez', telefono='11',
@@ -128,6 +129,54 @@ class TestEmision:
             emitir_cupon(clienta)
 
         assert crear.call_args.args[0]['combines_with_other_discounts'] is False
+
+    def test_por_defecto_el_cupon_no_se_combina(self):
+        """
+        AME lo decidió el 04/10/2026: el cupón no convive con el 2x1, porque la
+        promo y el cupón juntos se llevan el margen dos veces. El default pasó a
+        False, y este test es lo que avisa el día que alguien lo revierta sin
+        querer al tocar el modelo.
+        """
+        centro = hacer_centro()
+        hacer_integracion(centro)
+        clienta = hacer_clienta(centro)
+
+        with patch('apps.integraciones.cupones.TiendanubeClient.create_coupon',
+                   return_value={'id': 1}) as crear:
+            emitir_cupon(clienta)
+
+        assert crear.call_args.args[0]['combines_with_other_discounts'] is False
+
+    def test_el_tope_del_segmento_viaja_al_cupon(self):
+        """
+        El tope en pesos es la otra mitad de la decisión del 04/10/2026. Si no
+        llegara a Tienda Nube, un carrito grande se llevaría el porcentaje
+        entero y el tope sería decorativo.
+        """
+        centro = hacer_centro()
+        hacer_integracion(centro)
+        clienta = hacer_clienta(centro, porcentaje='15.00', tope='5000.00')
+
+        with patch('apps.integraciones.cupones.TiendanubeClient.create_coupon',
+                   return_value={'id': 1}) as crear:
+            emitir_cupon(clienta)
+
+        assert crear.call_args.args[0]['max_discount_amount'] == '5000.00'
+
+    def test_sin_tope_el_campo_no_se_manda(self):
+        """
+        Mandar `max_discount_amount` en null no es lo mismo que no mandarlo, y
+        lo que queremos cuando no hay tope es que Tienda Nube no lo vea.
+        """
+        centro = hacer_centro()
+        hacer_integracion(centro)
+        clienta = hacer_clienta(centro, porcentaje='15.00', tope=None)
+
+        with patch('apps.integraciones.cupones.TiendanubeClient.create_coupon',
+                   return_value={'id': 1}) as crear:
+            emitir_cupon(clienta)
+
+        assert 'max_discount_amount' not in crear.call_args.args[0]
 
     def test_sin_descuento_no_se_emite_nada(self):
         """
