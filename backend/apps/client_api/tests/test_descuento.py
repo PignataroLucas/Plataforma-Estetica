@@ -78,6 +78,49 @@ class DescuentoAppTests(APITestCase):
         self.assertEqual(respuesta.data['segmento'], 'General de la app')
         self.assertEqual(respuesta.data['centro'], self.centro_a.id)
 
+    def test_sin_tope_devuelve_null(self):
+        """
+        `null` y no 0: un tope de cero sería "no descuenta nada", que es lo
+        contrario de "descuenta sin límite".
+        """
+        self.autenticar()
+        respuesta = self.client.get(self.url)
+
+        self.assertIsNone(respuesta.data['tope'])
+
+    def test_el_tope_viaja_con_el_porcentaje(self):
+        """
+        Sin el tope, la app calcularía el total del carrito con el porcentaje
+        entero: con 15% y tope de $5.000, un carrito de $40.000 mostraría
+        $34.000 y el checkout cobraría $35.000. El precio le subiría a la
+        clienta justo al pagar, que es la trampa del §6.1 en su peor dirección.
+        """
+        self.general_a.tope_descuento = Decimal('5000.00')
+        self.general_a.save()
+
+        self.autenticar()
+        respuesta = self.client.get(self.url)
+
+        self.assertEqual(respuesta.data['porcentaje'], '10.00')
+        self.assertEqual(respuesta.data['tope'], '5000.00')
+
+    def test_el_tope_sale_del_segmento_propio(self):
+        """El tope acompaña al porcentaje: si manda VIP, manda el tope de VIP."""
+        vip = SegmentoApp.objects.create(
+            centro_estetica=self.centro_a, nombre='VIP',
+            porcentaje_descuento=Decimal('20.00'),
+            tope_descuento=Decimal('8000.00'),
+        )
+        self.general_a.tope_descuento = Decimal('5000.00')
+        self.general_a.save()
+        self.cliente_a.segmento_app = vip
+        self.cliente_a.save()
+
+        self.autenticar()
+        respuesta = self.client.get(self.url)
+
+        self.assertEqual(respuesta.data['tope'], '8000.00')
+
     def test_devuelve_el_segmento_propio(self):
         vip = SegmentoApp.objects.create(
             centro_estetica=self.centro_a, nombre='VIP',

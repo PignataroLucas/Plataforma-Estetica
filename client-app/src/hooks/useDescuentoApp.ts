@@ -33,6 +33,8 @@ export function useDescuentoApp() {
 
   return {
     porcentaje: data ? aNumero(data.porcentaje) : 0,
+    // `null` es "sin tope" y es distinto de 0, que sería "no descuenta nada".
+    tope: data?.tope != null ? aNumero(data.tope) : null,
     segmento: data?.segmento ?? null,
     cargando: autenticada && isPending,
   };

@@ -4,7 +4,7 @@
 30/08/2026**, incluida la detección del retorno. Falta instalarlo en la tienda
 real de AME, confirmar que Conto manda el cupón (7.1) y las dos decisiones del
 centro (7.2 y 6.1).
-**Fecha:** 11/08/2026, con notas del 15, 17 y 30/08/2026
+**Fecha:** 11/08/2026, con notas del 15, 17 y 30/08/2026, y del 01/10/2026
 
 Documento de handoff: está escrito para que se pueda implementar **sin haber
 participado de la conversación donde se decidió**. Todo lo que dice "verificado"
@@ -243,7 +243,7 @@ sección "Claves de Acceso" de esa misma pantalla.
 | | Alcance | Homologación |
 |---|---|---|
 | Tienda de Aplicaciones | Pública, listada en el marketplace de TN | Sí |
-| **Para sus clientes** | Solo los comercios que se elijan | La doc dice que no |
+| **Para sus clientes** | Solo los comercios que se elijan | No — confirmado en el panel, 01/10/2026 |
 
 Acá corresponde la privada: es una app para un comercio. Si eso se sostiene no
 hay aprobación de terceros que esperar, y el tiempo de calendario ajeno que
@@ -338,11 +338,36 @@ Dos consecuencias prácticas:
 >   tienda, así que no hay dato de Tienda Nube acá para borrar. La ficha de la
 >   clienta en el CRM es dato del centro, no de la tienda.
 >
-> **Falta un trámite que no es código:** cambiar la URL de redirección en el
-> panel de partners, que todavía apunta a la página del panel, por
-> `https://plataforma-estetica-production.up.railway.app/api/integraciones/tiendanube/oauth/callback/`,
-> y cargar las tres URLs de webhook. Hasta que eso pase, esto no se ejercita
-> contra Tienda Nube de verdad.
+> **Estado del panel de partners al 01/10/2026.** Las cuatro URLs **ya están
+> cargadas**: la de redirección apunta al callback de producción y los tres
+> webhooks de privacidad están en su sección. La nota anterior de este documento
+> decía que faltaba hacerlo y quedó vieja.
+>
+> Lo que todavía retiene el alta es el resto del formulario de *Datos básicos*,
+> que sigue en **Pendiente**: faltan la subcategoría, la página de la aplicación
+> y tildar los permisos. **Hasta que ese formulario no esté completo, el panel no
+> habilita el "Link de Instalación"**, que es lo que hay que mandarle al centro
+> para que instale. O sea que el bloqueo ya no es técnico ni de terceros: es un
+> formulario a medio llenar.
+>
+> **Dos preguntas que el panel respondió solo**, y que este documento y el
+> roadmap daban por abiertas:
+>
+> - **Una app "En desarrollo" se instala en una tienda real.** El panel ofrece un
+>   "Link de Instalación" con el texto *"Compartí este link con tu cliente para
+>   instalar esta aplicación en la tienda"*. No hace falta publicarla ni esperar
+>   a nadie.
+> - **La distribución elegida es "Para tus clientes"** —la privada de la tabla de
+>   §5.1—, así que **no hay homologación**. Lo que ahí decía "la doc dice que no"
+>   queda confirmado contra el panel.
+>
+> **Los permisos, contra las llamadas que la app hace de verdad.** Son cuatro, y
+> son todas: `GET store` (confirmar el token al instalar), `GET products`
+> (emparejar variantes, §5.2), `POST coupons` y `DELETE coupons/{id}`. Alcanza
+> entonces con **Coupons** en lectura y escritura y **Products** en lectura, y
+> nada más. Ojo que en Tienda Nube *Discounts* es un recurso distinto de
+> *Coupons* y no se usa: tildarlo sería pedir un permiso que el código nunca
+> ejerce.
 
 ### 5.2 Mapeo producto ↔ variante de Tienda Nube
 
@@ -625,6 +650,30 @@ precio con el descuento que **el backend va a materializar como cupón**, no un
 > y no `precio_venta_final`, que es un cambio de una línea en el serializer
 > público.
 
+> **Respondido el 04/10/2026, y el problema se dio vuelta.** AME carga las
+> ofertas en Tienda Nube, así que la rama peligrosa de la nota de arriba —mostrar
+> de menos y cobrar de más— queda cerrada. Pero aclararon que cargan **"desde
+> descuentos hasta 2x1, 3x2"**, y ahí aparece otra cosa.
+>
+> **Nuestro modelo no sabe representar un 2x1.** `Producto` tiene un solo campo
+> de oferta, `precio_oferta`, que es un precio unitario; un 2x1 es una promoción
+> de carrito. Consecuencias, en orden de cuánto duelen:
+>
+> 1. **La app no puede mostrar la promo.** Pinta precio unitario común, así que
+>    un 2x1 activo es invisible ahí.
+> 2. **La app queda peor que la web**, que es lo contrario del motivo del
+>    proyecto: la clienta ve precio normal en la app y 2x1 en la tienda online.
+> 3. La dirección del error es la benigna —el checkout cobra **menos** de lo que
+>    la app prometió—, así que no se pierde la venta. Se pierde el argumento.
+>
+> El punto 3 es también por qué esto no bloquea: no hay riesgo de que a nadie le
+> suba el precio al pagar. Lo que hay es una promo que la app no sabe contar.
+> Mostrarla requiere un modelo de promociones de carrito que hoy no existe, o
+> leerlas de TN al vuelo. Queda anotado y sin construir.
+>
+> El riesgo de margen que sí traía —cupón apilado sobre el 2x1— está cubierto por
+> la decisión del §7.2: el cupón ya no se combina con las promos de la tienda.
+
 > **Otra puerta, encontrada el 30/08/2026 en la primera compra real.** La app
 > dijo `$10.625` y Tienda Nube cobró `$10.675`. La diferencia es el **costo de
 > envío**, que la clienta elige *dentro* del WebView, después de que el backend
@@ -808,11 +857,47 @@ ventas que pasen mientras tanto los pierden para siempre.
 > `verificar_conto` ahora chequea las cuatro claves, así que es un comando de
 > solo lectura contra la API de Conto.
 
-### 7.2 Preguntarle al centro si los descuentos se apilan
+### 7.2 ~~Preguntarle al centro si los descuentos se apilan~~ — respondido el 04/10/2026
 
-Ver 6.4. El centro ya da 10% por transferencia y hay que decidir si el descuento
-de la app se suma o lo reemplaza. Cambia el porcentaje del cupón, así que hay que
-resolverlo antes de construir.
+Ver 6.4. **AME contestó, y la respuesta tiene tres partes:**
+
+1. **El descuento de la app se suma al 10% de transferencia.** Lo quieren
+   apilado: empuja las dos cosas que les convienen.
+2. **El cupón no convive con las promociones de la tienda.** El caso que lo
+   motivó es el 2x1: promo más cupón se lleva el margen dos veces. Por eso
+   `TiendanubeIntegration.coupons_combine_with_other_discounts` pasó a `False`
+   por defecto.
+3. **15% con tope de $5.000 por compra.** Dijeron "10 o 15 con tope de 5.000, es
+   lo mismo"; se eligió 15 porque hace la app más atractiva y el tope acota el
+   riesgo igual. El tope vive en `SegmentoApp.tope_descuento`, viaja al cupón
+   como `max_discount_amount` y **también a la app** por `/descuento/`.
+
+> **Por qué el tope tiene que llegar a la app.** El carrito calcula el total con
+> el porcentaje. Con 15% y tope de $5.000, un carrito de $40.000 descontaría
+> $6.000 en la app y $5.000 en el checkout: el precio le **sube** a la clienta
+> justo al pagar, que es el §6.1 en su peor dirección. Por eso
+> `descuentoDeCarrito` aplica el tope y, cuando muerde, el carrito deja de pintar
+> los unitarios con porcentaje —ya no suman el total— y muestra el descuento una
+> sola vez abajo.
+
+**Los puntos 1 y 2 son dos perillas distintas y conviven solo si la hipótesis es
+cierta:** que `combines_with_other_discounts` gobierna las promos de la tienda y
+no el descuento del medio de pago, que tiene su propia casilla del lado del
+comercio (6.4). **Sin verificar.** Se mide con una compra en la tienda demo, y de
+la misma pasada salen las otras dos que faltan:
+
+1. ¿El cupón porcentual se aplica sobre el subtotal de productos o sobre el total
+   con envío? Lo preguntó AME y no está documentado.
+2. Con `combines_with_other_discounts: false`, ¿sigue aplicando el 10% de
+   transferencia?
+3. Con un 2x1 activo, ¿el cupón queda efectivamente bloqueado?
+
+> **Una limitación que AME preguntó y conviene tener escrita:** el cupón se emite
+> al tocar "Comprar", y el medio de pago se elige *después*, dentro del checkout
+> de Tienda Nube. No hay forma de que el porcentaje dependa del medio de pago:
+> cuando hay que decidirlo, esa información todavía no existe, y para cuando
+> existe la venta ya está hecha. El descuento sí se *aplica* en el checkout —la
+> clienta ve el total ya descontado—, lo que se decide antes es el número.
 
 ### 7.3 Preguntas a Tienda Nube
 

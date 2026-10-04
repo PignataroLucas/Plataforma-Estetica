@@ -71,8 +71,8 @@ class CodigoInvitacionAdmin(admin.ModelAdmin):
 @admin.register(SegmentoApp)
 class SegmentoAppAdmin(admin.ModelAdmin):
     list_display = [
-        'nombre', 'porcentaje_descuento', 'es_predeterminado', 'activo',
-        'centro_estetica',
+        'nombre', 'porcentaje_descuento', 'tope_descuento', 'es_predeterminado',
+        'activo', 'centro_estetica',
     ]
     list_filter = ['centro_estetica', 'activo', 'es_predeterminado']
     search_fields = ['nombre']

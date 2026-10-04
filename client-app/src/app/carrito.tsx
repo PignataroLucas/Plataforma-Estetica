@@ -15,7 +15,12 @@ import { getProductos } from '@/services/public';
 import { MAX_POR_PRODUCTO, useCarritoStore, type ItemCarrito } from '@/stores/carrito';
 import { colors, radius, spacing } from '@/theme/ame';
 import { formatPrecio } from '@/utils/format';
-import { aNumero, conDescuento, formatPorcentaje } from '@/utils/precios';
+import {
+  aNumero,
+  conDescuento,
+  descuentoDeCarrito,
+  formatPorcentaje,
+} from '@/utils/precios';
 
 interface Linea extends ItemCarrito {
   /** Precio unitario a mostrar, ya resuelto contra el catálogo fresco. */
@@ -33,7 +38,7 @@ interface Linea extends ItemCarrito {
  */
 export default function CarritoScreen() {
   const { centroId } = useCentroActivo();
-  const { porcentaje: descuento } = useDescuentoApp();
+  const { porcentaje: descuento, tope } = useDescuentoApp();
   const items = useCarritoStore((s) => s.items);
   const cambiarCantidad = useCarritoStore((s) => s.cambiarCantidad);
   const quitar = useCarritoStore((s) => s.quitar);
@@ -73,8 +78,16 @@ export default function CarritoScreen() {
   // El descuento se aplica una sola vez sobre el total y no línea por línea,
   // porque así lo va a aplicar el cupón de Tienda Nube sobre el carrito. Con
   // dos redondeos distintos, el total de la app y el del checkout se separan.
-  const total = conDescuento(subtotal, descuento);
-  const ahorro = subtotal - total;
+  const { descuento: ahorro, total, topeAlcanzado } = descuentoDeCarrito(
+    subtotal,
+    descuento,
+    tope,
+  );
+  // Cuando el tope muerde, los unitarios con porcentaje dejan de sumar el total.
+  // Las filas pasan a precio de lista y el descuento se muestra una sola vez
+  // abajo: prometer en cada línea un porcentaje que el checkout no va a dar es
+  // la trampa del §6.1.
+  const descuentoPorLinea = topeAlcanzado ? 0 : descuento;
   const hayComprables = lineas.some((l) => !l.discontinuado);
 
   const volver = () => {
@@ -107,7 +120,7 @@ export default function CarritoScreen() {
               <Fila
                 key={linea.productoId}
                 linea={linea}
-                descuento={descuento}
+                descuento={descuentoPorLinea}
                 onCambiar={(cantidad) => cambiarCantidad(linea.productoId, cantidad)}
                 onQuitar={() => quitar(linea.productoId)}
               />
@@ -123,7 +136,9 @@ export default function CarritoScreen() {
                 </View>
                 <View style={styles.totalRow}>
                   <AppText variant="meta">
-                    Descuento de la app ({formatPorcentaje(descuento)})
+                    {topeAlcanzado
+                      ? 'Descuento de la app (tope)'
+                      : `Descuento de la app (${formatPorcentaje(descuento)})`}
                   </AppText>
                   <AppText variant="meta">−{formatPrecio(ahorro)}</AppText>
                 </View>

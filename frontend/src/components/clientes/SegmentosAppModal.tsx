@@ -65,6 +65,37 @@ export default function SegmentosAppModal({ isOpen, onClose, onCambios }: Segmen
     }
   }
 
+  /**
+   * El tope en pesos del descuento, por compra.
+   *
+   * Vacío significa "sin tope" y viaja como null: 0 sería "no descuenta nada",
+   * que es lo contrario. El número que se guarda acá es el que la app usa para
+   * calcular el total del carrito, así que un tope mal cargado le cambia el
+   * precio a la clienta en el checkout.
+   */
+  const handleGuardarTope = async (segmento: SegmentoApp, valor: string) => {
+    const limpio = valor.trim()
+    const tope_descuento = limpio === '' ? null : limpio
+    if (tope_descuento === segmento.tope_descuento) return
+
+    setGuardando(segmento.id)
+    try {
+      await updateSegmentoApp(segmento.id, { tope_descuento })
+      toast.success(
+        tope_descuento
+          ? `${segmento.nombre}: tope de $${tope_descuento}`
+          : `${segmento.nombre}: sin tope`,
+      )
+      await load()
+      onCambios?.()
+    } catch {
+      toast.error('No se pudo guardar el tope')
+      await load()
+    } finally {
+      setGuardando(null)
+    }
+  }
+
   const handleCrear = async () => {
     const nombre = nuevo.nombre.trim()
     if (!nombre) return
@@ -147,6 +178,19 @@ export default function SegmentosAppModal({ isOpen, onClose, onCambios }: Segmen
                   />
                 </div>
                 <span className="text-sm text-gray-500">%</span>
+
+                <span className="text-sm text-gray-500">hasta $</span>
+                <div className="w-28">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="100"
+                    placeholder="sin tope"
+                    defaultValue={segmento.tope_descuento ?? ''}
+                    disabled={guardando === segmento.id}
+                    onBlur={(e) => handleGuardarTope(segmento, e.target.value)}
+                  />
+                </div>
 
                 {segmento.es_predeterminado ? (
                   <span className="w-20" />

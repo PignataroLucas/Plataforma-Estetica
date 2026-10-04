@@ -241,16 +241,24 @@ class TiendanubeIntegration(models.Model):
         verbose_name='Activa',
         help_text="Se desactiva sola cuando el centro desinstala la app"
     )
-    # Acá vive la decisión del §7.2, que es del centro y no técnica: si el
-    # descuento de la app se suma al 10% de transferencia o lo reemplaza.
-    # Arranca en True porque es lo que hace Tienda Nube por defecto (verificado
-    # contra la API): dejarlo en False sin que nadie lo haya decidido cambiaría
-    # el comportamiento actual de la tienda por omisión.
+    # Acá vive la decisión del §7.2, que es del centro y no técnica.
+    #
+    # **AME la tomó el 04/10/2026: que el cupón no conviva con otras
+    # promociones.** El caso que lo motivó es el 2x1: con el cupón encima, una
+    # promo de ese tipo se lleva el margen dos veces. Por eso el default pasó de
+    # True —el de Tienda Nube— a False.
+    #
+    # Ojo, porque hay dos perillas y esta es solo una. El 10% por transferencia
+    # lo aplica el medio de pago y tiene su propia casilla del lado del
+    # comercio; la hipótesis es que esta no lo gobierna y que el de
+    # transferencia se sigue sumando, que es lo que AME quiere. **Sin verificar
+    # todavía**: se mide con una compra en la tienda demo (§9).
     coupons_combine_with_other_discounts = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name='Los cupones se combinan con otras promociones',
-        help_text="Si está activo, el descuento de la app se suma a los del "
-                  "medio de pago. Si no, lo reemplaza"
+        help_text="Si está activo, el descuento de la app se suma a las promos "
+                  "de la tienda (2x1, 3x2). Si no, la clienta se lleva el mejor "
+                  "de los dos"
     )
     installed_at = models.DateTimeField(
         default=timezone.now,
