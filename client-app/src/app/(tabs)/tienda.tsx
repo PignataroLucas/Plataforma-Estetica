@@ -60,6 +60,16 @@ export default function TiendaScreen() {
     return Array.from(new Set(nombres)).sort((a, b) => a.localeCompare(b, 'es'));
   }, [productos]);
 
+  /**
+   * Mientras ningún producto esté emparejado con Tienda Nube no se puede
+   * comprar desde la app, y la Tienda queda siendo un catálogo (§5.2). Se dice
+   * en vez de dejar que la clienta lo descubra buscando un botón que no está.
+   *
+   * Sale solo: en cuanto el primer producto tenga su variante, `comprable` da
+   * `true` y el aviso desaparece sin que nadie toque nada.
+   */
+  const sinCompras = productos.length > 0 && !productos.some((p) => p.comprable);
+
   const visibles = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
     return productos.filter((p) => {
@@ -99,6 +109,8 @@ export default function TiendaScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
+          {sinCompras ? <AvisoSinCompras /> : null}
+
           <SearchBar value={busqueda} onChangeText={setBusqueda} />
 
           {categorias.length > 0 ? (
@@ -201,6 +213,24 @@ function ProductoCard({
   );
 }
 
+/**
+ * Que todavía no se compra desde acá.
+ *
+ * Deliberadamente no parece un error: no está roto, falta. Por eso va en crema
+ * y no en `danger`, y por eso promete en lugar de disculparse — el catálogo
+ * igual sirve para mirar y para ir a buscar al centro.
+ */
+function AvisoSinCompras() {
+  return (
+    <View style={styles.aviso}>
+      <Feather name="clock" size={16} color={colors.muted} />
+      <AppText variant="meta" style={styles.avisoTxt}>
+        Por ahora podés mirar el catálogo. La compra desde la app está en camino.
+      </AppText>
+    </View>
+  );
+}
+
 function Chip({ label, activo, onPress }: { label: string; activo: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -259,6 +289,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
+
+  aviso: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.cream,
+  },
+  avisoTxt: { flex: 1 },
 
   chips: { gap: spacing.sm, paddingRight: spacing.xl },
   chip: {
