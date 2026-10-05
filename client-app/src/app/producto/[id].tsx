@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +11,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
 import { useDescuentoApp } from '@/hooks/useDescuentoApp';
+import { analytics } from '@/services/analytics';
 import { resolveMediaUrl } from '@/services/config';
 import { getProducto } from '@/services/public';
 import { MAX_POR_PRODUCTO, useCantidadDeProducto, useCarritoStore } from '@/stores/carrito';
@@ -33,6 +35,10 @@ export default function FichaProductoScreen() {
     queryFn: () => getProducto(productoId, centroId),
     enabled: Number.isFinite(productoId),
   });
+
+  useEffect(() => {
+    if (data) analytics.verProducto(data);
+  }, [data]);
 
   const volver = () => {
     if (router.canGoBack()) router.back();
@@ -223,7 +229,16 @@ function PieDeCompra({ producto }: { producto: ProductoPublico }) {
       <Button
         label={cantidad > 0 ? 'Agregar otra' : 'Agregar al carrito'}
         disabled={tope}
-        onPress={() => agregar(producto, centroId)}
+        onPress={() => {
+          agregar(producto, centroId);
+          analytics.agregarAlCarrito({
+            productoId: producto.id,
+            nombre: producto.nombre,
+            marca: producto.marca,
+            precio: producto.precio,
+            cantidad: 1,
+          });
+        }}
       />
 
       {tope ? (

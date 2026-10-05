@@ -10,6 +10,7 @@ import { TurnoHistorialRow } from '@/components/turnos/TurnoHistorialRow';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
+import { analytics } from '@/services/analytics';
 import { ApiError } from '@/services/api';
 import { cancelarTurno, getMisTurnos } from '@/services/turnos';
 import { colors, radius, spacing } from '@/theme/ame';
@@ -28,7 +29,8 @@ export default function TurnosScreen() {
 
   const cancelacion = useMutation({
     mutationFn: (turno: TurnoApp) => cancelarTurno(turno.id),
-    onSuccess: () => {
+    onSuccess: (_, turno) => {
+      analytics.turnoCancelado(turno);
       setErrorCancelar(null);
       queryClient.invalidateQueries({ queryKey: ['mis-turnos'] });
     },

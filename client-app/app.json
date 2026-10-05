@@ -24,7 +24,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.ameesencial.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "blockedPermissions": ["com.google.android.gms.permission.AD_ID"]
     },
     "web": {
       "output": "static",
@@ -48,6 +49,23 @@
           "icon": "./assets/images/android-icon-monochrome.png",
           "color": "#E8D1CD",
           "defaultChannel": "default"
+        }
+      ],
+      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/analytics",
+        {
+          "ios": {
+            "withoutAdIdSupport": true
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "dynamic"
+          }
         }
       ]
     ],
