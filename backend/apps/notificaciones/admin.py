@@ -4,6 +4,7 @@ from .models import (
     Aviso,
     DispositivoPush,
     EnvioPush,
+    NotificacionInterna,
     PlantillaNotificacion,
     PreferenciaNotificacion,
 )
@@ -46,3 +47,32 @@ class AvisoAdmin(admin.ModelAdmin):
     date_hierarchy = 'creado_en'
     inlines = [EnvioPushInline]
     readonly_fields = ('creado_en', 'enviado_en', 'intentos')
+
+
+@admin.register(NotificacionInterna)
+class NotificacionInternaAdmin(admin.ModelAdmin):
+    """
+    La bandeja del centro, en solo lectura, para diagnosticar entregas.
+
+    La columna que importa es `email_estado`: sin esto, un mail que no sale no
+    deja rastro en ningún lado visible, y el síntoma —"AME dice que no le
+    llegó"— no distingue entre un aviso que nunca se creó, uno que falló tres
+    veces y uno que se mandó a una casilla sin configurar.
+
+    El CRM va a tener su propia pantalla en la Fase 6; esta es la de atrás.
+    """
+    list_display = (
+        'creada_en', 'tipo', 'sucursal', 'titulo',
+        'email_estado', 'email_intentos', 'email_destino', 'leida_en',
+    )
+    list_filter = ('email_estado', 'tipo', 'sucursal')
+    search_fields = ('titulo', 'email_destino', 'clave')
+    date_hierarchy = 'creada_en'
+    ordering = ('-creada_en',)
+    list_select_related = ('sucursal', 'turno')
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False

@@ -194,10 +194,24 @@ def recordar_rutina(ahora=None) -> dict:
     return {'rutina_encolados': creados}
 
 
+def _enviar_avisos_internos(ahora=None) -> dict:
+    """
+    Despacha los mails que esperan en la bandeja del centro.
+
+    No programa nada: los avisos los escribe la señal de turnos al reservar. Acá
+    solo salen. Va en la misma corrida que el resto para no sumar otro proceso
+    programado por un envío que pasa un puñado de veces por día.
+    """
+    from .internas import enviar_pendientes
+
+    return enviar_pendientes()
+
+
 DISPARADORES = (
     programar_recordatorios_de_turnos,
     saludar_cumpleanos,
     recordar_rutina,
+    _enviar_avisos_internos,
 )
 
 
