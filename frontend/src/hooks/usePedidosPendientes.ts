@@ -17,7 +17,7 @@ export const PEDIDOS_KEY = ['pedidos-pendientes'] as const
 const CADA = 30 * 1000
 
 export function usePedidosPendientes() {
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: PEDIDOS_KEY,
     queryFn: getPedidosPendientes,
     refetchInterval: CADA,
@@ -32,6 +32,9 @@ export function usePedidosPendientes() {
     pedidos: data ?? [],
     cantidad: data?.length ?? 0,
     cargando: isLoading,
+    // Sin esto, un error se ve igual que una bandeja vacía: "no hay pedidos"
+    // mientras una clienta espera respuesta.
+    error: isError,
     refrescar: refetch,
   }
 }

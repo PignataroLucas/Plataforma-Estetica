@@ -14,34 +14,124 @@ const MESES_LARGOS = [
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ];
 
-/** Formatea una fecha ISO a "Vie 1 Ago · 14:30 hs" (hora local del dispositivo). */
-export function formatFechaTurno(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${formatHora(iso)}`;
+/**
+ * Zona horaria en la que se muestra todo instante: la del centro.
+ *
+ * Un turno es a las 16:00 **en el centro**, esté donde esté el teléfono. Con la
+ * zona del dispositivo, una clienta de viaje —o un emulador configurado en
+ * Europa, que es como apareció— ve el turno de las 16:00 a las 21:00, aunque la
+ * grilla de horarios, que arma el backend, le haya mostrado las 16:00.
+ *
+ * Es la misma `TIME_ZONE` del backend. El día que haya centros en otra zona,
+ * esto tiene que venir con el centro.
+ */
+export const ZONA_CENTRO = 'America/Argentina/Buenos_Aires';
+
+/**
+ * Respaldo si el motor no resuelve la zona. Argentina no tiene horario de
+ * verano desde 2009; si lo vuelve a tener, el camino con `Intl` lo toma solo.
+ */
+const DESFASE_CENTRO_MS = -3 * 60 * 60 * 1000;
+
+const DIAS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+interface PartesDeFecha {
+  anio: number;
+  /** 0-11, como `Date#getMonth`. */
+  mes: number;
+  dia: number;
+  /** 0 = domingo, como `Date#getDay`. */
+  diaSemana: number;
+  hora: number;
+  minuto: number;
 }
 
-/** "14:30 hs" */
-export function formatHora(iso: string): string {
+let formateador: Intl.DateTimeFormat | null | undefined;
+
+function formateadorDelCentro(): Intl.DateTimeFormat | null {
+  if (formateador !== undefined) return formateador;
+  try {
+    formateador = new Intl.DateTimeFormat('en-US', {
+      timeZone: ZONA_CENTRO,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short',
+      hour: 'numeric',
+      minute: 'numeric',
+      hourCycle: 'h23',
+    });
+  } catch {
+    formateador = null;
+  }
+  return formateador;
+}
+
+function partesEnElCentro(fecha: Date): PartesDeFecha {
+  const f = formateadorDelCentro();
+  if (f) {
+    try {
+      const p: Record<string, string> = {};
+      for (const parte of f.formatToParts(fecha)) p[parte.type] = parte.value;
+      const partes = {
+        anio: Number(p.year),
+        mes: Number(p.month) - 1,
+        dia: Number(p.day),
+        diaSemana: DIAS_EN.indexOf(p.weekday),
+        // Algunos motores dicen "24" para la medianoche aun con h23.
+        hora: Number(p.hour) % 24,
+        minuto: Number(p.minute),
+      };
+      if (partes.diaSemana >= 0 && Object.values(partes).every(Number.isFinite)) return partes;
+    } catch {
+      // Cae al desfase fijo.
+    }
+  }
+  const d = new Date(fecha.getTime() + DESFASE_CENTRO_MS);
+  return {
+    anio: d.getUTCFullYear(),
+    mes: d.getUTCMonth(),
+    dia: d.getUTCDate(),
+    diaSemana: d.getUTCDay(),
+    hora: d.getUTCHours(),
+    minuto: d.getUTCMinutes(),
+  };
+}
+
+/** Las partes de un instante ISO en la zona del centro, o null si no es fecha. */
+function partesDe(iso: string): PartesDeFecha | null {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const hh = d.getHours().toString().padStart(2, '0');
-  const mm = d.getMinutes().toString().padStart(2, '0');
+  return Number.isNaN(d.getTime()) ? null : partesEnElCentro(d);
+}
+
+/** Formatea una fecha ISO a "Vie 1 Ago · 14:30 hs", en la hora del centro. */
+export function formatFechaTurno(iso: string): string {
+  const p = partesDe(iso);
+  if (!p) return '';
+  return `${DIAS[p.diaSemana]} ${p.dia} ${MESES[p.mes]} · ${formatHora(iso)}`;
+}
+
+/** "14:30 hs", en la hora del centro. */
+export function formatHora(iso: string): string {
+  const p = partesDe(iso);
+  if (!p) return '';
+  const hh = p.hora.toString().padStart(2, '0');
+  const mm = p.minuto.toString().padStart(2, '0');
   return `${hh}:${mm} hs`;
 }
 
-/** "Martes 28 de julio" */
+/** "Martes 28 de julio", en la fecha del centro. */
 export function formatFechaLarga(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${DIAS_LARGOS[d.getDay()]} ${d.getDate()} de ${MESES_LARGOS[d.getMonth()]}`;
+  const p = partesDe(iso);
+  if (!p) return '';
+  return `${DIAS_LARGOS[p.diaSemana]} ${p.dia} de ${MESES_LARGOS[p.mes]}`;
 }
 
-/** "28 Jul 2026" — compacto, para el historial. */
+/** "28 Jul 2026" — compacto, para el historial. En la fecha del centro. */
 export function formatFechaCorta(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+  const p = partesDe(iso);
+  if (!p) return '';
+  return `${p.dia} ${MESES[p.mes]} ${p.anio}`;
 }
 
 /**
