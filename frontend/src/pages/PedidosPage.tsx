@@ -25,7 +25,7 @@ import {
  * que viene en la URL se resalta al entrar.
  */
 export default function PedidosPage() {
-  const { pedidos, cargando } = usePedidosPendientes()
+  const { pedidos, cargando, error } = usePedidosPendientes()
   const queryClient = useQueryClient()
   const [params] = useSearchParams()
   const [rechazando, setRechazando] = useState<PedidoPendiente | null>(null)
@@ -100,7 +100,19 @@ export default function PedidosPage() {
         </p>
       </div>
 
-      {pedidos.length === 0 ? (
+      {error ? (
+        <Card>
+          <CardBody>
+            <div className="text-center py-12">
+              <Inbox className="w-10 h-10 text-red-300 mx-auto mb-3" />
+              <p className="text-gray-900 font-medium">No pudimos cargar los pedidos</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Puede haber pedidos esperando. Reintentamos solos cada 30 segundos.
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+      ) : pedidos.length === 0 ? (
         <Card>
           <CardBody>
             <div className="text-center py-12">
