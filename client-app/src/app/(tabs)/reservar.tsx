@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
+import { analytics } from '@/services/analytics';
 import { ApiError } from '@/services/api';
 import { getDisponibilidad, getServiciosReservables, reservarTurno } from '@/services/turnos';
 import { colors, radius, spacing } from '@/theme/ame';
@@ -107,6 +108,7 @@ export default function ReservarScreen() {
         notas: notas.trim(),
       }),
     onSuccess: (turno) => {
+      analytics.turnoReservado(turno);
       setError(null);
       setReservado(turno);
       queryClient.invalidateQueries({ queryKey: ['mis-turnos'] });

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef } from 'react';
 // Solo tipos: se borra en compilación, no ejecuta el módulo.
 import type * as ExpoNotifications from 'expo-notifications';
 
+import { analytics } from '@/services/analytics';
 import { notificaciones } from '@/services/notificacionesNativas';
 import { crearCanalesAndroid, registrarDispositivo } from '@/services/push';
 import { useAuthStore } from '@/stores/auth';
@@ -72,6 +73,7 @@ export function usePushNotifications() {
 
       const datos = datosDe(respuesta.notification);
       invalidar(datos);
+      if (datos.evento) analytics.notificacionAbierta(datos.evento);
 
       // Sin sesión no hay adónde llevarla: el gate de navegación la manda a
       // login igual, y al entrar cae en el inicio.

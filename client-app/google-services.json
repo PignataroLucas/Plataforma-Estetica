@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "161937123818",
+    "project_id": "ame-esencial-e3e6a",
+    "storage_bucket": "ame-esencial-e3e6a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:161937123818:android:694af8e0a18744365a2a93",
+        "android_client_info": {
+          "package_name": "com.ameesencial.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDWn3JO0kABMkXe_rOZOXX9x8kRyJlBi8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

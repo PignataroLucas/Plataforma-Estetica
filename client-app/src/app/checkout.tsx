@@ -9,6 +9,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
+import { analytics } from '@/services/analytics';
 import { prepararCompra } from '@/services/compra';
 import { useCarritoStore } from '@/stores/carrito';
 import { colors, radius, spacing } from '@/theme/ame';
@@ -81,6 +82,7 @@ export default function CheckoutScreen() {
       .then((datos) => {
         if (cancelado) return;
         setCompra(datos);
+        analytics.iniciarCompra(items);
       })
       .catch((e) => {
         if (cancelado) return;
@@ -127,10 +129,12 @@ export default function CheckoutScreen() {
       if (listo) return;
       if (URLS_DE_EXITO.some((u) => estado.url.includes(u))) {
         setListo(true);
+        // Antes de vaciar: después no queda qué productos eran.
+        if (compra) analytics.compraTerminada(items, compra.total, compra.cupon?.codigo ?? null);
         vaciar();
       }
     },
-    [listo, vaciar],
+    [listo, vaciar, compra, items],
   );
 
   const copiar = async () => {

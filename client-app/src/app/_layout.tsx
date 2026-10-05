@@ -5,7 +5,7 @@ import {
 } from '@expo-google-fonts/cormorant-garamond';
 import { Inter_300Light, Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TransicionEntrada } from '@/components/TransicionEntrada';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { analytics } from '@/services/analytics';
 import { queryClient } from '@/services/queryClient';
 import { useAuthStore } from '@/stores/auth';
 import { colors } from '@/theme/ame';
@@ -74,6 +75,7 @@ function RootNavigator({ authenticated }: { authenticated: boolean }) {
   // Va acá y no en RootLayout porque necesita el QueryClientProvider ya montado,
   // y porque para navegar el Stack tiene que existir.
   usePushNotifications();
+  usePantallaMedida();
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -90,6 +92,24 @@ function RootNavigator({ authenticated }: { authenticated: boolean }) {
       </Stack.Protected>
     </Stack>
   );
+}
+
+/**
+ * Manda a Analytics cada pantalla que se ve.
+ *
+ * Con los segmentos y no con `usePathname`: el pathname trae el id real
+ * (`/producto/12`) y cada producto contaría como una pantalla distinta. Los
+ * segmentos traen la forma del archivo (`/producto/[id]`). Los grupos entre
+ * paréntesis se sacan porque no son parte de la URL.
+ */
+function usePantallaMedida() {
+  const segmentos = useSegments();
+  const ruta =
+    '/' + segmentos.filter((s) => !(s.startsWith('(') && s.endsWith(')'))).join('/');
+
+  useEffect(() => {
+    analytics.pantalla(ruta);
+  }, [ruta]);
 }
 
 const styles = StyleSheet.create({

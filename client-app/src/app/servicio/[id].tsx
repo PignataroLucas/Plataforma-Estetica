@@ -2,12 +2,14 @@ import { Feather } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { useCentroActivo } from '@/hooks/useCentroActivo';
+import { analytics } from '@/services/analytics';
 import { getCentroInfo, getServicio } from '@/services/public';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { ServicioPublico } from '@/types/api';
@@ -31,6 +33,10 @@ export default function FichaServicioScreen() {
     queryFn: () => getServicio(servicioId, centroId),
     enabled: Number.isFinite(servicioId),
   });
+
+  useEffect(() => {
+    if (data) analytics.verServicio(data);
+  }, [data]);
 
   const volver = () => {
     if (router.canGoBack()) router.back();

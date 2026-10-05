@@ -14,6 +14,7 @@ import {
   refreshTokens,
   registro as registroReq,
 } from '@/services/auth';
+import { analytics } from '@/services/analytics';
 import { configureHttpAuth } from '@/services/http';
 import { darDeBajaDispositivo } from '@/services/push';
 import { limpiarCacheDeDatos } from '@/services/queryClient';
@@ -75,6 +76,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const usuario = await getPerfil();
       set({ status: 'authenticated', usuario });
+      analytics.identificar(usuario.id);
     } catch {
       // getPerfil ya intentó renovar el token; si llegó acá la sesión no sirve.
       await get().logout();
@@ -84,11 +86,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   iniciarSesion: async (email, password) => {
     const auth = await loginReq(email, password);
     await get().setSession(auth);
+    analytics.inicioSesion();
   },
 
   registrar: async (payload) => {
     const auth = await registroReq(payload);
     await get().setSession(auth);
+    analytics.registro(payload.codigo ? 'codigo' : 'directo');
   },
 
   setSession: async (auth) => {
@@ -103,6 +107,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       usuario: auth.usuario,
       entrando: true,
     });
+    analytics.identificar(auth.usuario.id);
   },
 
   setTokens: async (par) => {
@@ -119,6 +124,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // por soltar. Si no se da de baja, el teléfono seguiría recibiendo los avisos
     // de esta cuenta. Nunca lanza, así que no puede impedir cerrar sesión.
     await darDeBajaDispositivo();
+    analytics.identificar(null);
 
     // ORDEN IMPORTANTE: primero se corta la sesión (esto desmonta las pantallas
     // y deja el access en null), después se limpia el cache. Al revés queda una
