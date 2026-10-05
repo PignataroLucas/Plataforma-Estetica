@@ -302,9 +302,17 @@ def avisar_al_centro_del_pedido(sender, instance, created, **kwargs):
     if instance.estado != Turno.Estado.PENDIENTE:
         return
 
-    from apps.notificaciones.internas import avisar_pedido_de_turno
+    from django.db import transaction
 
-    avisar_pedido_de_turno(instance)
+    from apps.notificaciones.internas import avisar_pedido_de_turno, enviar_ahora
+
+    if avisar_pedido_de_turno(instance) is None:
+        return
+
+    # El mail sale en el acto en vez de esperar al cron: esos minutos salen del
+    # plazo que el centro tiene para contestar. Best-effort, igual que el push:
+    # si SES no responde, la fila queda pendiente y el barrido la toma.
+    transaction.on_commit(enviar_ahora)
 
 
 @receiver(post_save, sender=Turno)
@@ -322,11 +330,26 @@ def encolar_avisos_push(sender, instance, created, **kwargs):
     **descartar los recordatorios viejos** cuando el turno se cancela o se mueve
     de hora, porque el texto y el momento quedaron mal.
     """
-    from apps.notificaciones import despacho, eventos
+    from django.db import transaction
+
+    from apps.notificaciones import cola, despacho, eventos
     from apps.notificaciones.disparadores import clave_de_turno, contexto_de_turno
 
     previous_estado = getattr(instance, '_previous_estado', None)
     previous_inicio = getattr(instance, '_previous_inicio', None)
+
+    def despachar_al_confirmar():
+        """
+        Saca el aviso en el acto en vez de esperar al cron.
+
+        Importa en las resoluciones y no en los recordatorios: cuando alguien del
+        centro acepta o rechaza un pedido, hay una clienta del otro lado
+        esperando una respuesta, y hasta cinco minutos de demora se notan. Un
+        recordatorio de 24 horas, no.
+
+        Es best-effort: si falla, el aviso queda en la cola y sale igual.
+        """
+        transaction.on_commit(lambda: cola.despachar_ahora())
 
     # --- Confirmación: el staff aprobó el turno (o lo creó ya confirmado) ---
     recien_confirmado = (
@@ -341,6 +364,28 @@ def encolar_avisos_push(sender, instance, created, **kwargs):
             clave=clave_de_turno(instance.id, eventos.TURNO_CONFIRMADO),
             datos_extra={'turnoId': instance.id},
         )
+        despachar_al_confirmar()
+
+    # --- Rechazo: el centro no tomó el pedido, o se le pasó el plazo ---
+    #
+    # Va antes de la cancelación y por separado a propósito: son dos hechos
+    # distintos. Acá además hay que bajar los recordatorios, porque un pedido
+    # pendiente ya tenía los suyos programados y apuntan a un turno que no va
+    # a existir.
+    recien_rechazado = (
+        instance.estado == Turno.Estado.RECHAZADO
+        and previous_estado != Turno.Estado.RECHAZADO
+    )
+    if recien_rechazado:
+        despacho.descartar_pendientes(clave_prefijo=f'turno:{instance.id}:')
+        despacho.crear_aviso_para_cliente(
+            evento=eventos.TURNO_RECHAZADO,
+            cliente=instance.cliente,
+            contexto=contexto_de_turno(instance),
+            clave=clave_de_turno(instance.id, eventos.TURNO_RECHAZADO),
+            datos_extra={'turnoId': instance.id},
+        )
+        despachar_al_confirmar()
 
     # --- Cancelación: avisar y bajar los recordatorios que quedaron colgados ---
     cancelado = (

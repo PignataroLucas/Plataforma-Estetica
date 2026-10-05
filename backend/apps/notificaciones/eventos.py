@@ -69,6 +69,7 @@ class Evento:
 # --------------------------------------------------------------------- #
 
 TURNO_CONFIRMADO = 'turno_confirmado'
+TURNO_RECHAZADO = 'turno_rechazado'
 TURNO_RECORDATORIO_24H = 'turno_recordatorio_24h'
 TURNO_RECORDATORIO_2H = 'turno_recordatorio_2h'
 TURNO_CANCELADO = 'turno_cancelado'
@@ -89,6 +90,25 @@ EVENTOS: dict[str, Evento] = {
             titulo='Turno confirmado',
             cuerpo='{servicio} el {fecha} a las {hora}. Te esperamos.',
             ruta='/turnos',
+            transaccional=True,
+            variables=('servicio', 'fecha', 'hora', 'centro'),
+            ejemplo={'servicio': 'Limpieza facial', 'fecha': '12 de agosto',
+                     'hora': '15:00', 'centro': 'AME'},
+        ),
+        Evento(
+            clave=TURNO_RECHAZADO,
+            categoria=Categoria.TURNOS,
+            # El texto le habla de la acción, no del rechazo: lo que la clienta
+            # necesita es volver a elegir, no entender por qué le dijeron que no.
+            # El motivo queda en el CRM para las métricas y **no se le manda**:
+            # "no hay disponibilidad" es muy distinto de leer "tiene una deuda".
+            titulo='No pudimos tomar ese horario',
+            cuerpo='{servicio} del {fecha} a las {hora}. Tocá para elegir otro.',
+            # A reservar y no a /turnos: mandarla a una lista donde su turno ya
+            # no está sería una pantalla muerta.
+            ruta='/reservar',
+            # Transaccional como la cancelación: apagar los recordatorios no es
+            # apagar "tu turno no va".
             transaccional=True,
             variables=('servicio', 'fecha', 'hora', 'centro'),
             ejemplo={'servicio': 'Limpieza facial', 'fecha': '12 de agosto',

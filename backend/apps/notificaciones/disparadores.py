@@ -194,13 +194,43 @@ def recordar_rutina(ahora=None) -> dict:
     return {'rutina_encolados': creados}
 
 
+def _vencer_pedidos_de_turno(ahora=None) -> dict:
+    """
+    Cierra los pedidos de turno a los que se les pasó el plazo.
+
+    Vive en `apps.turnos.services` y se llama desde acá porque el barrido es el
+    único proceso programado que hay: sumar otro cron para esto sería sumar otro
+    servicio que mantener.
+
+    Va **antes** del envío de avisos internos: así un pedido que vence en esta
+    misma corrida alcanza a disparar su aviso y sale en la misma pasada.
+    """
+    from apps.turnos.services import vencer_pedidos
+
+    return vencer_pedidos(ahora)
+
+
+def _avisar_pedidos_por_vencer(ahora=None) -> dict:
+    """
+    Segundo aviso a los pedidos a los que les queda poco.
+
+    Va **antes** de `_vencer_pedidos_de_turno` en la lista: de otro modo, un
+    pedido que entra a la ventana de aviso y vence en la misma corrida se
+    cerraría sin que el centro llegara a enterarse de que estaba por vencer.
+    """
+    from .internas import avisar_los_que_vencen
+
+    return avisar_los_que_vencen(ahora)
+
+
 def _enviar_avisos_internos(ahora=None) -> dict:
     """
     Despacha los mails que esperan en la bandeja del centro.
 
-    No programa nada: los avisos los escribe la señal de turnos al reservar. Acá
-    solo salen. Va en la misma corrida que el resto para no sumar otro proceso
-    programado por un envío que pasa un puñado de veces por día.
+    No programa nada: los avisos los escriben la señal de turnos al reservar y el
+    disparador de los que están por vencer. Acá solo salen. Va último en la lista
+    para que lo que se haya creado en esta misma corrida salga en esta misma
+    corrida y no en la siguiente.
     """
     from .internas import enviar_pendientes
 
@@ -211,6 +241,10 @@ DISPARADORES = (
     programar_recordatorios_de_turnos,
     saludar_cumpleanos,
     recordar_rutina,
+    # El orden importa: avisar que está por vencer, después vencer lo que se
+    # pasó, y recién entonces mandar todo lo que quedó escrito en esta corrida.
+    _avisar_pedidos_por_vencer,
+    _vencer_pedidos_de_turno,
     _enviar_avisos_internos,
 )
 

@@ -22,6 +22,7 @@ from django.utils import timezone
 from apps.notificaciones.correo import CorreoNoEnviado
 from apps.notificaciones.internas import (
     MAX_INTENTOS,
+    avisar_los_que_vencen,
     avisar_pedido_de_turno,
     enviar_pendientes,
     url_del_turno,
@@ -149,6 +150,34 @@ class TestSeCreaElAviso(BandejaTestBase):
 
         enviar.assert_not_called()
 
+    def test_el_mail_sale_en_el_acto_sin_esperar_al_cron(self):
+        """
+        Los minutos de espera salen del plazo que el centro tiene para
+        responder. El barrido queda como red, no como camino.
+        """
+        with patch('apps.notificaciones.internas.enviar_correo') as enviar:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._reservar_desde_la_app()
+
+        enviar.assert_called_once()
+
+    def test_si_ses_falla_la_reserva_queda_hecha_igual(self):
+        """
+        Que el mail no salga no puede tumbar la reserva de la clienta, que ya
+        está confirmada del lado de ella.
+        """
+        with patch('apps.notificaciones.internas.enviar_correo',
+                   side_effect=CorreoNoEnviado('SES caído')):
+            with self.captureOnCommitCallbacks(execute=True):
+                turno = self._reservar_desde_la_app()
+
+        self.assertEqual(turno.estado, Turno.Estado.PENDIENTE)
+        aviso = NotificacionInterna.objects.get(turno=turno)
+        # Sigue pendiente: el barrido lo reintenta.
+        self.assertEqual(
+            aviso.email_estado, NotificacionInterna.EstadoEntrega.PENDIENTE
+        )
+
     def test_el_mismo_pedido_no_entra_dos_veces(self):
         """La clave de idempotencia, igual que en los avisos a clientas."""
         turno = self._reservar_desde_la_app()
@@ -161,7 +190,8 @@ class TestElLinkDelMail(BandejaTestBase):
 
     @override_settings(CRM_URL='https://crm.ame.com')
     def test_con_crm_url_el_mail_lleva_el_link(self):
-        self.assertEqual(url_del_turno(12), 'https://crm.ame.com/turnos?turno=12')
+        # A `/pedidos`: es donde están los botones de aceptar y rechazar.
+        self.assertEqual(url_del_turno(12), 'https://crm.ame.com/pedidos?turno=12')
 
     @override_settings(CRM_URL='')
     def test_sin_crm_url_el_mail_sale_igual_sin_link(self):
@@ -290,6 +320,77 @@ class TestElBarridoEnvia(BandejaTestBase):
         estados = {primero.email_estado, segundo.email_estado}
         self.assertIn(NotificacionInterna.EstadoEntrega.ENVIADO, estados)
         self.assertIn(NotificacionInterna.EstadoEntrega.PENDIENTE, estados)
+
+
+class TestAvisoPorVencer(BandejaTestBase):
+    """
+    Media hora antes del vencimiento sale un segundo aviso. Es lo que convierte
+    el plazo en algo que el centro puede atajar en vez de algo que le pasa por
+    encima.
+    """
+
+    def _pedido(self, *, vence_en):
+        inicio = timezone.now() + timedelta(days=3)
+        turno = reservar_turno(
+            cliente=self.cliente, servicio=self.servicio, inicio=inicio,
+            origen=Turno.Origen.APP, estado=Turno.Estado.PENDIENTE,
+        )
+        turno.vence_en = vence_en
+        turno.save(update_fields=['vence_en'])
+        return turno
+
+    def test_avisa_a_los_que_estan_por_vencer(self):
+        turno = self._pedido(vence_en=timezone.now() + timedelta(minutes=20))
+
+        resumen = avisar_los_que_vencen()
+
+        self.assertEqual(resumen['pedidos_por_vencer_avisados'], 1)
+        aviso = NotificacionInterna.objects.get(
+            turno=turno, tipo=NotificacionInterna.Tipo.TURNO_POR_VENCER
+        )
+        self.assertIn('está por vencer', aviso.cuerpo)
+
+    def test_no_avisa_a_los_que_tienen_tiempo(self):
+        self._pedido(vence_en=timezone.now() + timedelta(hours=2))
+
+        resumen = avisar_los_que_vencen()
+
+        self.assertEqual(resumen['pedidos_por_vencer_avisados'], 0)
+
+    def test_no_avisa_dos_veces_aunque_el_barrido_corra_seguido(self):
+        """
+        El barrido corre cada cinco minutos: durante la media hora de la ventana
+        pasa seis veces. Sin idempotencia serían seis mails por el mismo pedido.
+        """
+        self._pedido(vence_en=timezone.now() + timedelta(minutes=20))
+
+        avisar_los_que_vencen()
+        avisar_los_que_vencen()
+        avisar_los_que_vencen()
+
+        self.assertEqual(
+            NotificacionInterna.objects.filter(
+                tipo=NotificacionInterna.Tipo.TURNO_POR_VENCER
+            ).count(),
+            1,
+        )
+
+    def test_no_avisa_a_uno_que_ya_vencio(self):
+        """De eso se ocupa el vencimiento, no este aviso."""
+        self._pedido(vence_en=timezone.now() - timedelta(minutes=1))
+
+        resumen = avisar_los_que_vencen()
+
+        self.assertEqual(resumen['pedidos_por_vencer_avisados'], 0)
+
+    def test_no_avisa_a_uno_ya_resuelto(self):
+        turno = self._pedido(vence_en=timezone.now() + timedelta(minutes=20))
+        turno.estado = Turno.Estado.CONFIRMADO
+        turno.save(update_fields=['estado'])
+
+        resumen = avisar_los_que_vencen()
+
+        self.assertEqual(resumen['pedidos_por_vencer_avisados'], 0)
 
 
 class TestElBarridoGeneralLoIncluye(BandejaTestBase):

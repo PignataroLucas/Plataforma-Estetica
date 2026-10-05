@@ -11,9 +11,12 @@ import {
   UserCog,
   BarChart3,
   MessageSquare,
+  Inbox,
   LogOut,
   LucideIcon,
 } from 'lucide-react'
+
+import { usePedidosPendientes } from '@/hooks/usePedidosPendientes'
 
 interface NavigationItem {
   name: string
@@ -26,6 +29,9 @@ const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard }, // Todos
   { name: 'Clientes', href: '/clientes', icon: Users }, // Todos
   { name: 'Turnos', href: '/turnos', icon: Calendar }, // Todos
+  // La cola de pedidos de la app. Va separada de Turnos porque es otra cosa: la
+  // agenda se mira, esto se resuelve (APROBACION_TURNOS_SPEC.md §2.7).
+  { name: 'Pedidos', href: '/pedidos', icon: Inbox }, // Todos
   { name: 'Servicios', href: '/servicios', icon: Briefcase }, // Todos
   { name: 'Inventario', href: '/inventario', icon: Package, roles: ['ADMIN', 'MANAGER'] },
   { name: 'Finanzas', href: '/finanzas', icon: DollarSign, roles: ['ADMIN'] },
@@ -38,6 +44,10 @@ const navigation: NavigationItem[] = [
 export default function Layout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
+  // El contador vive en el Layout para que se vea desde cualquier pantalla: un
+  // pedido con tres horas de plazo no puede depender de que alguien entre a
+  // mirar la sección.
+  const { cantidad: pedidosPendientes } = usePedidosPendientes()
 
   const handleLogout = () => {
     logout()
@@ -80,7 +90,12 @@ export default function Layout() {
                   }`}
                 >
                   <Icon className="w-5 h-5 mr-3" />
-                  {item.name}
+                  <span className="flex-1">{item.name}</span>
+                  {item.href === '/pedidos' && pedidosPendientes > 0 && (
+                    <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+                      {pedidosPendientes}
+                    </span>
+                  )}
                 </Link>
               )
             })}

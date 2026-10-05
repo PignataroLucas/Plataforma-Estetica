@@ -15,15 +15,27 @@ class TurnoListSerializer(serializers.ModelSerializer):
     servicio_nombre = serializers.CharField(source='servicio.nombre', read_only=True)
     profesional_nombre = serializers.SerializerMethodField()
     duracion_minutos = serializers.IntegerField(source='servicio.duracion_minutos', read_only=True)
+    cliente_telefono = serializers.CharField(source='cliente.telefono', read_only=True)
+    resuelto_por_nombre = serializers.SerializerMethodField()
+    motivo_rechazo_display = serializers.CharField(
+        source='get_motivo_rechazo_display', read_only=True
+    )
 
     class Meta:
         model = Turno
         fields = [
-            'id', 'cliente', 'cliente_nombre', 'servicio', 'servicio_nombre',
+            'id', 'cliente', 'cliente_nombre', 'cliente_telefono',
+            'servicio', 'servicio_nombre',
             'profesional', 'profesional_nombre', 'duracion_minutos',
             'fecha_hora_inicio', 'fecha_hora_fin', 'estado', 'estado_pago',
             'monto_total', 'monto_sena', 'notas',
             'recordatorio_24h_enviado', 'recordatorio_2h_enviado',
+            # Aprobación de pedidos de la app (APROBACION_TURNOS_SPEC.md).
+            # `vence_en` lo necesita el CRM para mostrar cuánto le queda a cada
+            # pedido sin repetir el cálculo de la franja de respuesta.
+            'origen', 'vence_en',
+            'motivo_rechazo', 'motivo_rechazo_display', 'detalle_rechazo',
+            'resuelto_por', 'resuelto_por_nombre', 'resuelto_en',
             'creado_en', 'actualizado_en',
         ]
 
@@ -31,6 +43,16 @@ class TurnoListSerializer(serializers.ModelSerializer):
         if obj.profesional:
             return f"{obj.profesional.first_name} {obj.profesional.last_name}".strip() or obj.profesional.username
         return None
+
+    def get_resuelto_por_nombre(self, obj):
+        """
+        Vacío cuando lo cerró el sistema por vencimiento, y eso se muestra
+        distinto en el CRM: no es lo mismo que alguien dijo que no a que a nadie
+        le llegó a tiempo.
+        """
+        if not obj.resuelto_por:
+            return None
+        return obj.resuelto_por.get_full_name().strip() or obj.resuelto_por.username
 
 
 class TurnoDetailSerializer(serializers.ModelSerializer):

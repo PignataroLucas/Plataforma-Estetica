@@ -79,6 +79,21 @@ export function TurnoCard({ turno, destacado = false, onCancelar, cancelando = f
         ))}
       </View>
 
+      {/*
+        Lo pendiente se dice con todas las letras y no solo con la etiqueta.
+        Si un turno a confirmar se ve igual que uno confirmado, el día que el
+        centro lo rechace la clienta va a sentir que le sacaron algo que tenía
+        (APROBACION_TURNOS_SPEC.md, Fase 7).
+      */}
+      {turno.estado === 'PENDIENTE' ? (
+        <View style={[styles.aviso, { borderTopColor: t.linea }]}>
+          <Feather name="clock" size={13} color={t.icono} />
+          <AppText variant="meta" color={t.meta} style={styles.avisoTxt}>
+            El centro todavía no lo confirmó. Te avisamos apenas responda.
+          </AppText>
+        </View>
+      ) : null}
+
       {onCancelar && turno.puede_cancelar ? (
         <View style={[styles.acciones, { borderTopColor: t.linea }]}>
           {confirmando ? (
@@ -139,6 +154,15 @@ const styles = StyleSheet.create({
   servicio: { lineHeight: 21, marginBottom: 3 },
   detalles: { gap: 5, marginTop: spacing.md },
   detalle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  aviso: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  avisoTxt: { flex: 1 },
   acciones: { marginTop: 14, paddingTop: 12, borderTopWidth: 1 },
   accion: { paddingVertical: 2 },
   confirmar: { gap: spacing.sm },

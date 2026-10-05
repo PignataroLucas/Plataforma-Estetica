@@ -5,6 +5,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import ClientesPage from '@/pages/ClientesPage'
 import ClienteDetailPage from '@/pages/ClienteDetailPage'
 import TurnosPage from '@/pages/TurnosPage'
+import PedidosPage from '@/pages/PedidosPage'
 import ServiciosPage from '@/pages/ServiciosPage'
 import InventarioPage from '@/pages/InventarioPage'
 import FinanzasPage from '@/pages/FinanzasPage'
@@ -26,6 +27,7 @@ function App() {
         <Route path="/clientes" element={<ClientesPage />} />
         <Route path="/clientes/:id" element={<ClienteDetailPage />} />
         <Route path="/turnos" element={<TurnosPage />} />
+        <Route path="/pedidos" element={<PedidosPage />} />
         <Route path="/servicios" element={<ServiciosPage />} />
         <Route path="/inventario" element={<InventarioPage />} />
         <Route path="/finanzas" element={<FinanzasPage />} />
