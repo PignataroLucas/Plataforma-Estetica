@@ -11,6 +11,7 @@ from .serializers import (
     TurnoDetailSerializer,
     TurnoCreateUpdateSerializer
 )
+from .services import PedidoYaResuelto, confirmar_turno, rechazar_turno
 from apps.notificaciones.tasks import (
     enviar_confirmacion_turno_task,
     enviar_cancelacion_turno_task
@@ -180,3 +181,88 @@ class TurnoViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(turno)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def pendientes_de_aprobacion(self, request):
+        """
+        Los pedidos que la app dejó esperando y nadie resolvió todavía.
+
+        Es lo que alimenta la campanita del CRM. **Lo accionable se deriva del
+        turno y no de un contador aparte**: así no hay un segundo estado que se
+        pueda desincronizar con la resolución (APROBACION_TURNOS_SPEC.md §2.7).
+        """
+        pedidos = self.get_queryset().filter(
+            estado=Turno.Estado.PENDIENTE,
+            origen=Turno.Origen.APP,
+        ).order_by('vence_en', 'fecha_hora_inicio')
+
+        return Response({
+            'count': pedidos.count(),
+            'results': TurnoListSerializer(pedidos, many=True).data,
+        })
+
+    @action(detail=True, methods=['post'])
+    def aprobar(self, request, pk=None):
+        """
+        El centro acepta el pedido. El aviso a la clienta sale solo.
+
+        Devuelve 409 si ya estaba resuelto: es la carrera de dos personas del
+        centro con el mismo pedido abierto, y conviene que la segunda vea un
+        mensaje claro en vez de creer que lo aprobó ella.
+        """
+        try:
+            turno = confirmar_turno(self.get_object(), usuario=request.user)
+        except PedidoYaResuelto as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        return Response(self.get_serializer(turno).data)
+
+    @action(detail=True, methods=['post'])
+    def rechazar(self, request, pk=None):
+        """
+        El centro no toma el pedido. El motivo es obligatorio.
+
+        El motivo alimenta el reporte de rechazos —la métrica que dice si la
+        disponibilidad que publica la app se parece a la realidad del centro— y
+        **no se le muestra a la clienta**: a ella le llega un texto neutro con el
+        camino para elegir otro horario.
+        """
+        motivo = request.data.get('motivo')
+        elegibles = [
+            m for m in Turno.MotivoRechazo.values
+            # El de vencimiento lo pone el sistema: nadie lo elige a mano, y
+            # ofrecerlo arruinaría la distinción entre "dijimos que no" y
+            # "nadie lo miró".
+            if m != Turno.MotivoRechazo.VENCIDO
+        ]
+        if motivo not in elegibles:
+            return Response(
+                {'motivo': f'Elegí un motivo: {", ".join(elegibles)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            turno = rechazar_turno(
+                self.get_object(),
+                motivo=motivo,
+                usuario=request.user,
+                detalle=(request.data.get('detalle') or '')[:300],
+            )
+        except PedidoYaResuelto as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        return Response(self.get_serializer(turno).data)
+
+    @action(detail=False, methods=['get'])
+    def motivos_de_rechazo(self, request):
+        """
+        Las opciones del selector del CRM.
+
+        Salen de acá y no de una lista repetida en el frontend: el día que se
+        agregue un motivo, aparece solo en la pantalla.
+        """
+        return Response([
+            {'valor': valor, 'etiqueta': etiqueta}
+            for valor, etiqueta in Turno.MotivoRechazo.choices
+            if valor != Turno.MotivoRechazo.VENCIDO
+        ])

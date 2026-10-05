@@ -51,7 +51,9 @@ def url_del_turno(turno_id) -> str:
     cargar después sin tocar código.
     """
     base = (getattr(settings, 'CRM_URL', '') or '').rstrip('/')
-    return f'{base}/turnos?turno={turno_id}' if base else ''
+    # A `/pedidos` y no a `/turnos`: la agenda se mira, la cola se resuelve. El
+    # link tiene que caer donde están los botones.
+    return f'{base}/pedidos?turno={turno_id}' if base else ''
 
 
 def _cuerpo_del_pedido(turno, *, por_vencer=False) -> str:

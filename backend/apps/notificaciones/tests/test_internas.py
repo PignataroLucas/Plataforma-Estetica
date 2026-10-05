@@ -190,7 +190,8 @@ class TestElLinkDelMail(BandejaTestBase):
 
     @override_settings(CRM_URL='https://crm.ame.com')
     def test_con_crm_url_el_mail_lleva_el_link(self):
-        self.assertEqual(url_del_turno(12), 'https://crm.ame.com/turnos?turno=12')
+        # A `/pedidos`: es donde están los botones de aceptar y rechazar.
+        self.assertEqual(url_del_turno(12), 'https://crm.ame.com/pedidos?turno=12')
 
     @override_settings(CRM_URL='')
     def test_sin_crm_url_el_mail_sale_igual_sin_link(self):
