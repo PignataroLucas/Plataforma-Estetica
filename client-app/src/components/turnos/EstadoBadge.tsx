@@ -9,8 +9,13 @@ import type { EstadoTurno } from '@/types/api';
  * están escritos para el staff, ej: "Pendiente de Confirmación").
  */
 const ESTADOS: Record<EstadoTurno, { label: string; punto: string }> = {
-  PENDIENTE: { label: 'A confirmar', punto: colors.taupe },
+  // "Esperando al centro" y no "A confirmar": lo segundo suena a que falta algo
+  // de su lado. Lo que falta es una respuesta ajena, y conviene que lo sepa —
+  // si no, un rechazo se siente como que le sacaron algo que ya tenía.
+  PENDIENTE: { label: 'Esperando al centro', punto: colors.taupe },
   CONFIRMADO: { label: 'Confirmado', punto: colors.ink },
+  // Distinto de "Cancelado" en el texto y en el color: nunca llegó a ser turno.
+  RECHAZADO: { label: 'No se pudo tomar', punto: colors.taupe },
   COMPLETADO: { label: 'Realizado', punto: colors.muted },
   CANCELADO: { label: 'Cancelado', punto: colors.danger },
   NO_SHOW: { label: 'No asististe', punto: colors.danger },

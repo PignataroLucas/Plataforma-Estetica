@@ -215,7 +215,16 @@ export interface MiRutina {
  * Turnos — listado, disponibilidad y reserva
  * ------------------------------------------------------------------ */
 
-export type EstadoTurno = 'PENDIENTE' | 'CONFIRMADO' | 'COMPLETADO' | 'CANCELADO' | 'NO_SHOW';
+export type EstadoTurno =
+  | 'PENDIENTE'
+  | 'CONFIRMADO'
+  // El centro no tomó el pedido, o se le pasó el plazo para responder. Es
+  // distinto de CANCELADO: ese turno existió y se cayó, este nunca llegó a ser
+  // turno (APROBACION_TURNOS_SPEC.md §2.1).
+  | 'RECHAZADO'
+  | 'COMPLETADO'
+  | 'CANCELADO'
+  | 'NO_SHOW';
 export type EstadoPagoTurno = 'PENDIENTE' | 'CON_SENA' | 'PAGADO';
 
 /** Turno como lo devuelve client_api (serializer curado, sin datos internos). */

@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { ApiError } from '@/services/api';
 import { cancelarTurno, getMisTurnos } from '@/services/turnos';
 import { colors, radius, spacing } from '@/theme/ame';
 import type { TurnoApp } from '@/types/api';
+import { formatFechaCorta, formatHora } from '@/utils/format';
 
 export default function TurnosScreen() {
   const { centroNombre } = useCentroActivo();
@@ -39,7 +40,30 @@ export default function TurnosScreen() {
   });
 
   const proximos = data?.proximos ?? [];
-  const historicos = data?.historicos ?? [];
+  // Memoizado y no `?? []` suelto: el array vacío sería una referencia nueva en
+  // cada render y los memos de abajo no servirían de nada.
+  const todosLosHistoricos = useMemo(() => data?.historicos ?? [], [data]);
+
+  /**
+   * Los pedidos que el centro no pudo tomar y todavía tienen arreglo.
+   *
+   * El backend los manda en `historicos` porque un rechazado ya no ocupa agenda,
+   * pero archivarlos ahí es justo lo contrario de lo que la clienta necesita:
+   * el horario que pidió todavía no llegó y lo que quiere es elegir otro. Se
+   * suben arriba con esa acción al lado y se sacan del historial, que es para
+   * mirar, no para resolver.
+   */
+  const sinTomar = useMemo(
+    () =>
+      todosLosHistoricos.filter(
+        (t) => t.estado === 'RECHAZADO' && new Date(t.fecha_hora_inicio) > new Date(),
+      ),
+    [todosLosHistoricos],
+  );
+  const historicos = useMemo(
+    () => todosLosHistoricos.filter((t) => !sinTomar.includes(t)),
+    [todosLosHistoricos, sinTomar],
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -85,6 +109,10 @@ export default function TurnosScreen() {
             </View>
           ) : null}
 
+          {sinTomar.map((turno) => (
+            <SinPoderTomar key={turno.id} turno={turno} />
+          ))}
+
           {proximos.length === 0 ? (
             <SinTurnos />
           ) : (
@@ -120,6 +148,34 @@ export default function TurnosScreen() {
   );
 }
 
+/**
+ * Un pedido que el centro no pudo tomar, con el camino para volver a elegir.
+ *
+ * El texto no dice el motivo y es a propósito: el motivo queda en el CRM para
+ * las métricas del centro. "No hay disponibilidad" es muy distinto de leer
+ * "tiene una deuda", y la clienta no necesita el porqué para resolver — necesita
+ * otro horario.
+ */
+function SinPoderTomar({ turno }: { turno: TurnoApp }) {
+  return (
+    <View style={styles.rechazado}>
+      <View style={styles.rechazadoHead}>
+        <Feather name="calendar" size={14} color={colors.muted} />
+        <AppText variant="meta" style={styles.rechazadoTxt}>
+          No pudimos tomar {turno.servicio_nombre} del{' '}
+          {formatFechaCorta(turno.fecha_hora_inicio)} a las{' '}
+          {formatHora(turno.fecha_hora_inicio)}.
+        </AppText>
+      </View>
+      <Button
+        label="Elegir otro horario"
+        onPress={() => router.push('/reservar')}
+        style={styles.rechazadoBoton}
+      />
+    </View>
+  );
+}
+
 function SinTurnos() {
   return (
     <View style={styles.vacio}>
@@ -141,6 +197,15 @@ function SinTurnos() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.ivory },
+  rechazado: {
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.cream,
+  },
+  rechazadoHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  rechazadoTxt: { flex: 1 },
+  rechazadoBoton: { alignSelf: 'flex-start' },
   header: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 14 },
   titulo: { marginTop: 4 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
