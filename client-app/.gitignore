@@ -41,3 +41,12 @@ example
 # generated native folders
 /ios
 /android
+
+# Clave de cuenta de servicio de Firebase, para push (FCM V1). Es un secreto:
+# se sube a EAS con `eas credentials` y no entra al repo. Firebase la descarga
+# con un nombre tipo "ame-esencial-firebase-adminsdk-a1b2c-3d4e5f6a7b.json".
+#
+# Ojo con no confundirla con `google-services.json`, que SÍ va commiteado: ese
+# solo trae identificadores públicos y lo necesita el build nativo.
+*-firebase-adminsdk-*.json
+google-service-account*.json

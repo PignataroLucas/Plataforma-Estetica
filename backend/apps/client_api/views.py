@@ -538,12 +538,20 @@ class TurnosView(ClienteScopeMixin, APIView):
         datos = serializer.validated_data
 
         try:
+            servicio = datos['servicio']
             turno = reservar_turno(
                 cliente=vinc.cliente,
-                servicio=datos['servicio'],
+                servicio=servicio,
                 inicio=datos['fecha_hora_inicio'],
                 notas=datos.get('notas', ''),
-                estado=Turno.Estado.PENDIENTE,
+                # Un servicio que no requiere aprobación nace confirmado, y la
+                # señal de turnos dispara sola el aviso de confirmación. Los demás
+                # quedan esperando al centro (APROBACION_TURNOS_SPEC.md §3.3).
+                estado=(
+                    Turno.Estado.PENDIENTE if servicio.requiere_aprobacion
+                    else Turno.Estado.CONFIRMADO
+                ),
+                origen=Turno.Origen.APP,
             )
         except TurnoNoDisponible as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)

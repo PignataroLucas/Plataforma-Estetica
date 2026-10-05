@@ -13,9 +13,48 @@ class Turno(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = 'PENDIENTE', 'Pendiente de Confirmación'
         CONFIRMADO = 'CONFIRMADO', 'Confirmado'
+        # Un pedido que el centro no tomó. **No es lo mismo que CANCELADO**: un
+        # turno cancelado existió y se cayó; un pedido rechazado nunca llegó a
+        # ser turno. La diferencia se paga en el texto que ve la clienta —"elegí
+        # otro horario" en vez de una disculpa— y sobre todo en las métricas: la
+        # tasa de rechazo mide si la disponibilidad que publica la app se parece
+        # a la realidad del centro, y la de cancelación mide comportamiento de
+        # las clientas. Mezcladas, las dos quedan inservibles.
+        RECHAZADO = 'RECHAZADO', 'Rechazado'
         COMPLETADO = 'COMPLETADO', 'Completado'
         CANCELADO = 'CANCELADO', 'Cancelado'
         NO_SHOW = 'NO_SHOW', 'No Show'
+
+    class MotivoRechazo(models.TextChoices):
+        """
+        Lista cerrada a propósito, no texto libre.
+
+        Con texto libre el reporte de rechazos no se puede agrupar, y esa es la
+        métrica más útil del circuito: *por qué* estamos rechazando. Además, un
+        campo vacío frena a quien está apurada y termina escribiendo "no".
+        """
+        SIN_DISPONIBILIDAD = 'SIN_DISPONIBILIDAD', 'No hay disponibilidad real'
+        EQUIPO_NO_DISPONIBLE = 'EQUIPO_NO_DISPONIBLE', 'El equipo no está disponible'
+        DEUDA_PENDIENTE = 'DEUDA_PENDIENTE', 'La clienta tiene una deuda'
+        REQUIERE_EVALUACION = 'REQUIERE_EVALUACION', 'Requiere evaluación previa'
+        OTRO = 'OTRO', 'Otro'
+        # Lo pone el sistema cuando nadie responde a tiempo. **No se ofrece en el
+        # CRM**: separar "dijimos que no" de "nadie lo miró" es lo que hace que
+        # las métricas sirvan, porque son dos problemas con dos soluciones
+        # distintas.
+        VENCIDO = 'VENCIDO', 'Venció sin respuesta'
+
+    class Origen(models.TextChoices):
+        """
+        De dónde salió el turno.
+
+        Se guarda explícito en vez de inferirlo de ``creado_por`` —que es nulo
+        cuando reservó la clienta— porque el circuito de aprobación aplica solo a
+        los de la app, y porque Analytics necesita contar cuántos turnos trae la
+        app sin depender de un nulo que podría significar otra cosa mañana.
+        """
+        APP = 'APP', 'App de clientas'
+        CRM = 'CRM', 'Cargado en el CRM'
 
     class EstadoPago(models.TextChoices):
         PENDIENTE = 'PENDIENTE', 'Pendiente'
@@ -64,6 +103,42 @@ class Turno(models.Model):
         default=EstadoPago.PENDIENTE
     )
 
+    origen = models.CharField(
+        max_length=10,
+        choices=Origen.choices,
+        default=Origen.CRM,
+        db_index=True,
+        help_text="De dónde salió el turno. La app manda APP; el CRM es el default."
+    )
+    vence_en = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Hasta cuándo el centro puede aceptar o rechazar este pedido. "
+                  "Solo se completa en los que esperan aprobación."
+    )
+
+    # --- Resolución del pedido (APROBACION_TURNOS_SPEC.md) ---
+    motivo_rechazo = models.CharField(
+        max_length=25,
+        choices=MotivoRechazo.choices,
+        blank=True,
+        help_text="Obligatorio al rechazar. Lo completa el sistema si vence."
+    )
+    detalle_rechazo = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Aclaración opcional del motivo. Nunca se le muestra a la clienta."
+    )
+    resuelto_por = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='turnos_resueltos',
+        help_text="Quién aceptó o rechazó el pedido. Vacío si venció sin respuesta."
+    )
+    resuelto_en = models.DateTimeField(null=True, blank=True)
+
     # Información adicional
     notas = models.TextField(blank=True)
     monto_sena = models.DecimalField(
@@ -103,6 +178,12 @@ class Turno(models.Model):
             models.Index(fields=['profesional', 'fecha_hora_inicio']),
             models.Index(fields=['cliente', 'fecha_hora_inicio']),
             models.Index(fields=['estado', 'fecha_hora_inicio']),
+            # El barrido de vencimientos: pendientes cuyo plazo ya pasó. Con
+            # nombre explícito y no derivado, para que la migración no dependa
+            # del hash que genera Django.
+            models.Index(
+                fields=['estado', 'vence_en'], name='turnos_turn_estado_vence_idx'
+            ),
         ]
 
     def __str__(self):

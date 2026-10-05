@@ -26,6 +26,7 @@ from apps.turnos.services import (
     DIAS_MAXIMOS_A_FUTURO,
     dias_reserva_de,
     motivo_fecha_no_reservable,
+    motivo_horario_no_reservable,
     puede_cancelar,
 )
 
@@ -359,7 +360,13 @@ class ReservaSerializer(serializers.Serializer):
         servicio = attrs.get('servicio')
         inicio = attrs.get('fecha_hora_inicio')
         if servicio and inicio:
-            motivo = motivo_fecha_no_reservable(servicio, timezone.localtime(inicio).date())
+            motivo = (
+                motivo_fecha_no_reservable(servicio, timezone.localtime(inicio).date())
+                # Por día primero y por horario después: el segundo mide la franja
+                # de respuesta del centro, que se cuenta en horas y no entra en el
+                # chequeo por fecha (APROBACION_TURNOS_SPEC.md §2.3).
+                or motivo_horario_no_reservable(servicio, inicio)
+            )
             if motivo:
                 raise serializers.ValidationError({'fecha_hora_inicio': motivo})
         return attrs
