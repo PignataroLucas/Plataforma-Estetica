@@ -106,7 +106,7 @@ EVENTOS: dict[str, Evento] = {
             cuerpo='{servicio} del {fecha} a las {hora}. Tocá para elegir otro.',
             # A reservar y no a /turnos: mandarla a una lista donde su turno ya
             # no está sería una pantalla muerta.
-            ruta='/(tabs)/reservar',
+            ruta='/reservar',
             # Transaccional como la cancelación: apagar los recordatorios no es
             # apagar "tu turno no va".
             transaccional=True,

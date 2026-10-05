@@ -155,7 +155,7 @@ class TestRechazar(ResolucionTestBase):
         )
 
         aviso = Aviso.objects.get(evento=eventos.TURNO_RECHAZADO)
-        self.assertEqual(aviso.datos.get('ruta'), '/(tabs)/reservar')
+        self.assertEqual(aviso.datos.get('ruta'), '/reservar')
         self.assertFalse(
             Aviso.objects.filter(evento=eventos.TURNO_CANCELADO).exists()
         )
