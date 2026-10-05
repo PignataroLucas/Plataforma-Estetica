@@ -282,6 +282,32 @@ def send_whatsapp_notifications(sender, instance, created, **kwargs):
 # ==================== PUSH NOTIFICATION SIGNALS ====================
 
 @receiver(post_save, sender=Turno)
+def avisar_al_centro_del_pedido(sender, instance, created, **kwargs):
+    """
+    Un pedido nuevo desde la app entra a la bandeja del centro.
+
+    Solo los que quedan esperando: un turno que nace confirmado —porque el
+    servicio no requiere aprobación— no tiene nada que resolver, y uno cargado en
+    el CRM lo decidió quien lo cargó.
+
+    Como todo lo demás del módulo, acá **no se manda nada**: se escribe la fila y
+    se sigue. El mail lo despacha el barrido, así que la clienta que reserva no
+    espera a SES ni pierde el aviso si SES está caído
+    (APROBACION_TURNOS_SPEC.md §2.6).
+    """
+    if not created:
+        return
+    if instance.origen != Turno.Origen.APP:
+        return
+    if instance.estado != Turno.Estado.PENDIENTE:
+        return
+
+    from apps.notificaciones.internas import avisar_pedido_de_turno
+
+    avisar_pedido_de_turno(instance)
+
+
+@receiver(post_save, sender=Turno)
 def encolar_avisos_push(sender, instance, created, **kwargs):
     """
     Avisos push del ciclo de vida del turno.

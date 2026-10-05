@@ -446,3 +446,113 @@ class EnvioPush(models.Model):
 
     def __str__(self):
         return f"{self.aviso_id} → {self.dispositivo_id} ({self.get_estado_display()})"
+
+
+class NotificacionInterna(models.Model):
+    """
+    Un aviso para el centro: lo que la clienta hizo y alguien del local tiene que
+    resolver.
+
+    **No es un `Aviso`, y no por capricho.** `Aviso` es un *outbox*: una entrega
+    pendiente, atada a una `UsuarioCliente`, que se manda y se olvida. Esto es una
+    bandeja: durable, con leído/no leído, accionable, y de una sucursal y no de
+    una persona. Además `cola.py` está armado íntegramente alrededor de
+    dispositivos push —`_dispositivos_por_usuario`, el canal de Android por
+    categoría—, así que generalizarlo para aceptar una dirección de mail obligaba
+    a tocar el camino caliente del push por algo que no es push.
+
+    **La entrega por mail vive en esta misma fila.** El aviso llega a dos lugares
+    —la campanita del CRM y el mail— pero es un solo hecho; partirlo en una fila
+    de bandeja más una de outbox obligaría a mantenerlas sincronizadas sin ganar
+    nada. Acá el barrido lee `email_estado` y reintenta.
+
+    **El estado de leído es compartido por sucursal**, no por usuario: esto es una
+    cola de trabajo y no un buzón personal. Si la recepcionista resuelve el
+    pedido, la dueña no necesita seguir viéndolo pendiente.
+
+    Y lo accionable **se deriva, no se guarda**: la campanita cuenta los turnos que
+    siguen en `PENDIENTE`, no las filas sin leer. Así no hay un segundo estado que
+    se pueda desincronizar del turno.
+
+    Ver APROBACION_TURNOS_SPEC.md §2.5 a §2.7.
+    """
+
+    class Tipo(models.TextChoices):
+        TURNO_SOLICITADO = 'TURNO_SOLICITADO', 'Pidieron un turno'
+        TURNO_POR_VENCER = 'TURNO_POR_VENCER', 'Un pedido está por vencer'
+
+    class EstadoEntrega(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', 'Pendiente'
+        ENVIADO = 'ENVIADO', 'Enviado'
+        SIN_DESTINO = 'SIN_DESTINO', 'Sin destinatario configurado'
+        FALLIDO = 'FALLIDO', 'Fallido'
+
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='notificaciones_internas',
+    )
+    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    turno = models.ForeignKey(
+        'turnos.Turno',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notificaciones_internas',
+        help_text="Lo accionable sale de su estado, no de un campo acá.",
+    )
+
+    titulo = models.CharField(max_length=150)
+    cuerpo = models.TextField()
+    datos = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Lo que el CRM necesita para armar el link y pintar la fila.",
+    )
+
+    clave = models.CharField(
+        max_length=120,
+        unique=True,
+        help_text="Idempotencia: `turno:12:solicitado` entra una sola vez por más "
+                  "que el disparador corra de nuevo.",
+    )
+
+    # --- Bandeja ---
+    leida_en = models.DateTimeField(null=True, blank=True)
+    leida_por = models.ForeignKey(
+        'empleados.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='notificaciones_internas_leidas',
+    )
+
+    # --- Entrega por mail ---
+    email_estado = models.CharField(
+        max_length=15,
+        choices=EstadoEntrega.choices,
+        default=EstadoEntrega.PENDIENTE,
+    )
+    email_destino = models.EmailField(
+        blank=True,
+        help_text="Se congela al crear: si mañana cambia el destinatario, esta "
+                  "fila sigue diciendo a dónde se mandó.",
+    )
+    email_intentos = models.PositiveSmallIntegerField(default=0)
+    email_error = models.TextField(blank=True)
+    email_enviado_en = models.DateTimeField(null=True, blank=True)
+
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Notificación interna'
+        verbose_name_plural = 'Notificaciones internas'
+        ordering = ['-creada_en']
+        indexes = [
+            models.Index(fields=['sucursal', '-creada_en']),
+            # El que usa el barrido de envío en cada corrida.
+            models.Index(fields=['email_estado', 'email_intentos']),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo} → {self.sucursal_id} ({self.clave})"

@@ -143,6 +143,11 @@ if SENTRY_DSN:
 AWS_SES_REGION_NAME = config('AWS_SES_REGION_NAME', default='sa-east-1')
 EMAIL_REMITENTE = config('EMAIL_REMITENTE', default='')
 
+# Base del CRM, para los links que viajan en los mails al centro (por ejemplo
+# «aceptar o rechazar este pedido»). Sin esto el mail sale igual, solo que sin
+# link: preferimos un aviso sin link antes que ningún aviso. Sin barra final.
+CRM_URL = config('CRM_URL', default='').rstrip('/')
+
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
