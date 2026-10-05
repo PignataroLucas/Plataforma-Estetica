@@ -314,3 +314,33 @@ def procesar_recibos(limite: int = MAX_RECIBOS_POR_CORRIDA, ahora=None) -> dict:
     }
     logger.info("Recibos de push procesados: %s", resumen)
     return resumen
+
+
+# Cuántos avisos toma un despacho inmediato. Chico a propósito: lo que busca es
+# sacar el aviso recién creado, no vaciar la cola — de eso ya se ocupa el cron.
+LOTE_INMEDIATO = 5
+
+
+def despachar_ahora(limite: int = LOTE_INMEDIATO) -> dict:
+    """
+    Intento de envío inmediato, para que un aviso no espere al próximo cron.
+
+    **No reemplaza al barrido, se apoya en él.** El outbox sigue siendo la
+    garantía: si esto falla —Expo caído, la red del contenedor, lo que sea—, el
+    aviso queda pendiente y sale en la corrida siguiente. Por eso se traga
+    cualquier excepción: que el push no salga en el acto no puede hacer fallar la
+    acción que lo originó, que es el clic de alguien del centro confirmando un
+    turno.
+
+    Va llamado desde ``transaction.on_commit``: antes del commit el aviso todavía
+    no existe para otra conexión, así que el envío no lo encontraría.
+
+    Tampoco hay riesgo de doble envío con el cron corriendo a la vez: ``_tomar``
+    marca en ``PROCESANDO`` dentro de una transacción, que es exactamente para
+    esto.
+    """
+    try:
+        return procesar_pendientes(limite=limite)
+    except Exception:
+        logger.exception('Falló el despacho inmediato; queda para el barrido')
+        return {}

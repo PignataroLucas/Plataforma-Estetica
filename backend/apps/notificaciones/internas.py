@@ -13,6 +13,7 @@ dirección de mail de la sucursal. Ver ``NotificacionInterna`` y
 APROBACION_TURNOS_SPEC.md §2.5.
 """
 import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -29,6 +30,11 @@ logger = logging.getLogger(__name__)
 MAX_INTENTOS = 3
 
 LOTE_POR_CORRIDA = 50
+
+# Cuánto antes del vencimiento sale el segundo aviso. Media hora es suficiente
+# para que alguien salga de un box y conteste, y poco como para que no se
+# confunda con el aviso original.
+MARGEN_DE_AVISO = timedelta(minutes=30)
 
 
 def clave_de_pedido(turno_id, tipo) -> str:
@@ -151,6 +157,57 @@ def avisar_pedido_de_turno(turno, *, por_vencer=False):
     except IntegrityError:
         # La clave ya existía: el aviso está hecho.
         return None
+
+
+def avisar_los_que_vencen(ahora=None) -> dict:
+    """
+    Segundo aviso para los pedidos a punto de vencer.
+
+    Es lo que hace que un plazo de tres horas sea un plazo y no una trampa. Sin
+    esto, el centro se entera de que se le pasó cuando ya se le pasó; con esto,
+    tiene media hora para atajarlo.
+
+    La clave de idempotencia es la que hace que el aviso salga **una sola vez**
+    por pedido, aunque el barrido corra cada cinco minutos durante esa media
+    hora.
+    """
+    from apps.turnos.models import Turno
+
+    ahora = ahora or timezone.now()
+    por_vencer = Turno.objects.filter(
+        estado=Turno.Estado.PENDIENTE,
+        vence_en__isnull=False,
+        vence_en__gt=ahora,
+        vence_en__lte=ahora + MARGEN_DE_AVISO,
+    ).select_related('cliente', 'servicio', 'sucursal', 'profesional')
+
+    avisados = 0
+    for turno in por_vencer:
+        if avisar_pedido_de_turno(turno, por_vencer=True) is not None:
+            avisados += 1
+
+    return {'pedidos_por_vencer_avisados': avisados}
+
+
+def enviar_ahora(limite=5) -> dict:
+    """
+    Intento de envío inmediato, para que el mail no espere al próximo cron.
+
+    Esos minutos salen del plazo que el centro tiene para responder, así que
+    conviene no regalarlos. **No reemplaza al barrido**: si SES no contesta, la
+    fila queda pendiente y sale en la corrida siguiente.
+
+    Se traga cualquier excepción a propósito: que el mail no salga en el acto no
+    puede hacer fallar la reserva de la clienta, que ya está hecha.
+
+    Va llamado desde ``transaction.on_commit``: antes del commit la fila todavía
+    no existe para otra conexión.
+    """
+    try:
+        return enviar_pendientes(limite=limite)
+    except Exception:
+        logger.exception('Falló el envío inmediato; queda para el barrido')
+        return {}
 
 
 def enviar_pendientes(limite=LOTE_POR_CORRIDA) -> dict:

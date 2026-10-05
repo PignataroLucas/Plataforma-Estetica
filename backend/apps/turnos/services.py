@@ -8,6 +8,7 @@ endpoint ``UsuarioViewSet.horarios_disponibles``; se extrajo acá para que la ap
 reserve con exactamente las mismas reglas y no haya dos implementaciones que
 puedan divergir.
 """
+import logging
 from datetime import datetime, time, timedelta
 
 from django.db import transaction
@@ -17,6 +18,8 @@ from apps.empleados.models import Usuario
 
 from .models import Turno
 from .ventana import hay_ventana_suficiente, vencimiento_de
+
+logger = logging.getLogger(__name__)
 
 # Horario asumido cuando el profesional no tiene agenda cargada en su ficha.
 HORARIO_DEFAULT_INICIO = time(8, 0)
@@ -403,6 +406,108 @@ def reservar_turno(*, cliente, servicio, inicio, profesional=None, notas='',
             )
 
     raise TurnoNoDisponible('Ese horario ya no está disponible')
+
+
+class PedidoYaResuelto(Exception):
+    """El pedido no está pendiente: alguien ya lo aceptó, lo rechazó o venció."""
+
+
+def confirmar_turno(turno, *, usuario=None):
+    """
+    El centro acepta el pedido.
+
+    El aviso a la clienta **no se manda acá**: la señal de turnos lo encola al
+    ver la transición a ``CONFIRMADO``, igual que para los turnos que el staff
+    confirma desde el CRM por cualquier otra vía.
+
+    Lanza ``PedidoYaResuelto`` si no estaba pendiente. Es la carrera real: dos
+    personas del centro abriendo el mismo pedido, o alguien que lo acepta justo
+    cuando el barrido lo estaba venciendo.
+    """
+    return _resolver(turno, Turno.Estado.CONFIRMADO, usuario=usuario)
+
+
+def rechazar_turno(turno, *, motivo, usuario=None, detalle=''):
+    """
+    El centro rechaza el pedido, o el sistema lo vence.
+
+    ``usuario`` nulo con motivo ``VENCIDO`` es el barrido: no lo cerró nadie.
+    Esa distinción es la que después permite separar "dijimos que no" de "nadie
+    lo miró", que son dos problemas con dos soluciones distintas.
+
+    El motivo es obligatorio y de la lista cerrada; el detalle libre es opcional
+    y **nunca se le muestra a la clienta**.
+    """
+    if not motivo:
+        raise ValueError('Rechazar un pedido requiere un motivo')
+
+    return _resolver(
+        turno, Turno.Estado.RECHAZADO,
+        usuario=usuario, motivo=motivo, detalle=detalle,
+    )
+
+
+def _resolver(turno, estado, *, usuario=None, motivo='', detalle=''):
+    """
+    Pasa el pedido a su estado final, una sola vez.
+
+    El bloqueo de fila es lo que hace segura la resolución concurrente: sin él,
+    dos requests podrían leer el turno pendiente a la vez y los dos escribirían
+    su resolución, con el último pisando al primero y disparando dos avisos a la
+    clienta.
+    """
+    with transaction.atomic():
+        actual = Turno.objects.select_for_update().get(pk=turno.pk)
+        if actual.estado != Turno.Estado.PENDIENTE:
+            raise PedidoYaResuelto(
+                f'Este pedido ya está {actual.get_estado_display().lower()}'
+            )
+
+        actual.estado = estado
+        actual.motivo_rechazo = motivo
+        actual.detalle_rechazo = detalle
+        actual.resuelto_por = usuario
+        actual.resuelto_en = timezone.now()
+        actual.save(update_fields=[
+            'estado', 'motivo_rechazo', 'detalle_rechazo',
+            'resuelto_por', 'resuelto_en', 'actualizado_en',
+        ])
+
+    turno.refresh_from_db()
+    return turno
+
+
+def vencer_pedidos(ahora=None) -> dict:
+    """
+    Cierra los pedidos a los que se les pasó el plazo.
+
+    Corre en el mismo barrido que el resto de las notificaciones. Libera el
+    horario —``RECHAZADO`` no ocupa agenda— y dispara el aviso a la clienta con
+    el camino para elegir otro.
+
+    Que uno falle no puede frenar a los demás: un pedido con datos raros no
+    debería dejar la agenda bloqueada por el resto.
+    """
+    ahora = ahora or timezone.now()
+    vencidos = Turno.objects.filter(
+        estado=Turno.Estado.PENDIENTE,
+        vence_en__isnull=False,
+        vence_en__lte=ahora,
+    )
+
+    cerrados = errores = 0
+    for turno in vencidos:
+        try:
+            rechazar_turno(turno, motivo=Turno.MotivoRechazo.VENCIDO)
+            cerrados += 1
+        except PedidoYaResuelto:
+            # Alguien lo resolvió entre el filtro y el lock. No es un error.
+            continue
+        except Exception:
+            logger.exception('No se pudo vencer el pedido %s', turno.pk)
+            errores += 1
+
+    return {'pedidos_vencidos': cerrados, 'pedidos_con_error': errores}
 
 
 def puede_cancelar(turno, *, ahora=None):
