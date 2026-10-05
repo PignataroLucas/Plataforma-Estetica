@@ -1,4 +1,8 @@
+from datetime import time
+
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from config.storage import storage_publico
@@ -62,9 +66,57 @@ class Sucursal(models.Model):
     activa = models.BooleanField(default=True)
     es_principal = models.BooleanField(default=False)
 
+    # --- Respuesta a los pedidos de turno de la app ---
+    #
+    # No es el horario en que abre el local: es **la franja en la que alguien
+    # mira los pedidos**. El plazo de `horas_para_responder` corre solo acá
+    # adentro, y esa es toda la diferencia entre un vencimiento que funciona y
+    # uno que rechaza solo los pedidos que entran de noche
+    # (APROBACION_TURNOS_SPEC.md §2.2).
+    #
+    # La configuración va en la sucursal y no en el centro porque la agenda es de
+    # la sucursal: dos locales pueden tener personas y horarios distintos.
+    respuesta_hora_inicio = models.TimeField(
+        default=time(9, 0),
+        verbose_name='Responde pedidos desde',
+        help_text="Desde qué hora se miran los pedidos de turno de la app"
+    )
+    respuesta_hora_fin = models.TimeField(
+        default=time(20, 0),
+        verbose_name='Responde pedidos hasta',
+        help_text="Hasta qué hora se miran los pedidos de turno de la app"
+    )
+    horas_para_responder = models.PositiveSmallIntegerField(
+        default=3,
+        validators=[MinValueValidator(1)],
+        verbose_name='Horas para responder',
+        help_text="Cuánto dura un pedido antes de vencer, contando solo las horas "
+                  "de la franja de respuesta"
+    )
+    email_avisos = models.EmailField(
+        blank=True,
+        verbose_name='Email para avisos',
+        help_text="A dónde llegan los pedidos de turno de la app. "
+                  "Vacío usa el email de la sucursal."
+    )
+
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        """La franja tiene que ser una franja: sin esto el plazo no avanza nunca."""
+        super().clean()
+        if self.respuesta_hora_inicio >= self.respuesta_hora_fin:
+            raise ValidationError({
+                'respuesta_hora_fin':
+                    'La hora de fin tiene que ser posterior a la de inicio.'
+            })
+
+    @property
+    def destino_avisos(self):
+        """A dónde mandar los pedidos de turno. Vacío = nadie configurado."""
+        return self.email_avisos or self.email or ''
 
     class Meta:
         verbose_name = 'Sucursal'

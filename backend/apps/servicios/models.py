@@ -258,6 +258,18 @@ class Servicio(models.Model):
                   "listo. Si hay fechas cargadas REEMPLAZAN a dias_reserva — el servicio "
                   "se reserva solo esos días exactos."
     )
+    # Hoy va en True para todos: AME pidió revisar cada pedido. El campo existe
+    # igual desde ahora porque el día que tenga cuarenta pedidos por semana y
+    # quiera que la limpieza facial se confirme sola, es destildar un check y no
+    # una migración con datos encima. Con False la app crea el turno directamente
+    # en CONFIRMADO y la señal que ya existe dispara el aviso: no hay camino
+    # nuevo que escribir (APROBACION_TURNOS_SPEC.md §3.3).
+    requiere_aprobacion = models.BooleanField(
+        default=True,
+        verbose_name='Requiere aprobación del centro',
+        help_text="Si está activo, el turno pedido desde la app queda pendiente "
+                  "hasta que alguien del centro lo acepte o lo rechace."
+    )
 
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)

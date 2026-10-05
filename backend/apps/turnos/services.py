@@ -16,6 +16,7 @@ from django.utils import timezone
 from apps.empleados.models import Usuario
 
 from .models import Turno
+from .ventana import hay_ventana_suficiente, vencimiento_de
 
 # Horario asumido cuando el profesional no tiene agenda cargada en su ficha.
 HORARIO_DEFAULT_INICIO = time(8, 0)
@@ -172,6 +173,27 @@ def motivo_fecha_no_reservable(servicio, fecha, *, hoy=None):
     return None
 
 
+def motivo_horario_no_reservable(servicio, inicio, *, ahora=None):
+    """
+    Motivo por el que ese HORARIO puntual no se puede pedir, o ``None``.
+
+    Complementa a ``motivo_fecha_no_reservable``, que trabaja por día: la franja
+    de respuesta se mide en horas, así que la regla no entra en aquella. Van las
+    dos, y las dos se aplican igual en el calendario y en el POST, para que la app
+    y el backend nunca discrepen.
+    """
+    if not servicio.requiere_aprobacion:
+        return None
+
+    ahora = ahora or timezone.now()
+    if not hay_ventana_suficiente(inicio, ahora=ahora, sucursal=servicio.sucursal):
+        return (
+            'Ese horario es demasiado pronto para que el centro llegue a '
+            'confirmarlo. Elegí uno más tarde.'
+        )
+    return None
+
+
 def _listado_de_dias(dias):
     """['lunes','martes','jueves'] → 'lunes, martes y jueves' (con tildes)."""
     nombres = [DIAS_DISPLAY.get(d, d) for d in DIAS_SEMANA.values() if d in dias]
@@ -267,20 +289,56 @@ def calcular_slots(profesional, servicio, fecha, *, no_antes_de=None, excluir_tu
     return slots
 
 
-def slots_agregados(servicio, fecha, *, no_antes_de=None):
+def slots_agregados(servicio, fecha, *, no_antes_de=None, ahora=None):
     """
     Horarios libres del servicio combinando a todos los profesionales de la sucursal.
 
     Cada horario aparece UNA sola vez, con el primer profesional libre — así el
     cliente elige hora y el sistema resuelve con quién, sin exponer la agenda de
     cada empleado.
+
+    **Es el camino de la app**, y por eso acá se descartan los horarios que el
+    centro no llegaría a aprobar a tiempo: si el servicio requiere aprobación, un
+    horario se ofrece solo si queda franja de respuesta suficiente antes de que
+    empiece (APROBACION_TURNOS_SPEC.md §2.3). El CRM usa ``calcular_slots``
+    directo y no pasa por esta regla, que es lo correcto: el staff agenda cuando
+    quiere.
+
+    El caso que esto ataja: pedido el lunes 23:30 para el martes 08:00, con la
+    franja abriendo a las 09:00. Ofrecerlo sería prometer un turno que iba a
+    vencer sin que nadie pudiera mirarlo.
     """
     por_horario = {}
     for profesional in profesionales_de(servicio.sucursal):
         for slot in calcular_slots(profesional, servicio, fecha, no_antes_de=no_antes_de):
             por_horario.setdefault(slot['inicio'], {**slot, 'profesional': profesional})
 
-    return [por_horario[inicio] for inicio in sorted(por_horario)]
+    inicios = sorted(por_horario)
+    if servicio.requiere_aprobacion:
+        ahora = ahora or timezone.now()
+        inicios = [
+            inicio for inicio in inicios
+            if hay_ventana_suficiente(inicio, ahora=ahora, sucursal=servicio.sucursal)
+        ]
+
+    return [por_horario[inicio] for inicio in inicios]
+
+
+def _vencimiento_del_pedido(servicio, inicio, estado, origen):
+    """
+    ``vence_en`` del turno que se está por crear, o ``None`` si no vence.
+
+    Solo vencen los pedidos de la app que quedan esperando aprobación. Un turno
+    que nace confirmado ya fue decidido, y uno cargado en el CRM lo decidió quien
+    lo cargó.
+    """
+    if origen != Turno.Origen.APP or estado != Turno.Estado.PENDIENTE:
+        return None
+    if not servicio.requiere_aprobacion:
+        return None
+    return vencimiento_de(
+        inicio, pedido_en=timezone.now(), sucursal=servicio.sucursal
+    )
 
 
 def _entra_en_la_jornada(profesional, inicio, fin):
@@ -293,7 +351,8 @@ def _entra_en_la_jornada(profesional, inicio, fin):
 
 
 def reservar_turno(*, cliente, servicio, inicio, profesional=None, notas='',
-                   estado=Turno.Estado.PENDIENTE, creado_por=None):
+                   estado=Turno.Estado.PENDIENTE, creado_por=None,
+                   origen=Turno.Origen.CRM):
     """
     Crea un turno verificando la disponibilidad dentro de la transacción.
 
@@ -301,6 +360,11 @@ def reservar_turno(*, cliente, servicio, inicio, profesional=None, notas='',
     la fila del profesional antes de re-chequear los conflictos: eso serializa dos
     reservas concurrentes del mismo profesional (el chequeo previo por sí solo no
     alcanza, porque ninguna de las dos ve el turno que la otra está insertando).
+
+    ``origen=APP`` con un servicio que ``requiere_aprobacion`` calcula además
+    ``vence_en``: hasta cuándo el centro puede aceptarlo o rechazarlo
+    (APROBACION_TURNOS_SPEC.md §2.11). Los turnos del CRM no vencen — los cargó
+    alguien que ya decidió.
 
     Lanza ``TurnoNoDisponible`` si el horario ya no se puede tomar.
     """
@@ -331,6 +395,8 @@ def reservar_turno(*, cliente, servicio, inicio, profesional=None, notas='',
                 fecha_hora_inicio=inicio,
                 fecha_hora_fin=fin,
                 estado=estado,
+                origen=origen,
+                vence_en=_vencimiento_del_pedido(servicio, inicio, estado, origen),
                 monto_total=servicio.precio,
                 notas=notas,
                 creado_por=creado_por,
