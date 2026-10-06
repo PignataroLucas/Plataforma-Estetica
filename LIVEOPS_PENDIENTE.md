@@ -1,6 +1,6 @@
 # Configuración pendiente fuera del código
 
-**Fecha:** 04/10/2026
+**Fecha:** 05/10/2026
 
 Todo lo que falta para que la app funcione completa **no es código**: son altas,
 credenciales y trámites en consolas de terceros. Está junto acá porque son tareas
@@ -14,6 +14,9 @@ ordenados por eso, no por dificultad.
 Los valores concretos —URLs, nombres de paquete, rutas de menú— están copiados
 acá a propósito: la idea es poder atacar un bloque sin releer ninguna
 conversación.
+
+No hay bloque 2: era FCM, y quedó hecho el 05/10/2026. Los demás conservan su
+número porque otros documentos los citan.
 
 ---
 
@@ -161,84 +164,14 @@ resuelve el caso de AME en una tarde si hace falta.
 
 ---
 
-## 2. FCM — desbloquea las notificaciones push
-
-**Mientras no esté:** el push está construido de punta a punta —registro de
-token, preferencias por categoría, deep links, un test que verifica que toda ruta
-de aviso existe en la app— y **no llega ni una notificación**. Los recordatorios
-de turno son de las pocas cosas que la clienta nota de inmediato.
-
-**Son dos archivos distintos, y confundirlos es el error clásico:**
-
-| Archivo | Qué es | Dónde va |
-|---|---|---|
-| `google-services.json` | Identificadores públicos | **Al repo**, declarado en `app.json` |
-| Clave de cuenta de servicio | **Secreto** | **A EAS**, nunca al repo |
-
-El `.gitignore` de `client-app/` ya tiene la regla para que la clave secreta no se
-cuele: Firebase la descarga con un nombre tipo
-`ame-esencial-firebase-adminsdk-a1b2c-3d4e5f6a7b.json`, que es fácil de no mirar.
-
-### 2.1 Firebase
-
-Crear un proyecto en https://console.firebase.google.com y agregarle una **app
-Android**. El package tiene que ser **exactamente**:
-
-```
-com.ameesencial.app
-```
-
-Si no coincide con `app.json`, el push no llega nunca y nada te dice por qué.
-
-Descargar el **`google-services.json`**.
-
-### 2.2 El archivo al repo
-
-Va en `client-app/google-services.json`, declarado en `app.json` dentro de
-`android`:
-
-```json
-"googleServicesFile": "./google-services.json"
-```
-
-`app.json` está bajo `.gitattributes` como `text eol=lf` por el fingerprint: no
-cambiarle los finales de línea.
-
-### 2.3 La clave de servicio a EAS
-
-En Firebase: **Project settings → Service accounts → Generate new private key →
-Generate key**. Descarga un JSON que **no se commitea**.
-
-```bash
-eas credentials
-```
-
-Ruta de menú: `Android` → `production` → `Google Service Account` → `Manage your
-Google Service Account Key for Push Notifications (FCM V1)` → `Set up a Google
-Service Account Key for Push Notifications (FCM V1)` → `Upload a new service
-account key`.
-
-### 2.4 Build nativa
-
-Esto **no viaja por OTA**: `googleServicesFile` cambia el fingerprint, o sea el
-`runtimeVersion`.
-
-**Juntarlo con Sentry (bloque 5).** Las dos cosas necesitan rebuild nativo; si
-viajan juntas se ahorra una build de las 15 gratis del mes.
-
----
-
 ## 3. Salir del sandbox de SES — desbloquea recuperar contraseña
 
 **Mientras no esté:** la recuperación de contraseña funciona, pero **solo contra
-direcciones verificadas** —hoy, las de Lucas y `info@ameesencial.com.ar`—. Una
+direcciones verificadas** —hoy, las de Lucas, `info@ameesencial.com.ar` y
+`ame.esencial@gmail.com`—. Una
 tester que se olvide la contraseña no recibe nada, y como el endpoint responde
 200 siempre (a propósito, para que no se pueda averiguar quién es clienta del
 centro), ni ella ni vos se enteran salvo mirando los logs de Railway.
-
-**Ya hecho:** `info@ameesencial.com.ar` verificado como remitente, permiso
-`ses:SendEmail` en el usuario IAM `ame-catalogo-app`, `EMAIL_REMITENTE` en
-Railway. El circuito completo anda en producción.
 
 ### 3.1 Conseguir que se publiquen los tres CNAME de DKIM
 
@@ -283,6 +216,9 @@ Con el dominio verificado se puede usar cualquier dirección de
 `@ameesencial.com.ar` sin verificarla una por una, y los mails quedan firmados
 con DKIM del dominio en vez del de Amazon.
 
+Hoy sale desde `info@ameesencial.com.ar`: se cambia en `EMAIL_REMITENTE`, en las
+variables de Railway.
+
 ---
 
 ## 4. Apple Developer — desbloquea iOS
@@ -293,6 +229,18 @@ ni ad-hoc: la cuenta paga (US$99/año) es obligatoria y no hay atajo.
 Es el **camino crítico de todo lo iOS**, y la aprobación tarda 24–48 h. La
 modalidad **individual** es la rápida; la de *organización* pide número D-U-N-S y
 puede sumar días.
+
+**Antes de la primera build de iOS, de cualquier perfil:** en Firebase, *Agregar
+app → iOS* con el bundle id `com.ameesencial.app`, bajar el
+`GoogleService-Info.plist` a `client-app/` y declararlo en `app.json`:
+
+```json
+"ios": { "googleServicesFile": "./GoogleService-Info.plist" }
+```
+
+Sin ese archivo el plugin de Firebase corta el prebuild de iOS, **incluida la
+build de simulador**. En Android no afecta. Son dos minutos y no necesitan la
+cuenta de Apple.
 
 Gratis y sin cuenta se puede, mientras tanto:
 
@@ -323,7 +271,8 @@ El backend **ya está cableado** y es inerte sin DSN. Falta:
 > mandarle a un tercero los cuerpos de request convertiría una herramienta de
 > diagnóstico en una fuga de datos sensibles. Con el stack trace y la URL alcanza.
 
-El punto 3 **viaja con el bloque 2**: las dos necesitan la misma build.
+El punto 3 necesita una build nativa propia. Conviene que viaje con la próxima
+que haga falta por otro motivo.
 
 ---
 
@@ -336,31 +285,83 @@ no se toca. Es el bloque más corto de todos.
 
 ---
 
+## 7. Firebase — cerrar lo que quedó abierto
+
+**Mientras no esté:** no se rompe nada; push y Analytics andan. Es higiene, y se
+hace en diez minutos.
+
+### 7.1 Restringir la clave de Android en Google Cloud
+
+https://console.cloud.google.com/apis/credentials, proyecto
+**`ame-esencial-e3e6a`**, clave **"Android key (auto created by Firebase)"**.
+
+- **Restricciones de API:** "Restringir clave", solo con APIs de Firebase.
+  Firebase suele dejarla así de fábrica; confirmarlo.
+- **Restricciones de aplicación:** **dejar en "Ninguna" hasta publicar en la Play
+  Store.** Con Play App Signing la firma del APK cambia, y restringir solo por el
+  SHA-1 de EAS cortaría el push y Analytics sin ningún error visible. Al publicar,
+  restringir a *Apps de Android* con el package `com.ameesencial.app` y **los dos**
+  SHA-1: el de EAS (`49:BC:A6:07:C4:7F:E1:A1:0B:4B:65:77:57:D4:DD:34:FC:FA:41:36`)
+  y el de Play App Signing.
+
+### 7.2 Cerrar la alerta de GitHub
+
+GitHub marcó como secreto expuesto la `api_key` de
+`client-app/google-services.json`. No lo es: es un identificador público que
+viaja adentro de cada APK, y rotarla no sirve porque la nueva quedaría igual de
+expuesta. El secreto de verdad es la clave de cuenta de servicio, que está en EAS
+y nunca entró al repo.
+
+En **Security → Secret scanning**: *Close as → False positive*, con el comentario
+*"Firebase Android API key, pública por diseño (va dentro del APK). Restringida a
+APIs de Firebase en Google Cloud."*
+
+### 7.3 Lo que NO hay que tocar
+
+**"Enhanced security for push notifications"**, en *Access tokens* de expo.dev,
+queda **apagado**. Exige un token en cada envío, y el backend hoy no lo manda:
+activarlo corta todas las notificaciones sin un solo error a la vista. Se puede
+prender el día que el backend mande el token.
+
+### 7.4 Al publicar en la Play Store
+
+En el formulario de *Seguridad de los datos*, declarar Analytics: actividad en la
+app e identificadores de la instalación. **No** se usa el ID de publicidad: está
+apagado en `firebase.json` y el permiso `AD_ID` se quita del manifest. Lo mismo va
+en la política de privacidad.
+
+---
+
 ## Por dónde empezar
 
 Si hubiera que elegir un orden:
 
 1. **Los tres CNAME (3.1).** Es un mail y depende de terceros, así que cuanto
    antes salga, antes vuelve. No bloquea nada mientras tanto.
-2. **FCM (bloque 2).** Es el único que depende solo de vos y desbloquea una
-   feature entera que ya está construida.
-3. **Apple Developer (bloque 4)**, en paralelo, por los 24–48 h de aprobación.
-4. **Tienda Nube (bloque 1)**, cuando tengas a AME disponible para una sentada
+2. **Apple Developer (bloque 4)**, en paralelo, por los 24–48 h de aprobación.
+3. **Tienda Nube (bloque 1)**, cuando tengas a AME disponible para una sentada
    larga.
-5. **Sentry (bloque 5)** antes de lanzar la build de FCM, para que viajen juntas.
+4. **Firebase (bloque 7)**, cuando haya diez minutos libres.
+5. **Sentry (bloque 5)**, con la próxima build nativa.
 6. **El logo (bloque 6)**, cuando llegue.
 
-Nada de esto bloquea sacar una build para testers esta semana. La app funciona
-hoy: login, vinculación por código, turnos con reserva y cancelación, mi rutina,
-catálogo, perfil y recuperación de contraseña, todo contra producción.
+Nada de esto bloquea a las testers. La app funciona hoy contra producción: login,
+vinculación por código, turnos con reserva, aprobación del centro y cancelación,
+notificaciones push, mi rutina, catálogo, perfil, recuperación de contraseña y
+Analytics.
 
 ---
 
 ## Cuota de EAS, para planificar
 
 15 builds de Android y 15 de iOS por mes en el plan gratuito, con 1 de
-concurrencia y 45 minutos de timeout. Juntar FCM y Sentry en la misma build no es
-una optimización prematura: son dos de esas quince.
+concurrencia, 45 minutos de timeout y una cola que llegó a tardar dos horas en
+arrancar.
+
+Las builds de Android no tienen por qué pasar por ahí. El workflow **EAS Build**
+de GitHub Actions, con `donde = runner`, compila en la máquina de GitHub con las
+mismas credenciales y firma que EAS: sin cola y sin gastar la cuota. EAS queda
+para iOS. Un cambio que es solo JS no necesita build: sale con `eas update`.
 
 ---
 
@@ -369,4 +370,3 @@ una optimización prematura: son dos de esas quince.
 - `COMPRA_EN_APP_SPEC.md` — el porqué de cada decisión del bloque 1. Las trampas
   del §6 valen la pena antes de tocar precios.
 - `APP_MOBILE_ROADMAP.md` §0 — el estado real de la app y qué falta en features.
-- `NOTIFICACIONES_PUSH_SPEC.md` — el circuito que el bloque 2 enciende.
