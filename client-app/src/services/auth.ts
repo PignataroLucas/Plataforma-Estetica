@@ -2,7 +2,7 @@
 import type { AuthResponse, Perfil, RegistroPayload, TokenPair } from '@/types/api';
 
 import { apiPost } from './api';
-import { authGet, authPatch } from './http';
+import { authDelete, authGet, authPatch } from './http';
 
 /** POST /api/client/auth/login/ */
 export function login(email: string, password: string): Promise<AuthResponse> {
@@ -30,6 +30,17 @@ export function getPerfil(): Promise<Perfil> {
 /** PATCH /api/client/perfil/ (autenticado). */
 export function actualizarPerfil(datos: { nombre?: string; apellido?: string }): Promise<Perfil> {
   return authPatch<Perfil>('/client/perfil/', datos);
+}
+
+/**
+ * DELETE /api/client/perfil/ — borra la cuenta de la app. Pide la contraseña.
+ *
+ * Borra la cuenta, los teléfonos y las preferencias; la ficha del centro queda
+ * (ver `backend/apps/clientes/cuenta_app.py`). Una contraseña equivocada vuelve
+ * como `ApiError` con el campo `password`.
+ */
+export function eliminarCuenta(password: string): Promise<void> {
+  return authDelete<void>('/client/perfil/', { password });
 }
 
 /**

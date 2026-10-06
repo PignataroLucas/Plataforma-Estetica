@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SimuladorPush } from '@/components/dev/SimuladorPush';
@@ -57,6 +58,17 @@ export default function Perfil() {
 
         <View style={styles.section}>
           <Button label="Cerrar sesión" variant="ghost" onPress={() => logout()} />
+          {/* Discreto a propósito: tiene que estar a la vista (lo pide Google
+              Play), no ser lo primero que se toca. */}
+          <Pressable
+            onPress={() => router.push('/eliminar-cuenta')}
+            hitSlop={8}
+            style={styles.eliminar}
+            accessibilityRole="button">
+            <AppText variant="meta" color={colors.danger}>
+              Eliminar mi cuenta
+            </AppText>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -94,4 +106,5 @@ const styles = StyleSheet.create({
   },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.line },
   rowText: { gap: 2 },
+  eliminar: { alignSelf: 'center', paddingVertical: spacing.sm },
 });

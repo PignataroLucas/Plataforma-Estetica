@@ -11,6 +11,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.clientes.cuenta_app import eliminar_cuenta_app
 from apps.clientes.models import (
     Cliente,
     CodigoRecuperacion,
@@ -43,6 +44,7 @@ from .serializers import (
     OlvideMiClaveSerializer,
     RestablecerClaveSerializer,
     CompraSerializer,
+    EliminarCuentaSerializer,
     LoginSerializer,
     PerfilSerializer,
     PerfilUpdateSerializer,
@@ -199,7 +201,17 @@ class ClienteTokenRefreshView(TokenRefreshView):
 
 
 class PerfilView(ClienteScopeMixin, APIView):
-    """GET/PATCH /api/client/perfil/ — perfil de la cuenta autenticada."""
+    """
+    GET/PATCH /api/client/perfil/ — perfil de la cuenta autenticada.
+    DELETE    /api/client/perfil/ — borra la cuenta. Pide la contraseña.
+    """
+    # Solo la baja: pide la contraseña, y sin tope se podría tantear con un token
+    # robado. Es el mismo límite que la recuperación de clave.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'cliente_password'
+
+    def get_throttles(self):
+        return super().get_throttles() if self.request.method == 'DELETE' else []
 
     def get_queryset(self):
         return UsuarioCliente.objects.prefetch_related(
@@ -216,6 +228,19 @@ class PerfilView(ClienteScopeMixin, APIView):
         serializer.save()
         usuario = self.get_queryset().get(pk=request.user.pk)
         return Response(PerfilSerializer(usuario).data)
+
+    def delete(self, request):
+        """
+        Borra la cuenta de la app y deja intactas las fichas de los centros
+        (ver ``apps/clientes/cuenta_app.py``). Los teléfonos registrados se van
+        con la cuenta, así que no vuelve a llegar ningún aviso.
+        """
+        serializer = EliminarCuentaSerializer(
+            data=request.data, context={'usuario': request.user},
+        )
+        serializer.is_valid(raise_exception=True)
+        eliminar_cuenta_app(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class OlvideMiClaveView(APIView):
