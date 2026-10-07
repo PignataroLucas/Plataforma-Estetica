@@ -86,6 +86,7 @@ function RootNavigator({ authenticated }: { authenticated: boolean }) {
         <Stack.Screen name="servicio/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="carrito" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="checkout" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="eliminar-cuenta" options={{ animation: 'slide_from_right' }} />
       </Stack.Protected>
       <Stack.Protected guard={!authenticated}>
         <Stack.Screen name="(auth)" />

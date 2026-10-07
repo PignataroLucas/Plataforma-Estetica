@@ -209,6 +209,21 @@ class PerfilUpdateSerializer(serializers.ModelSerializer):
         fields = ['nombre', 'apellido']
 
 
+class EliminarCuentaSerializer(serializers.Serializer):
+    """
+    Pide la contraseña para borrar la cuenta.
+
+    Un token de sesión no alcanza: es irreversible, y un teléfono desbloqueado en
+    manos ajenas no puede bastar para borrarle la cuenta a nadie.
+    """
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_password(self, value):
+        if not self.context['usuario'].check_password(value):
+            raise serializers.ValidationError('La contraseña no es correcta.')
+        return value
+
+
 class ClienteTokenRefreshSerializer(TokenRefreshSerializer):
     """Refresh que solo acepta tokens de cliente (claim ``token_use='cliente'``)."""
 

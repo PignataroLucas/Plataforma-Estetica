@@ -156,6 +156,14 @@ export async function darDeBajaDispositivo(): Promise<void> {
   }
 }
 
+/**
+ * Suelta el token del aparato **sin** pedir la baja. Es para cuando se borró la
+ * cuenta: sus dispositivos se fueron con ella, y pedir la baja daría 401.
+ */
+export function olvidarDispositivo(): void {
+  tokenActual = null;
+}
+
 /** GET /api/client/notificaciones/preferencias/ */
 export function getPreferencias(): Promise<Preferencias> {
   return authGet<Preferencias>('/client/notificaciones/preferencias/');

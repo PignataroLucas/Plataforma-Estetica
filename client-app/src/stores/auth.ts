@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 
 import {
+  eliminarCuenta as eliminarCuentaReq,
   getPerfil,
   login as loginReq,
   refreshTokens,
@@ -16,7 +17,7 @@ import {
 } from '@/services/auth';
 import { analytics } from '@/services/analytics';
 import { configureHttpAuth } from '@/services/http';
-import { darDeBajaDispositivo } from '@/services/push';
+import { darDeBajaDispositivo, olvidarDispositivo } from '@/services/push';
 import { limpiarCacheDeDatos } from '@/services/queryClient';
 import { deleteItem, getItem, setItem } from '@/services/storage';
 import { vaciarCarrito } from '@/stores/carrito';
@@ -53,6 +54,11 @@ interface AuthState {
   setUsuario: (usuario: Perfil) => void;
   /** Cierra sesión y limpia el almacenamiento. */
   logout: () => Promise<void>;
+  /**
+   * Borra la cuenta en el backend y cierra la sesión. Propaga `ApiError` (por
+   * ejemplo, contraseña equivocada) sin tocar la sesión, para mostrarlo en el form.
+   */
+  eliminarCuenta: (password: string) => Promise<void>;
   /** La pantalla de transición terminó: se puede mostrar la app. */
   terminarEntrada: () => void;
 }
@@ -144,6 +150,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // teléfono se encuentra con el pedido de la anterior.
     vaciarCarrito();
     await Promise.all([deleteItem(ACCESS_KEY), deleteItem(REFRESH_KEY)]);
+  },
+
+  eliminarCuenta: async (password) => {
+    await eliminarCuentaReq(password);
+    // Los teléfonos se borraron con la cuenta. Sin esto, el logout pediría la
+    // baja del dispositivo con un token que ya no corresponde a nadie.
+    olvidarDispositivo();
+    await get().logout();
   },
 }));
 

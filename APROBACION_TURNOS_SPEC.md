@@ -33,8 +33,8 @@ de cambiar algo.
   `PENDIENTE`, así que no hay carrera entre dos clientas por el mismo slot.
 - **El push de confirmación ya está cableado.** La señal de
   `apps/turnos/signals.py` dispara `TURNO_CONFIRMADO` cuando un turno pasa a
-  `CONFIRMADO`, venga de donde venga el cambio. Solo falta FCM para que llegue
-  (ver `LIVEOPS_PENDIENTE.md` §2).
+  `CONFIRMADO`, venga de donde venga el cambio. Con FCM configurado
+  (05/10/2026) llega al teléfono.
 - **La antelación mínima existe.** `DIAS_MINIMOS_ANTICIPACION = 1`, por día de
   calendario, aplicada en `motivo_fecha_no_reservable`.
 
@@ -365,7 +365,7 @@ Evento(
     clave=TURNO_RECHAZADO,
     categoria=Categoria.TURNOS,
     transaccional=True,          # llega aunque haya apagado Turnos
-    ruta='/(tabs)/reservar',     # el tap lleva a elegir otro horario
+    ruta='/reservar',            # el tap lleva a elegir otro horario
 )
 ```
 
@@ -424,8 +424,8 @@ confirmar/rechazar un turno. Permisos: quien pueda ver la agenda.
 | Rechazos falsos por vencimiento | El reloj corre en ventana de respuesta (§2.2) y hay aviso previo a 30 min |
 | Horarios que no se pueden aprobar a tiempo | No se ofrecen (§2.3) |
 | El mail no llega y nadie se entera | Entrega con estado y reintentos en la misma fila; `email_estado` visible en el admin |
-| SES en sandbox | Verificar `ame.esencial@gmail.com` antes de la Fase 3 |
-| El push no llega | Depende de FCM (`LIVEOPS_PENDIENTE.md` §2). El mail y la campanita funcionan sin eso |
+| SES en sandbox | `ame.esencial@gmail.com` verificado en SES |
+| El push no llega | Depende de FCM, configurado el 05/10/2026. El mail y la campanita funcionan sin eso |
 | Dos procesos avisando dos veces | Clave de idempotencia en `NotificacionInterna`, igual que en `Aviso` |
 | La política cambia y rompe pedidos vivos | `vence_en` guardado: los viejos conservan su plazo (§2.11) |
 
@@ -433,9 +433,10 @@ confirmar/rechazar un turno. Permisos: quien pueda ver la agenda.
 
 ## 7. Dependencias
 
-- **FCM** es lo único que bloquea el circuito completo. El mail a AME y la
-  campanita del CRM andan sin eso; el push a la clienta no.
-- **`ame.esencial@gmail.com` verificado en SES**, antes de la Fase 3.
+- **FCM**, configurado el 05/10/2026. Era lo único que bloqueaba el circuito
+  completo: el mail a AME y la campanita del CRM andaban sin eso; el push a la
+  clienta no.
+- **`ame.esencial@gmail.com` verificado en SES.** Hecho.
 - Salir del sandbox de SES no es necesario para este feature: el único
   destinatario es una casilla que se puede verificar a mano.
 
@@ -444,5 +445,5 @@ confirmar/rechazar un turno. Permisos: quien pueda ver la agenda.
 ## 8. Documentos relacionados
 
 - `NOTIFICACIONES_PUSH_SPEC.md` — el outbox de avisos y el circuito de push.
-- `LIVEOPS_PENDIENTE.md` §2 y §3 — FCM y SES.
+- `LIVEOPS_PENDIENTE.md` §3 — salir del sandbox de SES.
 - `APP_MOBILE_ROADMAP.md` §0 — estado de la app.

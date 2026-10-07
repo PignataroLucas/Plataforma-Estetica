@@ -7,7 +7,8 @@ import { Presionable, type PresionableProps } from './Presionable';
 
 interface ButtonProps extends Omit<PresionableProps, 'children'> {
   label: string;
-  variant?: 'primary' | 'ghost';
+  /** `danger`: solo para lo irreversible, como borrar la cuenta. */
+  variant?: 'primary' | 'ghost' | 'danger';
   loading?: boolean;
 }
 
@@ -27,7 +28,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityState={{ disabled: !!isDisabled, busy: loading }}
       disabled={isDisabled}
-      style={[styles.base, isGhost ? styles.ghost : styles.primary, isDisabled && styles.disabled, style]}
+      style={[styles.base, styles[variant], isDisabled && styles.disabled, style]}
       {...rest}>
       <View style={styles.inner}>
         {loading ? (
@@ -53,5 +54,6 @@ const styles = StyleSheet.create({
   inner: { minHeight: 18, justifyContent: 'center' },
   primary: { backgroundColor: colors.ink },
   ghost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.line },
+  danger: { backgroundColor: colors.danger },
   disabled: { opacity: 0.5 },
 });
