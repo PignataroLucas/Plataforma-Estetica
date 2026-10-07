@@ -1,6 +1,6 @@
 # Configuración pendiente fuera del código
 
-**Fecha:** 05/10/2026
+**Fecha:** 06/10/2026
 
 Todo lo que falta para que la app funcione completa **no es código**: son altas,
 credenciales y trámites en consolas de terceros. Está junto acá porque son tareas
@@ -221,14 +221,31 @@ variables de Railway.
 
 ---
 
-## 4. Apple Developer — desbloquea iOS
+## 4. App Store — publicar en iOS
 
-**Mientras no esté:** no hay forma de instalar en un iPhone físico. Ni TestFlight
-ni ad-hoc: la cuenta paga (US$99/año) es obligatoria y no hay atajo.
+**Mientras no esté:** no hay forma de instalar en un iPhone físico, ni por
+TestFlight ni de otra manera.
 
-Es el **camino crítico de todo lo iOS**, y la aprobación tarda 24–48 h. La
-modalidad **individual** es la rápida; la de *organización* pide número D-U-N-S y
-puede sumar días.
+### 4.1 La cuenta de Apple Developer
+
+US$99 por año. Por lo mismo que en Google (bloque 8), va **individual a nombre de
+la titular de AME**: la de organización pide D-U-N-S.
+
+**Diferencia con Google:** en una cuenta individual, el App Store muestra como
+vendedor el **nombre legal de la titular**, no "AME esencial". La app se sigue
+llamando "AME esencial"; lo que cambia es la línea del vendedor. Que figure la
+marca solo se logra con la cuenta de organización.
+
+- Alta en developer.apple.com/programs/enroll, con un Apple ID con verificación
+  en dos pasos. La identidad se verifica con el DNI desde la app *Apple
+  Developer*. La aprobación tarda 24–48 h.
+- Acceso de Lucas: en App Store Connect, *Usuarios y acceso*, con rol
+  **Admin**. Una cuenta individual no deja sumar personas al portal de
+  certificados; si EAS no puede manejarlos con ese acceso, la alternativa es una
+  **API key de App Store Connect** con rol Admin, que la titular genera y se
+  carga en `eas credentials`. Confirmarlo cuando la cuenta exista.
+
+### 4.2 Firebase para iOS
 
 **Antes de la primera build de iOS, de cualquier perfil:** en Firebase, *Agregar
 app → iOS* con el bundle id `com.ameesencial.app`, bajar el
@@ -239,19 +256,74 @@ app → iOS* con el bundle id `com.ameesencial.app`, bajar el
 ```
 
 Sin ese archivo el plugin de Firebase corta el prebuild de iOS, **incluida la
-build de simulador**. En Android no afecta. Son dos minutos y no necesitan la
-cuenta de Apple.
+build de simulador**. No necesita la cuenta de Apple.
 
-Gratis y sin cuenta se puede, mientras tanto:
+### 4.3 Lo que pide la revisión de Apple
 
-- **Expo Go** en el iPhone: valida layout, safe areas, gestos y el WebView del
-  checkout. No valida ícono, splash ni push.
-- **Build de simulador** (`preview-simulador-ios`), si hay una Mac a mano: la app
-  compilada de verdad, con ícono y splash, sin push.
+Casi todo es lo mismo que para Google y se prepara una sola vez:
 
-Con la cuenta activa: `eas build -p ios --profile production` → `eas submit -p
-ios` → grupo interno de TestFlight. El bundle id `com.ameesencial.app` ya está
-definido.
+- **Borrar la cuenta desde la app:** hecho (Perfil → Eliminar mi cuenta).
+- **Política de privacidad:** la misma URL que en Google.
+- **Etiquetas de privacidad** (*App Privacy*) en App Store Connect: los mismos
+  datos que *Seguridad de los datos* de Google (8.2).
+- **Cuenta de demo** para el revisor, vinculada a un centro.
+- **Capturas de iPhone** en el tamaño que pida App Store Connect.
+- **Cifrado:** la app solo usa HTTPS. Declarar
+  `"infoPlist": { "ITSAppUsesNonExemptEncryption": false }` en `app.json`
+  evita la pregunta en cada subida.
+
+Lo que **no** hace falta:
+
+- **"Iniciar sesión con Apple":** es obligatorio solo si la app ofrece login con
+  Google o Facebook. Esta usa email y contraseña.
+- **Pagos de Apple:** los productos físicos y los servicios presenciales se
+  pueden cobrar por fuera, así que el checkout de Tienda Nube y los turnos no
+  tienen problema.
+- **Prueba con testers:** no hay equivalente a los 14 días de Google.
+  TestFlight es opcional: hasta 100 testers internos, o hasta 10.000 externos
+  con un link (la primera build externa pasa una revisión corta).
+
+### 4.4 TestFlight y builds
+
+**Decisión pendiente de AME (06/10/2026):** probar primero en Android y recién
+con la app validada pagar la cuenta de Apple, o arrancar las dos a la vez.
+
+El plan, cuando se decida:
+
+- **La titular** crea la cuenta, suma a Lucas como Admin en App Store Connect y
+  genera una **API key de App Store Connect** con rol Admin (*Usuarios y acceso →
+  Integraciones*): el `.p8`, el Key ID y el Issuer ID. Con una cuenta individual
+  no se puede sumar a nadie al portal de certificados; con la key, EAS maneja los
+  certificados y sube las builds sin pedirle un código de verificación cada vez.
+- **Lucas compila en su Mac**, sin cola ni cuota de EAS. Una sola vez: Xcode,
+  CocoaPods y fastlane. Después:
+
+  ```bash
+  npx eas-cli build --platform ios --profile production --local
+  npx eas-cli submit --platform ios --path ./build.ipa
+  ```
+
+- **Testers internos** (quienes están en la cuenta): ven la build apenas Apple
+  la procesa, sin revisión.
+- **Testers externos** (las clientas): entran con un link público e instalan
+  desde la app TestFlight. La primera build pasa una revisión corta de Apple
+  (alrededor de un día), que pide una descripción de qué probar, un mail de
+  contacto y una cuenta de demo. Cada build vence a los 90 días.
+- **Los testers de iPhone no cuentan para Google:** los 12 del bloque 8 son de
+  Android. Las dos pruebas corren en paralelo, cada una con su gente.
+- **La primera build de iOS puede fallar:** nunca se compiló para iOS, y
+  Firebase cambia cómo se arman las dependencias (`useFrameworks`). En la Mac se
+  depura rápido.
+- **Junto con el plist del 4.2,** y no antes, va
+  `"infoPlist": { "ITSAppUsesNonExemptEncryption": false }` en `app.json`.
+  Tocar `app.json` cambia el runtime version: hecho antes de tiempo, las
+  actualizaciones OTA dejarían de llegar a los APK ya instalados.
+
+La clave de push de Apple (APNs) la genera EAS en la primera build.
+
+Mientras tanto, gratis y sin cuenta, en la Mac: el **simulador de iOS**, con
+`preview-simulador-ios` o `npx expo run:ios`, una vez que esté el plist del 4.2.
+Valida layout, safe areas, gestos y el WebView del checkout; no valida push.
 
 ---
 
@@ -323,12 +395,73 @@ queda **apagado**. Exige un token en cada envío, y el backend hoy no lo manda:
 activarlo corta todas las notificaciones sin un solo error a la vista. Se puede
 prender el día que el backend mande el token.
 
-### 7.4 Al publicar en la Play Store
+---
 
-En el formulario de *Seguridad de los datos*, declarar Analytics: actividad en la
-app e identificadores de la instalación. **No** se usa el ID de publicidad: está
-apagado en `firebase.json` y el permiso `AD_ID` se quita del manifest. Lo mismo va
-en la política de privacidad.
+## 8. Play Store — publicar en Android
+
+**Estado (06/10/2026):** la titular de AME está creando la cuenta de desarrollador
+con `Guia cuenta Google Play - AME.pdf`. Lucas entra como **Administrador**.
+
+### 8.1 La cuenta
+
+Personal, porque AME no tiene D-U-N-S. US$25, un solo pago. Google verifica la
+identidad y un teléfono Android; tarda unos días.
+
+Por ser una cuenta personal **nueva**, Google exige la prueba cerrada del 8.3
+antes de publicar.
+
+### 8.2 Antes de la prueba cerrada
+
+Google pide completar todo esto antes de publicar en cualquier pista, incluida la
+cerrada:
+
+- **Política de privacidad publicada.** El borrador está en
+  `POLITICA_DE_PRIVACIDAD.md`, en revisión de AME y de un abogado. Va en
+  `ameesencial.com.ar` junto con la página *Eliminación de la cuenta*: Google
+  pide las dos URLs.
+- **Borrar la cuenta desde la app:** hecho. Falta que llegue a producción.
+- **Link a la política desde Perfil,** cuando tenga URL.
+- **Pendiente de la revisión legal:** si hace falta aceptar la política al
+  registrarse. Hoy la app no lo pide.
+- **Seguridad de los datos:** declarar cuenta (email, nombre, teléfono), turnos,
+  compras, notificaciones y Analytics (actividad en la app e identificadores de
+  la instalación). **No** se usa el ID de publicidad: está apagado en
+  `firebase.json` y el permiso `AD_ID` se quita del manifest.
+- **Acceso a la app:** toda la app está detrás del login, así que hay que darle
+  a Google una cuenta de prueba vinculada a un centro.
+- **Cuestionarios:** clasificación de contenido, público mayor de 18, sin
+  anuncios, categoría *Belleza*.
+- **Ficha de la tienda:** nombre, descripción corta (80 caracteres) y larga,
+  ícono de 512×512, gráfico de 1024×500 y al menos 2 capturas. El ícono depende
+  del bloque 6.
+
+### 8.3 La prueba cerrada: 12 testers durante 14 días
+
+- **Al menos 12 personas, mejor 15,** con Android y cuenta de Google, anotadas
+  sin interrupción durante 14 días. Los iPhone no sirven.
+- **Personas reales.** Emuladores o varias cuentas en un mismo teléfono se ven
+  como una prueba armada: arriesgan el rechazo y la cuenta de la titular. Una
+  cuenta de Lucas en el emulador entre las 12 no es problema.
+- **Uso:** no hay mínimo. Que abran la app algunas veces por semana y prueben
+  entrar con el código, la tienda, reservar, Mi rutina y los avisos. El
+  feedback, por un grupo de WhatsApp: va al formulario del 8.4.
+- **Los turnos que reserven son pedidos reales** en producción. Crear un
+  servicio "Prueba app" o avisarle a AME que los rechace.
+- **Build:** perfil `production` (AAB), por el workflow de GitHub con
+  `donde = runner`. El **primer AAB se sube a mano** en Play Console.
+
+### 8.4 Pedir acceso a producción
+
+Al cumplirse los 14 días, desde el *Panel* de Play Console. El formulario
+pregunta cómo se consiguieron los testers, cuánto usaron la app, qué feedback
+dejaron y qué se cambió a partir de eso. Google tarda alrededor de una semana.
+
+### 8.5 Después de publicar
+
+- **Restringir la clave de Android** con el SHA-1 de Play App Signing (7.1).
+- **Opcional, `eas submit`:** para no subir cada AAB a mano. Necesita una clave
+  de cuenta de servicio de Google Play, que se carga en `eas credentials` →
+  *Submissions*.
 
 ---
 
@@ -336,14 +469,16 @@ en la política de privacidad.
 
 Si hubiera que elegir un orden:
 
-1. **Los tres CNAME (3.1).** Es un mail y depende de terceros, así que cuanto
-   antes salga, antes vuelve. No bloquea nada mientras tanto.
-2. **Apple Developer (bloque 4)**, en paralelo, por los 24–48 h de aprobación.
-3. **Tienda Nube (bloque 1)**, cuando tengas a AME disponible para una sentada
-   larga.
-4. **Firebase (bloque 7)**, cuando haya diez minutos libres.
-5. **Sentry (bloque 5)**, con la próxima build nativa.
-6. **El logo (bloque 6)**, cuando llegue.
+1. **Play Store (bloque 8).** Es el camino crítico para publicar: la cuenta
+   está del lado de AME, y en paralelo corren la revisión legal de la política
+   y la prueba de 14 días.
+2. **Los tres CNAME (3.1).** Es un mail y depende de terceros, así que cuanto
+   antes salga, antes vuelve.
+3. **App Store (bloque 4)**, a la par del 8 si se publica en iOS al mismo tiempo.
+4. **El logo (bloque 6)**, antes de armar las fichas de las tiendas.
+5. **Tienda Nube (bloque 1)**, cuando AME pueda dedicarle una sentada larga.
+6. **Firebase (bloque 7)**, cuando haya diez minutos libres.
+7. **Sentry (bloque 5)**, con la próxima build nativa.
 
 Nada de esto bloquea a las testers. La app funciona hoy contra producción: login,
 vinculación por código, turnos con reserva, aprobación del centro y cancelación,
@@ -370,3 +505,5 @@ para iOS. Un cambio que es solo JS no necesita build: sale con `eas update`.
 - `COMPRA_EN_APP_SPEC.md` — el porqué de cada decisión del bloque 1. Las trampas
   del §6 valen la pena antes de tocar precios.
 - `APP_MOBILE_ROADMAP.md` §0 — el estado real de la app y qué falta en features.
+- `POLITICA_DE_PRIVACIDAD.md` — el borrador de la política y de la página de
+  borrado de cuenta, para los bloques 4 y 8.
