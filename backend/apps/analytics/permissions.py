@@ -32,20 +32,24 @@ class CanViewClientAnalytics(permissions.BasePermission):
 
         user = request.user
 
-        # Admin siempre puede
-        if user.rol == 'ADMIN':
+        # Multi-tenancy: ningún rol puede salir de su propio centro.
+        # El cliente objetivo DEBE pertenecer al centro del usuario; si no,
+        # se deniega antes de evaluar el rol. Esto cierra el IDOR cross-tenant
+        # (un ADMIN del centro A ya no puede leer analytics de clientes del
+        # centro B). Ver CLAUDE.md: toda consulta filtra por centro_estetica.
+        from apps.clientes.models import Cliente
+        cliente_en_centro = Cliente.objects.filter(
+            id=cliente_id,
+            centro_estetica=user.centro_estetica
+        ).exists()
+        if not cliente_en_centro:
+            return False
+
+        # Admin y Manager: cualquier cliente de su propio centro
+        if user.rol in ('ADMIN', 'MANAGER'):
             return True
 
-        # Manager de la misma sucursal/centro
-        if user.rol == 'MANAGER':
-            from apps.clientes.models import Cliente
-            cliente = Cliente.objects.filter(
-                id=cliente_id,
-                centro_estetica=user.centro_estetica
-            ).exists()
-            return cliente
-
-        # Empleado puede ver solo clientes que atendió
+        # Empleado: solo clientes de su centro que además atendió
         if user.rol == 'EMPLEADO':
             from apps.turnos.models import Turno
             has_attended = Turno.objects.filter(
