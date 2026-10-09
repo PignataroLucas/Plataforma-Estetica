@@ -39,8 +39,12 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Un 401 del login o del refresh es "credenciales incorrectas", no un token
+    // vencido: refrescar ahí recarga la página y tapa el mensaje de error.
+    const esAuth = /\/auth\/(login|refresh)\/?$/.test(originalRequest?.url ?? '')
+
     // If error is 401 and we haven't retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !esAuth) {
       originalRequest._retry = true
 
       try {
