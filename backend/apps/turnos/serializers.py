@@ -93,6 +93,42 @@ class TurnoCreateUpdateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
 
+    def get_fields(self):
+        """
+        Multi-tenancy: acotar los FK al centro/sucursal del usuario.
+
+        Sin esto DRF genera estos campos con queryset=<Model>.objects.all(), y
+        el endpoint aceptaba `cliente`/`servicio`/`profesional` de CUALQUIER
+        centro (IDOR cross-tenant: se podía crear un turno apuntando a la ficha
+        de un cliente de otro centro). Al limitar el queryset de validación, un
+        id ajeno devuelve el MISMO 400 "does not exist" que un id inexistente,
+        así que tampoco queda un oráculo para enumerar ids entre centros.
+        Ver CLAUDE.md: toda consulta filtra por centro_estetica/sucursal.
+        """
+        fields = super().get_fields()
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return fields
+
+        from apps.clientes.models import Cliente
+        from apps.servicios.models import Servicio
+        from apps.empleados.models import Usuario
+
+        # Cliente y profesional viven a nivel centro; el servicio, a nivel
+        # sucursal (igual que ServicioViewSet). Si el usuario no tiene centro o
+        # sucursal, el queryset queda vacío y todo id es rechazado (fail-closed).
+        fields['cliente'].queryset = Cliente.objects.filter(
+            centro_estetica=user.centro_estetica
+        )
+        fields['servicio'].queryset = Servicio.objects.filter(
+            sucursal=user.sucursal
+        )
+        fields['profesional'].queryset = Usuario.objects.filter(
+            centro_estetica=user.centro_estetica
+        )
+        return fields
+
     def validate(self, attrs):
         """
         Validación de disponibilidad y prevención de double-booking
