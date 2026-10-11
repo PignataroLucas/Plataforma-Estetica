@@ -34,6 +34,20 @@ from apps.turnos.services import reservar_turno
 from .base import NotificacionesTestBase
 
 
+def _inicio_en_jornada(dias=3):
+    """Un ``inicio`` determinístico dentro de la jornada laboral (14:00 hora local).
+
+    ``timezone.now()`` es UTC; usarlo tal cual como inicio del turno hace que el
+    slot caiga fuera de la jornada (08–22 en hora local) según la hora en que
+    corra el test, y ``reservar_turno`` lo rechaza con ``TurnoNoDisponible``.
+    Fijar las 14:00 locales lo vuelve estable a cualquier hora y en cualquier
+    huso (CI corre en UTC).
+    """
+    local = timezone.localtime(timezone.now())
+    inicio = local.replace(hour=14, minute=0, second=0, microsecond=0)
+    return inicio + timedelta(days=dias)
+
+
 class BandejaTestBase(NotificacionesTestBase):
     """
     La fixture compartida arma la sucursal sin email, así que sin esto todos los
@@ -50,8 +64,7 @@ class BandejaTestBase(NotificacionesTestBase):
 class TestSeCreaElAviso(BandejaTestBase):
 
     def _reservar_desde_la_app(self, **extra):
-        inicio = timezone.now() + timedelta(days=3)
-        inicio = inicio.replace(hour=14, minute=0, second=0, microsecond=0)
+        inicio = _inicio_en_jornada()
         datos = {
             'cliente': self.cliente,
             'servicio': self.servicio,
@@ -201,7 +214,7 @@ class TestElLinkDelMail(BandejaTestBase):
         """
         self.assertEqual(url_del_turno(12), '')
 
-        inicio = timezone.now() + timedelta(days=3)
+        inicio = _inicio_en_jornada()
         turno = reservar_turno(
             cliente=self.cliente, servicio=self.servicio, inicio=inicio,
             origen=Turno.Origen.APP, estado=Turno.Estado.PENDIENTE,
@@ -214,7 +227,7 @@ class TestElLinkDelMail(BandejaTestBase):
 class TestElBarridoEnvia(BandejaTestBase):
 
     def _pedido_pendiente(self):
-        inicio = timezone.now() + timedelta(days=3)
+        inicio = _inicio_en_jornada()
         turno = reservar_turno(
             cliente=self.cliente, servicio=self.servicio, inicio=inicio,
             origen=Turno.Origen.APP, estado=Turno.Estado.PENDIENTE,
@@ -292,7 +305,7 @@ class TestElBarridoEnvia(BandejaTestBase):
     def test_un_error_no_frena_al_resto_de_la_tanda(self):
         """Que un mail falle no puede dejar sin avisar a los demás pedidos."""
         primero = self._pedido_pendiente()
-        inicio = timezone.now() + timedelta(days=4)
+        inicio = _inicio_en_jornada(dias=4)
         otro_turno = reservar_turno(
             cliente=self.cliente, servicio=self.servicio, inicio=inicio,
             origen=Turno.Origen.APP, estado=Turno.Estado.PENDIENTE,
@@ -330,7 +343,7 @@ class TestAvisoPorVencer(BandejaTestBase):
     """
 
     def _pedido(self, *, vence_en):
-        inicio = timezone.now() + timedelta(days=3)
+        inicio = _inicio_en_jornada()
         turno = reservar_turno(
             cliente=self.cliente, servicio=self.servicio, inicio=inicio,
             origen=Turno.Origen.APP, estado=Turno.Estado.PENDIENTE,
@@ -403,7 +416,7 @@ class TestElBarridoGeneralLoIncluye(BandejaTestBase):
         """
         from apps.notificaciones.disparadores import correr_todos
 
-        inicio = timezone.now() + timedelta(days=3)
+        inicio = _inicio_en_jornada()
         reservar_turno(
             cliente=self.cliente, servicio=self.servicio, inicio=inicio,
             origen=Turno.Origen.APP, estado=Turno.Estado.PENDIENTE,
