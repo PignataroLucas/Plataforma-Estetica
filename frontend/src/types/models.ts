@@ -193,6 +193,17 @@ export interface RutinaItem {
   producto_nombre?: string
   producto_texto?: string
   nota?: string
+  /** Días en que va el paso (0 = lunes … 6 = domingo). Vacío = todos los días. */
+  dias?: number[]
+}
+
+/** Cuánto hizo la clienta su rutina en los últimos días (solo la rutina activa). */
+export interface ConstanciaRutina {
+  dias: number
+  cumplidos: number
+  /** Un valor por día, del más viejo a hoy. */
+  ultimos: boolean[]
+  racha: number
 }
 
 export interface RutinaCuidado {
@@ -205,6 +216,7 @@ export interface RutinaCuidado {
   rutina_nocturna_productos?: string
   items?: RutinaItem[]
   activa: boolean
+  constancia?: ConstanciaRutina | null
   creado_por?: number
   creado_por_nombre?: string
   creado_en: string

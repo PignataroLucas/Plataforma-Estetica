@@ -27,7 +27,7 @@ import { Platform } from 'react-native';
 // Solo tipos: TypeScript lo borra al compilar, no genera require.
 import type * as FirebaseAnalytics from '@react-native-firebase/analytics';
 
-import type { ProductoPublico, ServicioPublico, TurnoApp } from '@/types/api';
+import type { MomentoRutina, ProductoPublico, ServicioPublico, TurnoApp } from '@/types/api';
 import { aNumero } from '@/utils/precios';
 
 type Modulo = typeof FirebaseAnalytics;
@@ -220,5 +220,15 @@ export const analytics = {
   /** Tocó un aviso push. `evento` es la clave del catálogo del backend. */
   notificacionAbierta(clave: string): void {
     evento('abrir_notificacion', { evento: clave });
+  },
+
+  /** Tildó un paso de su rutina de hoy. Los destildes no se miden. */
+  rutinaPasoHecho(momento: MomentoRutina): void {
+    evento('rutina_paso_hecho', { momento });
+  },
+
+  /** Con ese tilde completó la rutina de la mañana o de la noche. */
+  rutinaCumplida(momento: MomentoRutina, racha: number): void {
+    evento('rutina_cumplida', { momento, racha });
   },
 };
