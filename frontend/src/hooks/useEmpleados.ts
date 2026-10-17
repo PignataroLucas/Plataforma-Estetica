@@ -46,7 +46,7 @@ export const useEmpleados = (): UseEmpleadosReturn => {
   const cleanEmpleadoData = (data: Partial<Usuario> | EmpleadoFormData) => {
     const cleaned: any = { ...data }
     const optionalFields = ['telefono', 'fecha_nacimiento', 'direccion', 'fecha_ingreso',
-                            'especialidades', 'sucursal', 'foto']
+                            'especialidades', 'sucursal']
 
     optionalFields.forEach(field => {
       if (cleaned[field] === '' || cleaned[field] === undefined || cleaned[field] === null) {

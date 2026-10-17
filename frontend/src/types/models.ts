@@ -58,7 +58,6 @@ export interface Usuario {
   telefono: string
   fecha_nacimiento?: string
   direccion: string
-  foto?: string
   rol: Rol
   fecha_ingreso?: string
   especialidades: string

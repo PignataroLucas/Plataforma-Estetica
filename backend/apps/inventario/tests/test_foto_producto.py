@@ -14,7 +14,6 @@ from decimal import Decimal
 from io import BytesIO
 
 import pytest
-from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
@@ -103,17 +102,7 @@ class TestQueCamposUsanElBucket:
     def test_los_campos_del_catalogo_optan_por_el_storage_publico(self, modelo, campo):
         assert storage_declarado(modelo, campo) is storage_publico
 
-    def test_la_foto_del_personal_sigue_en_el_storage_default(self):
-        """
-        Es la foto de una persona identificable. El día que se suba va a
-        necesitar un bucket privado con URLs firmadas, no el bucket del
-        catálogo, que es de lectura pública. Que el campo no declare storage es
-        exactamente la propiedad que se quiere: lo que nadie pensó nace privado.
-        """
-        assert storage_declarado(Usuario, 'foto') is None
-        assert Usuario._meta.get_field('foto').storage is default_storage
-
-    # La ficha de cliente ya no guarda fotos: lo cuida
+    # Ni la ficha de cliente ni el personal guardan fotos de personas: lo cuida
     # apps/clientes/tests/test_datos_que_no_se_guardan.py.
 
 

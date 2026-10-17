@@ -1,5 +1,5 @@
 """
-Datos que la ficha de cliente no guarda, a propósito.
+Datos de personas que el sistema no guarda, a propósito.
 
 Se sacaron el 17/10/2026 porque ningún flujo los usaba: cada dato sensible que
 se guarda es uno más que proteger, y la política de privacidad ya promete que no
@@ -20,8 +20,9 @@ from apps.empleados.models import CentroEstetica, Usuario
     (Cliente, 'numero_documento'),
     (HistorialCliente, 'foto_antes'),
     (HistorialCliente, 'foto_despues'),
+    (Usuario, 'foto'),
 ])
-def test_la_ficha_no_tiene_el_campo(modelo, campo):
+def test_no_se_guarda_el_campo(modelo, campo):
     assert campo not in {f.name for f in modelo._meta.get_fields()}
 
 
