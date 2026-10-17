@@ -107,17 +107,8 @@ class Cliente(models.Model):
     provincia = models.CharField(max_length=100, blank=True)
     codigo_postal = models.CharField(max_length=10, blank=True)
 
-    # Documento
-    tipo_documento = models.CharField(
-        max_length=10,
-        choices=[
-            ('DNI', 'DNI'),
-            ('PASAPORTE', 'Pasaporte'),
-            ('OTRO', 'Otro')
-        ],
-        default='DNI'
-    )
-    numero_documento = models.CharField(max_length=20, blank=True)
+    # Sin documento de identidad, a propósito (se sacó el 17/10/2026): ningún
+    # flujo lo necesita y es un dato más que guardar y proteger.
 
     # A) Datos del paciente (tracking)
     motivo_consulta = models.TextField(blank=True, help_text="Motivo principal de consulta")
@@ -269,8 +260,8 @@ class Cliente(models.Model):
     # Preferencias (se mantiene)
     preferencias = models.TextField(blank=True, help_text="Preferencias del cliente")
 
-    # Foto de perfil
-    foto = models.ImageField(upload_to='clientes/', null=True, blank=True)
+    # Sin foto de la persona, a propósito (se sacó el 17/10/2026): no se usaba y
+    # es un dato sensible más que guardar y proteger. Ver POLITICA_DE_PRIVACIDAD.md.
 
     # Marketing
     acepta_promociones = models.BooleanField(default=True)
@@ -400,9 +391,8 @@ class HistorialCliente(models.Model):
     observaciones = models.TextField(blank=True)
     resultado = models.TextField(blank=True)
 
-    # Fotos antes/después
-    foto_antes = models.ImageField(upload_to='tratamientos/antes/', null=True, blank=True)
-    foto_despues = models.ImageField(upload_to='tratamientos/despues/', null=True, blank=True)
+    # Sin fotos de antes y después, por el mismo motivo que la ficha no tiene
+    # foto: se sacaron el 17/10/2026 porque no se usaban.
 
     # Timestamps
     creado_en = models.DateTimeField(auto_now_add=True)

@@ -21,7 +21,7 @@ class VinculacionInline(admin.TabularInline):
 class ClienteAdmin(admin.ModelAdmin):
     list_display = ['apellido', 'nombre', 'telefono', 'email', 'centro_estetica', 'activo']
     list_filter = ['centro_estetica', 'activo']
-    search_fields = ['nombre', 'apellido', 'telefono', 'email', 'numero_documento']
+    search_fields = ['nombre', 'apellido', 'telefono', 'email']
     actions = ['generar_codigo_invitacion']
 
     @admin.action(description='Generar código de invitación a la app')

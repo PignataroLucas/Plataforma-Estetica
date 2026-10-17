@@ -66,9 +66,8 @@ export const useClientes = () => {
 
     // Campos opcionales que se deben eliminar si están vacíos
     const optionalFields = ['email', 'fecha_nacimiento', 'telefono_alternativo', 'direccion',
-                            'ciudad', 'provincia', 'codigo_postal', 'numero_documento',
-                            'alergias', 'contraindicaciones', 'notas_medicas', 'preferencias',
-                            'tipo_documento', 'foto']
+                            'ciudad', 'provincia', 'codigo_postal',
+                            'alergias', 'contraindicaciones', 'notas_medicas', 'preferencias']
 
     // Eliminar campos que están vacíos, undefined o null
     optionalFields.forEach(field => {

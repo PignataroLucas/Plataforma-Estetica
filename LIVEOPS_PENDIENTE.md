@@ -1,6 +1,6 @@
 # Configuración pendiente fuera del código
 
-**Fecha:** 06/10/2026
+**Fecha:** 06/10/2026, actualizado el 17/10/2026
 
 Todo lo que falta para que la app funcione completa **no es código**: son altas,
 credenciales y trámites en consolas de terceros. Está junto acá porque son tareas
@@ -18,14 +18,40 @@ conversación.
 No hay bloque 2: era FCM, y quedó hecho el 05/10/2026. Los demás conservan su
 número porque otros documentos los citan.
 
+### Qué cambió desde el 06/10
+
+- **Borrar la cuenta desde la app** ya está en producción: el backend entró con
+  el PR #18 y la app viaja en las builds desde el 17/10.
+- **La build de Android en GitHub anda.** Fallaba con `OutOfMemoryError:
+  Metaspace` y quedaba colgada; ahora el workflow sube la memoria de Gradle y
+  compila solo para ARM (teléfonos). Tarda unos 21 minutos. El APK ya **no se
+  instala en emuladores x86**: para LDPlayer sigue el APK local con `x86_64`.
+- **Recordatorios de rutina encendidos** (9 h y 21 h, solo si ese momento tiene
+  pasos hoy y la clienta no lo marcó). El interruptor es
+  `NOTIFICACIONES_RUTINA_DIARIA` y va en el servicio **`notificaciones_cron`**,
+  no en el backend: sin la variable quedan prendidos. Para apagarlos, `False`.
+- **Mail a `ame.esencial@gmail.com`:** verificado en SES, así que los avisos de
+  pedidos al centro salen aunque SES siga en sandbox (el bloque 3 sigue
+  pendiente para las clientas).
+
 ---
 
 ## 1. Tienda Nube — desbloquea comprar desde la app
 
-**Mientras no esté:** la pestaña Tienda es un catálogo que no vende. Los 20
-productos de producción dan `comprable: false`, así que no aparece el botón de
-agregar al carrito ni el carrito mismo. La app muestra un aviso explicándolo, que
-se apaga solo en cuanto el primer producto quede emparejado.
+**Mientras no esté:** la pestaña Tienda es un catálogo que no vende. Los 24
+productos de producción dan `comprable: false` (verificado el 17/10/2026), así
+que no aparece el botón de agregar al carrito ni el carrito mismo. La app muestra
+un aviso explicándolo, que se apaga solo en cuanto el primer producto quede
+emparejado.
+
+**En producción no hay ninguna tienda vinculada**, ni la demo ni la real: la demo
+(`amedemo.mitiendanube.com`) se usó solo en la base local. Por eso la compra no
+depende de la build: apenas AME instale y se emparejen los productos, las builds
+que ya están instaladas empiezan a vender, sin compilar de nuevo. Y como ningún
+producto de producción tiene ids de la demo, el emparejado arranca limpio.
+
+**Ojo con las testers:** desde ese momento, lo que compren en la app son ventas
+reales en la tienda de AME, con pago de verdad. Avisarles antes.
 
 Es el bloque más largo porque tiene a AME adentro. Conviene hacerlo entero en una
 sentada con ellos disponibles.
@@ -136,6 +162,11 @@ curl -s "https://plataforma-estetica-production.up.railway.app/api/public/centro
 
 Con eso aparece el botón de agregar al carrito, el carrito, y se apaga el aviso
 de la pestaña Tienda.
+
+Con la **primera venta real con cupón**, confirmar que Conto manda el campo
+`cupon` (§7.1 de `COMPRA_EN_APP_SPEC.md`). Sin ese campo, la medición de cuánto
+vende la app queda en cero sin avisar. Se mira en el payload de la venta que
+importa el sync.
 
 ### 1.8 Las tres mediciones, en la tienda demo
 
@@ -402,6 +433,11 @@ prender el día que el backend mande el token.
 **Estado (06/10/2026):** la titular de AME está creando la cuenta de desarrollador
 con `Guia cuenta Google Play - AME.pdf`. Lucas entra como **Administrador**.
 
+**17/10/2026:** está lista la guía de una página para las testers (`Guia para
+testers - AME esencial.pdf`, en Descargas). Falta confirmar en qué quedó la
+cuenta y si los testers se cargan por lista de mails o por un Grupo de Google
+(recomendado para 12-15 personas que se suman de a poco).
+
 ### 8.1 La cuenta
 
 Personal, porque AME no tiene D-U-N-S. US$25, un solo pago. Google verifica la
@@ -419,13 +455,30 @@ cerrada:
   `POLITICA_DE_PRIVACIDAD.md`, en revisión de AME y de un abogado. Va en
   `ameesencial.com.ar` junto con la página *Eliminación de la cuenta*: Google
   pide las dos URLs.
-- **Borrar la cuenta desde la app:** hecho. Falta que llegue a producción.
+- **Borrar la cuenta desde la app:** hecho y en producción.
 - **Link a la política desde Perfil,** cuando tenga URL.
 - **Pendiente de la revisión legal:** si hace falta aceptar la política al
   registrarse. Hoy la app no lo pide.
+- **Datos sensibles de la ficha (17/10/2026):** la política ya nombra los datos de
+  salud (cáncer, embarazo, marcapasos, alergias, medicación…). Las fotos de la
+  ficha, las de antes y después y el documento de identidad se sacaron del
+  sistema el mismo día: no se usaban. Quedan del lado de AME y el abogado:
+  - un **formulario de consentimiento firmado** en el centro al completar la
+    ficha, porque los datos de salud se cargan ahí y no en la app;
+  - la **inscripción de la base** en el Registro Nacional de Bases de Datos de
+    la AAIP;
+  - el **plazo de conservación** de la ficha.
+
+  La lista completa está en la nota al principio de `POLITICA_DE_PRIVACIDAD.md`.
+- **Términos y condiciones:** Google no los exige, pero con compras y turnos
+  conviene tenerlos (cancelaciones, devoluciones, descuento de la app). Se
+  redactan con el abogado junto con la política, y si se publican van en el
+  mismo lugar y con el mismo link desde Perfil.
 - **Seguridad de los datos:** declarar cuenta (email, nombre, teléfono), turnos,
   compras, notificaciones y Analytics (actividad en la app e identificadores de
-  la instalación). **No** se usa el ID de publicidad: está apagado en
+  la instalación). Los datos de salud de la ficha **no** los recolecta la app
+  (los carga el centro en el CRM y la app no los muestra), pero confirmarlo con
+  el abogado antes de dejar sin tildar *Información de salud*. **No** se usa el ID de publicidad: está apagado en
   `firebase.json` y el permiso `AD_ID` se quita del manifest.
 - **Acceso a la app:** toda la app está detrás del login, así que hay que darle
   a Google una cuenta de prueba vinculada a un centro.
@@ -448,7 +501,8 @@ cerrada:
 - **Los turnos que reserven son pedidos reales** en producción. Crear un
   servicio "Prueba app" o avisarle a AME que los rechace.
 - **Build:** perfil `production` (AAB), por el workflow de GitHub con
-  `donde = runner`. El **primer AAB se sube a mano** en Play Console.
+  `donde = runner`. El **primer AAB se sube a mano** en Play Console. El APK
+  `preview` que se usa para probar no sirve para Play: tiene que ser el AAB.
 
 ### 8.4 Pedir acceso a producción
 
@@ -482,8 +536,9 @@ Si hubiera que elegir un orden:
 
 Nada de esto bloquea a las testers. La app funciona hoy contra producción: login,
 vinculación por código, turnos con reserva, aprobación del centro y cancelación,
-notificaciones push, mi rutina, catálogo, perfil, recuperación de contraseña y
-Analytics.
+notificaciones push, mi rutina con check-in diario y recordatorios, catálogo,
+perfil, eliminación de cuenta, recuperación de contraseña (con la salvedad del
+bloque 3) y Analytics. Lo único que no anda es comprar, que es el bloque 1.
 
 ---
 
@@ -497,6 +552,9 @@ Las builds de Android no tienen por qué pasar por ahí. El workflow **EAS Build
 de GitHub Actions, con `donde = runner`, compila en la máquina de GitHub con las
 mismas credenciales y firma que EAS: sin cola y sin gastar la cuota. EAS queda
 para iOS. Un cambio que es solo JS no necesita build: sale con `eas update`.
+
+El APK queda en **Summary → Artifacts** del run, adentro de un `.zip`, y se
+borra a los 14 días.
 
 ---
 

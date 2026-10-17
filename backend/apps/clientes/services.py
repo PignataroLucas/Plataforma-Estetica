@@ -15,7 +15,7 @@ from .models import Cliente
 # Campos escalares que NO se tocan al consolidar (se conserva el de la principal).
 _NO_CONSOLIDAR = {
     'id', 'centro_estetica', 'creado_en', 'actualizado_en',
-    'telefono_normalizado', 'ultima_visita', 'foto',
+    'telefono_normalizado', 'ultima_visita',
     'activo', 'acepta_promociones', 'acepta_whatsapp',
 }
 

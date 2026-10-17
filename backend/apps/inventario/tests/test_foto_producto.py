@@ -21,7 +21,6 @@ from PIL import Image
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from apps.clientes.models import Cliente, HistorialCliente
 from apps.empleados.models import CentroEstetica, Sucursal, Usuario
 from apps.inventario.models import Producto
 from apps.inventario.serializers import ProductoCreateUpdateSerializer
@@ -104,21 +103,18 @@ class TestQueCamposUsanElBucket:
     def test_los_campos_del_catalogo_optan_por_el_storage_publico(self, modelo, campo):
         assert storage_declarado(modelo, campo) is storage_publico
 
-    @pytest.mark.parametrize('modelo, campo', [
-        (Cliente, 'foto'),
-        (HistorialCliente, 'foto_antes'),
-        (HistorialCliente, 'foto_despues'),
-        (Usuario, 'foto'),
-    ])
-    def test_los_campos_sensibles_siguen_en_el_storage_default(self, modelo, campo):
+    def test_la_foto_del_personal_sigue_en_el_storage_default(self):
         """
-        Son datos de salud de personas identificables. El día que se suban van a
+        Es la foto de una persona identificable. El día que se suba va a
         necesitar un bucket privado con URLs firmadas, no el bucket del
         catálogo, que es de lectura pública. Que el campo no declare storage es
         exactamente la propiedad que se quiere: lo que nadie pensó nace privado.
         """
-        assert storage_declarado(modelo, campo) is None
-        assert modelo._meta.get_field(campo).storage is default_storage
+        assert storage_declarado(Usuario, 'foto') is None
+        assert Usuario._meta.get_field('foto').storage is default_storage
+
+    # La ficha de cliente ya no guarda fotos: lo cuida
+    # apps/clientes/tests/test_datos_que_no_se_guardan.py.
 
 
 @pytest.mark.django_db

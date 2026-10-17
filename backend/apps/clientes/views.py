@@ -47,11 +47,11 @@ class ClienteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 
-    # Búsqueda por nombre, apellido, email, teléfono, documento
-    search_fields = ['nombre', 'apellido', 'email', 'telefono', 'numero_documento']
+    # Búsqueda por nombre, apellido, email y teléfono
+    search_fields = ['nombre', 'apellido', 'email', 'telefono']
 
     # Filtros disponibles
-    filterset_fields = ['activo', 'acepta_promociones', 'acepta_whatsapp', 'tipo_documento']
+    filterset_fields = ['activo', 'acepta_promociones', 'acepta_whatsapp']
 
     # Campos por los que se puede ordenar
     ordering_fields = ['apellido', 'nombre', 'creado_en', 'ultima_visita']
