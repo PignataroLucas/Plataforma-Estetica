@@ -150,6 +150,31 @@ jobs:
           cache: gradle
           cache-dependency-path: client-app/package-lock.json
 
+      # Memoria y arquitecturas de Gradle. Va en ~/.gradle/gradle.properties
+      # porque ese archivo le gana al del proyecto, que `expo prebuild` regenera
+      # en cada build con el default de Expo: 512 MB de Metaspace. Con todos los
+      # módulos nativos de hoy (Firebase incluido) eso no alcanza: el KSP de
+      # expo-updates muere con `OutOfMemoryError: Metaspace` y el daemon queda
+      # colgado sin terminar la build, hasta que lo corta el timeout.
+      #
+      # - El daemon de Kotlin, si no se le dice nada, hereda los límites del de
+      #   Gradle; por eso van los dos. Los números entran en el runner chico de
+      #   un repo privado (7 GB).
+      # - Solo ARM: es lo que tienen los teléfonos, y x86/x86_64 (emuladores)
+      #   duplicaban la compilación de C++ de reanimated y compañía. Para
+      #   probar en un emulador x86 está el APK que se arma local con Gradle.
+      - name: Configurar Gradle
+        if: inputs.donde == 'runner'
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+          kotlin.daemon.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1g
+          org.gradle.workers.max=2
+          reactNativeArchitectures=arm64-v8a,armeabi-v7a
+          EOF
+          cat ~/.gradle/gradle.properties
+
       - name: Compilar en el runner
         if: inputs.donde == 'runner'
         working-directory: client-app
