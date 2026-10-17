@@ -249,7 +249,7 @@ function Seccion({
           style={styles.plegar}
           accessibilityRole="button"
           hitSlop={6}>
-          <AppText style={styles.plegarTxt}>{plegada ? `Ver los ${total} pasos` : 'Plegar'}</AppText>
+          <AppText style={styles.plegarTxt}>{plegada ? (total === 1 ? 'Ver el paso' : `Ver los ${total} pasos`) : 'Plegar'}</AppText>
           <Feather name={plegada ? 'chevron-down' : 'chevron-up'} size={14} color={colors.ink} />
         </Pressable>
       ) : null}
@@ -323,7 +323,8 @@ const styles = StyleSheet.create({
   centerText: { textAlign: 'center' },
   retry: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl },
-  fecha: { textAlign: 'center', marginTop: -spacing.sm },
+  // Sin margen negativo: el ScrollView recorta lo que sobresale de su borde.
+  fecha: { textAlign: 'center' },
 
   plan: { gap: 5 },
   planTitulo: { marginTop: 4, lineHeight: 21 },
@@ -367,7 +368,8 @@ const styles = StyleSheet.create({
   semana: { gap: spacing.md, borderRadius: radius.lg },
   semanaTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   racha: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
-  rachaNum: { fontFamily: fonts.serif, fontSize: 22, lineHeight: 24, color: colors.ink },
+  // lining-nums: con los números de estilo antiguo de Cormorant, el 1 se lee como una I.
+  rachaNum: { fontFamily: fonts.serif, fontSize: 22, lineHeight: 24, color: colors.ink, fontVariant: ['lining-nums'] },
 
   felicitacion: {
     flexDirection: 'row',

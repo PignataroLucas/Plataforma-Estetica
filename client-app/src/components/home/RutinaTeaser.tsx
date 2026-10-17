@@ -122,5 +122,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   racha: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
-  rachaNum: { fontFamily: fonts.serif, fontSize: 22, lineHeight: 24, color: colors.ink },
+  // lining-nums: con los números de estilo antiguo de Cormorant, el 1 se lee como una I.
+  rachaNum: { fontFamily: fonts.serif, fontSize: 22, lineHeight: 24, color: colors.ink, fontVariant: ['lining-nums'] },
 });
