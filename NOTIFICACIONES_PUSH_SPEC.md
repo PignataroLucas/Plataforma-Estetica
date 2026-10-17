@@ -270,12 +270,14 @@ punta hace falta un teléfono real, que es el punto 1.1 de `PENDIENTES_AME`.
 | Confirmación y cancelación de turno | ✅ Completo |
 | Cumpleaños | ✅ Completo |
 | Envío masivo (promociones) | ✅ El motor está; falta la pantalla del CRM para disparar una promo |
-| Recordatorio diario de rutina | ⚠️ Implementado y **apagado** (`NOTIFICACIONES_RUTINA_DIARIA`) |
+| Recordatorio diario de rutina (9 h y 21 h) | ✅ Completo, encendido (`NOTIFICACIONES_RUTINA_DIARIA`) |
 | App: registro, permisos, deep link | ✅ Completo, pendiente de los dos requisitos de arriba |
 | App: pantalla de preferencias | ❌ La API está; falta la UI |
 | Aviso de fechas nuevas | ❌ El evento está definido; falta dispararlo desde el CRM |
 
-El recordatorio de rutina queda apagado a propósito: es un push por día y el
-modelo de rutina todavía no tiene frecuencia por paso (punto 2.1 de
-`PENDIENTES_AME`), así que hoy el recordatorio sería impreciso para todo lo que no
-va todas las noches.
+El recordatorio de rutina sale a las 9 (mañana) y a las 21 (noche), solo si ese
+momento tiene pasos que tocan hoy (cada paso tiene sus días de la semana) y la
+clienta todavía no lo cumplió en la app. Al completar un momento, el check-in
+descarta el aviso pendiente (`apps/clientes/rutina_diaria.py`). Con más de dos
+horas de atraso del barrido, el de ese momento se pierde. Desde la ficha de la
+clienta en el CRM se puede mandar uno de prueba en el acto.

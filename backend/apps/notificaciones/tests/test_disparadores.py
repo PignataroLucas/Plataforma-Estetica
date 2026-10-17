@@ -5,11 +5,12 @@ Lo que se prueba acá es que el cron puede correr las veces que quiera sin
 duplicar nada, y que un turno que cambia no deja recordatorios viejos apuntando a
 una hora que ya no existe.
 """
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.test import override_settings
 from django.utils import timezone
 
+from apps.clientes import rutina_diaria
 from apps.clientes.models import Cliente, RutinaCuidado, RutinaItem
 from apps.notificaciones import disparadores, eventos
 from apps.notificaciones.models import Aviso
@@ -161,42 +162,141 @@ class CumpleanosTests(NotificacionesTestBase):
         self.assertEqual(Aviso.objects.count(), 0)
 
 
+def _local(*args):
+    """Un instante en la hora del centro."""
+    return timezone.make_aware(datetime(*args))
+
+
+# Viernes 16 de octubre de 2026, antes de las 9.
+VIERNES_TEMPRANO = _local(2026, 10, 16, 7, 0)
+VIERNES = VIERNES_TEMPRANO.date()
+
+
 class RutinaTests(NotificacionesTestBase):
 
-    def _rutina_con_pasos(self):
+    def _rutina(self, *pasos):
         rutina = RutinaCuidado.objects.create(cliente=self.cliente, activa=True)
-        RutinaItem.objects.create(
-            rutina=rutina, momento=RutinaItem.Momento.NOCTURNA, orden=1, paso='Limpieza'
-        )
-        return rutina
+        items = []
+        for orden, (momento, paso, dias) in enumerate(pasos, start=1):
+            items.append(RutinaItem.objects.create(
+                rutina=rutina, momento=momento, orden=orden, paso=paso, dias=dias,
+            ))
+        return rutina, items
 
-    def test_apagado_por_defecto(self):
-        self._rutina_con_pasos()
+    def _avisos(self):
+        return Aviso.objects.filter(evento=eventos.RUTINA_RECORDATORIO).order_by('programado_para')
 
-        resumen = disparadores.recordar_rutina()
+    @override_settings(NOTIFICACIONES_RUTINA_DIARIA=False)
+    def test_el_interruptor_los_apaga(self):
+        self._rutina((RutinaItem.Momento.NOCTURNA, 'Limpieza', []))
+
+        resumen = disparadores.recordar_rutina(VIERNES_TEMPRANO)
 
         self.assertTrue(resumen['apagado'])
         self.assertEqual(Aviso.objects.count(), 0)
 
-    @override_settings(NOTIFICACIONES_RUTINA_DIARIA=True)
-    def test_encendido_encola_uno_por_dia(self):
-        self._rutina_con_pasos()
-
-        disparadores.recordar_rutina()
-        disparadores.recordar_rutina()
-
-        self.assertEqual(Aviso.objects.filter(evento=eventos.RUTINA_RECORDATORIO).count(), 1)
-
-    @override_settings(NOTIFICACIONES_RUTINA_DIARIA=True)
-    def test_una_rutina_sin_pasos_nocturnos_no_recuerda_nada(self):
-        rutina = RutinaCuidado.objects.create(cliente=self.cliente, activa=True)
-        RutinaItem.objects.create(
-            rutina=rutina, momento=RutinaItem.Momento.DIURNA, orden=1, paso='Protector'
+    def test_encola_manana_y_noche_a_su_hora_una_sola_vez(self):
+        self._rutina(
+            (RutinaItem.Momento.DIURNA, 'Protector', []),
+            (RutinaItem.Momento.NOCTURNA, 'Limpieza', []),
         )
 
-        disparadores.recordar_rutina()
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+        disparadores.recordar_rutina(VIERNES_TEMPRANO + timedelta(minutes=15))
+
+        manana, noche = self._avisos()
+        self.assertEqual(manana.programado_para, _local(2026, 10, 16, 9, 0))
+        self.assertEqual(manana.titulo, 'Tu rutina de la mañana')
+        self.assertEqual(noche.programado_para, _local(2026, 10, 16, 21, 0))
+        self.assertEqual(noche.titulo, 'Tu rutina de la noche')
+
+    def test_un_momento_sin_pasos_no_recuerda_nada(self):
+        self._rutina((RutinaItem.Momento.DIURNA, 'Protector', []))
+
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+
+        self.assertEqual([a.titulo for a in self._avisos()], ['Tu rutina de la mañana'])
+
+    def test_un_paso_que_no_toca_hoy_no_cuenta(self):
+        # Martes (1) y jueves (3): el viernes no hay nada a la noche.
+        self._rutina((RutinaItem.Momento.NOCTURNA, 'Exfoliante', [1, 3]))
+
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
 
         self.assertEqual(Aviso.objects.count(), 0)
+
+    def test_el_texto_nombra_lo_que_no_va_todos_los_dias(self):
+        self._rutina(
+            (RutinaItem.Momento.NOCTURNA, 'Doble limpieza', []),
+            (RutinaItem.Momento.NOCTURNA, 'Exfoliante enzimático', [1, 4]),
+            (RutinaItem.Momento.NOCTURNA, 'Crema reparadora', []),
+        )
+
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+
+        self.assertEqual(self._avisos().get().cuerpo, 'Hoy toca exfoliante enzimático. Son 3 pasos.')
+
+    def test_con_pocos_pasos_los_lista(self):
+        self._rutina(
+            (RutinaItem.Momento.DIURNA, 'Limpieza', []),
+            (RutinaItem.Momento.DIURNA, 'Sérum', []),
+            (RutinaItem.Momento.DIURNA, 'Protector', []),
+        )
+
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+
+        self.assertEqual(self._avisos().get().cuerpo, 'Limpieza, sérum y protector. Son unos minutos.')
+
+    def test_si_ya_la_cumplio_no_se_encola(self):
+        rutina, (paso,) = self._rutina((RutinaItem.Momento.DIURNA, 'Protector', []))
+        rutina_diaria.marcar_paso(rutina, paso, True, fecha=VIERNES)
+
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+
+        self.assertEqual(Aviso.objects.count(), 0)
+
+    def test_cumplirla_descarta_el_aviso_que_estaba_esperando(self):
+        rutina, (paso,) = self._rutina((RutinaItem.Momento.NOCTURNA, 'Limpieza', []))
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+        self.assertEqual(self._avisos().count(), 1)
+
+        rutina_diaria.marcar_paso(rutina, paso, True, fecha=VIERNES)
+        self.assertEqual(self._avisos().count(), 0)
+
+        # Si la destilda, el barrido siguiente lo vuelve a encolar.
+        rutina_diaria.marcar_paso(rutina, paso, False, fecha=VIERNES)
+        disparadores.recordar_rutina(VIERNES_TEMPRANO + timedelta(minutes=15))
+        self.assertEqual(self._avisos().count(), 1)
+
+    def test_con_mucho_atraso_el_de_la_manana_se_pierde(self):
+        self._rutina(
+            (RutinaItem.Momento.DIURNA, 'Protector', []),
+            (RutinaItem.Momento.NOCTURNA, 'Limpieza', []),
+        )
+
+        disparadores.recordar_rutina(_local(2026, 10, 16, 15, 0))
+
+        self.assertEqual([a.titulo for a in self._avisos()], ['Tu rutina de la noche'])
+
+    def test_con_dos_rutinas_activas_manda_la_mas_nueva(self):
+        vieja, _ = self._rutina((RutinaItem.Momento.NOCTURNA, 'Vieja', []))
+        nueva, _ = self._rutina((RutinaItem.Momento.NOCTURNA, 'Nueva', []))
+        RutinaCuidado.objects.filter(id=vieja.id).update(creado_en=timezone.now() - timedelta(days=30))
+
+        disparadores.recordar_rutina(VIERNES_TEMPRANO)
+
+        aviso = self._avisos().get()
+        self.assertEqual(aviso.cuerpo, 'Nueva. Es un solo paso.')
+        self.assertIn(f'rutina:{nueva.id}:', aviso.clave)
+
+    def test_la_prueba_sale_aunque_no_sea_la_hora(self):
+        rutina, _ = self._rutina((RutinaItem.Momento.NOCTURNA, 'Limpieza', []))
+
+        avisos = disparadores.enviar_recordatorio_de_prueba(rutina, RutinaItem.Momento.NOCTURNA)
+        otra = disparadores.enviar_recordatorio_de_prueba(rutina, RutinaItem.Momento.NOCTURNA)
+
+        self.assertEqual(len(avisos) + len(otra), 2)
+        self.assertLessEqual(avisos[0].programado_para, timezone.now())
 
 
 class CorrerTodosTests(NotificacionesTestBase):

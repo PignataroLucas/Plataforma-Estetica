@@ -10,6 +10,7 @@ export const colors = {
   taupe: '#D5C4B9', // bordes / secundarios
   ink: '#1A1712', // texto y CTAs (near-black cálido)
   muted: '#9C8E7F', // texto secundario
+  rose: '#7A5F58', // texto sobre blush (el muted no contrasta ahí)
   line: 'rgba(26,23,18,0.09)', // divisores / bordes sutiles
   card: '#FCFAF6', // tarjetas claras
   onDark: '#EFE7DC', // texto sobre superficies oscuras (card negra / botones)

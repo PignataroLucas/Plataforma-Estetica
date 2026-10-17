@@ -318,11 +318,11 @@ LOGGING = {
     },
 }
 
-# Daily skincare-routine reminder. Off by default: it is one push per day per
-# client and the routine model still has no per-step frequency, so the reminder
-# would be wrong for anything that is not meant to be done every night.
+# Daily skincare-routine reminders (morning and night). On by default now that
+# steps carry their weekdays and a reminder is skipped once the client has
+# checked that routine in. Kept as a switch to silence them without a deploy.
 NOTIFICACIONES_RUTINA_DIARIA = config(
-    'NOTIFICACIONES_RUTINA_DIARIA', default=False, cast=bool
+    'NOTIFICACIONES_RUTINA_DIARIA', default=True, cast=bool
 )
 
 # Custom User Model

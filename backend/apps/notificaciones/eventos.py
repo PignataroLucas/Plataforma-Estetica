@@ -159,10 +159,13 @@ EVENTOS: dict[str, Evento] = {
             clave=RUTINA_RECORDATORIO,
             categoria=Categoria.RUTINA,
             titulo='Tu rutina de la {momento}',
-            cuerpo='Son unos minutos. Entrá y mirá los pasos.',
+            # {resumen} ya viene armado: nombra lo que hoy toca y no va todos
+            # los días ("Hoy toca exfoliante"), o lista los pasos si son pocos.
+            cuerpo='{resumen}',
             ruta='/mi-rutina',
-            variables=('momento',),
-            ejemplo={'momento': 'noche'},
+            variables=('momento', 'pasos', 'resumen'),
+            ejemplo={'momento': 'noche', 'pasos': 4,
+                     'resumen': 'Hoy toca exfoliante enzimático. Son 4 pasos.'},
         ),
 
         # ---------------- Novedades ----------------

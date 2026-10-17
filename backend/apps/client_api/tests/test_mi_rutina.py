@@ -154,3 +154,80 @@ class MiRutinaTests(APITestCase):
     def test_sin_auth_401(self):
         resp = self.client.get(reverse('client-mi-rutina'))
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class CheckInDeRutinaTests(MiRutinaTests):
+    """
+    El check-in de la app: tildar pasos de hoy y recibir el estado del día.
+
+    Hereda el armado de ``MiRutinaTests`` (rutina_a con un paso de día y uno de
+    noche, cliente_b con su propia rutina), pero no sus tests.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.diurno = self.rutina_a.items.get(momento=RutinaItem.Momento.DIURNA)
+        self.nocturno = self.rutina_a.items.get(momento=RutinaItem.Momento.NOCTURNA)
+        self._auth(self.user_a)
+
+    def _url(self, item):
+        return reverse('client-mi-rutina-paso-hecho', args=[item.id])
+
+    def test_mi_rutina_trae_el_estado_de_hoy(self):
+        resp = self.client.get(reverse('client-mi-rutina'))
+
+        hoy = resp.data['hoy']
+        self.assertEqual(hoy['pasos_hechos'], [])
+        self.assertEqual(hoy['momentos']['DIURNA'], {'total': 1, 'hechos': 0, 'cumplido': False})
+        self.assertEqual(len(hoy['semana']), 7)
+        self.assertEqual(hoy['racha'], 0)
+        self.assertTrue(all(i['va_hoy'] for i in resp.data['rutina']['items']))
+
+    def test_tildar_un_paso_devuelve_el_dia_actualizado(self):
+        resp = self.client.post(self._url(self.diurno))
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data['hoy']['pasos_hechos'], [self.diurno.id])
+        self.assertTrue(resp.data['hoy']['momentos']['DIURNA']['cumplido'])
+        self.assertEqual(resp.data['hoy']['racha'], 1)
+
+    def test_destildar_lo_deshace(self):
+        self.client.post(self._url(self.diurno))
+
+        resp = self.client.delete(self._url(self.diurno))
+
+        self.assertEqual(resp.data['hoy']['pasos_hechos'], [])
+        self.assertEqual(resp.data['hoy']['racha'], 0)
+
+    def test_un_paso_de_otra_clienta_da_404(self):
+        ajeno = RutinaItem.objects.get(paso='SECRETO B')
+
+        resp = self.client.post(self._url(ajeno))
+
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_un_paso_que_hoy_no_toca_da_400(self):
+        from django.utils import timezone
+
+        hoy = timezone.localdate().weekday()
+        self.nocturno.dias = [(hoy + 1) % 7]
+        self.nocturno.save()
+
+        resp = self.client.post(self._url(self.nocturno))
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        mi_rutina = self.client.get(reverse('client-mi-rutina')).data
+        nocturno = next(i for i in mi_rutina['rutina']['items'] if i['id'] == self.nocturno.id)
+        self.assertFalse(nocturno['va_hoy'])
+
+    def test_sin_auth_401(self):
+        self.client.credentials()
+        resp = self.client.post(self._url(self.diurno))
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # Los tests de MiRutinaTests ya corren en su clase; acá no se repiten.
+    test_devuelve_rutina_plan_y_centro = None
+    test_aislamiento_entre_usuarios = None
+    test_centro_param_inexistente_da_404 = None
+    test_solo_rutina_activa = None
+    test_sin_rutina_devuelve_null = None

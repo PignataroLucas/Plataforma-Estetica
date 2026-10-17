@@ -15,13 +15,21 @@ import logging
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.utils import formats, timezone
 
-from apps.clientes.models import Cliente, RutinaCuidado, RutinaItem, VinculacionCliente
+from apps.clientes import rutina_diaria
+from apps.clientes.models import (
+    Cliente,
+    RutinaCuidado,
+    RutinaDiaCumplido,
+    RutinaItem,
+    VinculacionCliente,
+)
 from apps.turnos.models import Turno
 
-from . import eventos
+from . import cola, eventos
 from .despacho import crear_aviso_para_cliente
 
 logger = logging.getLogger(__name__)
@@ -45,8 +53,20 @@ ESTADOS_QUE_RECIBEN_RECORDATORIO = (Turno.Estado.PENDIENTE, Turno.Estado.CONFIRM
 # Hora local en la que sale el saludo de cumpleaños.
 HORA_CUMPLEANOS = 10
 
-# Hora local del recordatorio de rutina nocturna.
-HORA_RUTINA = 21
+# Hora local de los recordatorios de rutina, por momento.
+HORAS_RUTINA = {
+    RutinaItem.Momento.DIURNA: 9,
+    RutinaItem.Momento.NOCTURNA: 21,
+}
+
+# Cuánto atraso se tolera antes de dar por perdido un recordatorio de rutina.
+TOLERANCIA_ATRASO_RUTINA = timedelta(hours=2)
+
+# Cómo se nombra cada momento en el texto del aviso ("tu rutina de la ...").
+NOMBRE_DEL_MOMENTO = {
+    RutinaItem.Momento.DIURNA: 'mañana',
+    RutinaItem.Momento.NOCTURNA: 'noche',
+}
 
 
 def contexto_de_turno(turno) -> dict:
@@ -153,45 +173,130 @@ def saludar_cumpleanos(ahora=None) -> dict:
     return {'cumpleanos_encolados': creados}
 
 
+def _resumen_de_pasos(pasos) -> str:
+    """
+    El cuerpo del recordatorio: qué tiene que hacer, en una línea.
+
+    Lo que no va todos los días es lo que la clienta se olvida, así que si hoy
+    toca algo así se nombra primero. Si no, con pocos pasos alcanza con
+    listarlos; con muchos, la cuenta.
+    """
+    nombres = [p.etiqueta for p in pasos if p.etiqueta]
+    cantidad = 'Es un solo paso.' if len(pasos) == 1 else f'Son {len(pasos)} pasos.'
+
+    especiales = [p.etiqueta.lower() for p in pasos if p.dias and p.etiqueta]
+    if especiales:
+        verbo = 'toca' if len(especiales) == 1 else 'tocan'
+        return f'Hoy {verbo} {_enumerar(especiales)}. {cantidad}'
+    if 0 < len(nombres) <= 3 and len(nombres) == len(pasos):
+        lista = _enumerar([nombres[0]] + [n.lower() for n in nombres[1:]])
+        return f'{lista}. {cantidad if len(pasos) == 1 else "Son unos minutos."}'
+    return f'{cantidad} Unos minutos para tu piel.'
+
+
+def _enumerar(palabras) -> str:
+    if len(palabras) == 1:
+        return palabras[0]
+    return f"{', '.join(palabras[:-1])} y {palabras[-1]}"
+
+
+def contexto_de_rutina(momento, pasos) -> dict:
+    """Variables disponibles en la plantilla del recordatorio de rutina."""
+    return {
+        'momento': NOMBRE_DEL_MOMENTO[momento],
+        'pasos': len(pasos),
+        'resumen': _resumen_de_pasos(pasos),
+    }
+
+
 def recordar_rutina(ahora=None) -> dict:
     """
-    Encola el recordatorio diario de rutina nocturna.
+    Encola los recordatorios de rutina de hoy: mañana (9 h) y noche (21 h).
 
-    Apagado por defecto (``NOTIFICACIONES_RUTINA_DIARIA``). Es un push por día:
-    conviene encenderlo recién cuando exista frecuencia por paso, porque hoy la
-    rutina no distingue lo que va todas las noches de lo que va dos veces por
-    semana y el recordatorio sería impreciso para la mitad de los pasos.
+    Solo a quien tiene pasos para ese momento **hoy** (un paso de martes y
+    viernes no hace sonar el teléfono un lunes) y todavía no lo cumplió. Cuando
+    la clienta completa el momento, el check-in descarta el aviso pendiente; el
+    filtro de acá evita que el barrido siguiente lo vuelva a encolar.
+
+    Si el barrido corre con mucho atraso, el recordatorio de ese momento se
+    pierde: "tu rutina de la mañana" a las tres de la tarde es ruido.
     """
     if not getattr(settings, 'NOTIFICACIONES_RUTINA_DIARIA', False):
         return {'rutina_encolados': 0, 'apagado': True}
 
     ahora = ahora or timezone.now()
     hoy = timezone.localdate(ahora)
-    momento = timezone.make_aware(datetime.combine(hoy, time(HORA_RUTINA)))
 
-    con_pasos = RutinaItem.objects.filter(
-        rutina_id=OuterRef('id'), momento=RutinaItem.Momento.NOCTURNA
-    )
+    momentos = []
+    for momento, hora in HORAS_RUTINA.items():
+        cuando = timezone.make_aware(datetime.combine(hoy, time(hora)))
+        if ahora <= cuando + TOLERANCIA_ATRASO_RUTINA:
+            momentos.append((momento, cuando))
+    if not momentos:
+        return {'rutina_encolados': 0}
+
+    tiene_cuenta = VinculacionCliente.objects.filter(cliente_id=OuterRef('cliente_id'))
     rutinas = (
         RutinaCuidado.objects
         .filter(activa=True)
-        .annotate(tiene_pasos=Exists(con_pasos))
-        .filter(tiene_pasos=True)
+        .annotate(notificable=Exists(tiene_cuenta))
+        .filter(notificable=True)
         .select_related('cliente__centro_estetica')
+        .prefetch_related('items__producto')
+        .order_by('cliente_id', '-creado_en')
+    )
+    cumplidos = set(
+        RutinaDiaCumplido.objects
+        .filter(fecha=hoy)
+        .values_list('cliente_id', 'momento')
     )
 
     creados = 0
+    vistos = set()
     for rutina in rutinas:
-        avisos = crear_aviso_para_cliente(
-            evento=eventos.RUTINA_RECORDATORIO,
-            cliente=rutina.cliente,
-            contexto={'momento': 'noche'},
-            clave=f"rutina:{rutina.id}:{hoy.isoformat()}:nocturna",
-            programado_para=max(momento, ahora),
-        )
-        creados += len(avisos)
+        # Con más de una rutina activa, la app muestra la más nueva: esa manda.
+        if rutina.cliente_id in vistos:
+            continue
+        vistos.add(rutina.cliente_id)
+
+        for momento, cuando in momentos:
+            if (rutina.cliente_id, momento) in cumplidos:
+                continue
+            pasos = rutina_diaria.pasos_del_dia(rutina, hoy, momento)
+            if not pasos:
+                continue
+            avisos = crear_aviso_para_cliente(
+                evento=eventos.RUTINA_RECORDATORIO,
+                cliente=rutina.cliente,
+                contexto=contexto_de_rutina(momento, pasos),
+                clave=rutina_diaria.clave_recordatorio(rutina.id, hoy, momento),
+                programado_para=max(cuando, ahora),
+            )
+            creados += len(avisos)
 
     return {'rutina_encolados': creados}
+
+
+def enviar_recordatorio_de_prueba(rutina, momento) -> list:
+    """
+    Manda ya mismo el recordatorio de un momento, para mostrarlo en una demo.
+
+    Va sin clave, así que se puede repetir. Si hoy no toca ningún paso de ese
+    momento, usa todos los del momento: el objetivo es ver cómo llega el aviso.
+    Respeta las preferencias: si la clienta apagó "Mi rutina", no se crea.
+    """
+    hoy = timezone.localdate()
+    pasos = rutina_diaria.pasos_del_dia(rutina, hoy, momento) or [
+        item for item in rutina.items.all() if item.momento == momento
+    ]
+    avisos = crear_aviso_para_cliente(
+        evento=eventos.RUTINA_RECORDATORIO,
+        cliente=rutina.cliente,
+        contexto=contexto_de_rutina(momento, pasos),
+    )
+    if avisos:
+        transaction.on_commit(lambda: cola.despachar_ahora())
+    return avisos
 
 
 def _vencer_pedidos_de_turno(ahora=None) -> dict:

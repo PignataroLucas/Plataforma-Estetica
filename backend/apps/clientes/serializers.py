@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from . import rutina_diaria
 from .models import (
     Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, RutinaItem,
     NotaCliente, SegmentoApp
@@ -221,15 +222,29 @@ class PlanTratamientoSerializer(serializers.ModelSerializer):
 
 class RutinaItemStaffSerializer(serializers.ModelSerializer):
     """Paso estructurado de la rutina, editable por el staff (producto opcional)."""
+    # Escribible a propósito: al editar, el id es lo que permite conservar el
+    # paso (y los tildes de hoy de la clienta) en vez de borrarlo y recrearlo.
+    id = serializers.IntegerField(required=False)
     producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
+    dias = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6),
+        required=False,
+        allow_empty=True,
+    )
 
     class Meta:
         model = RutinaItem
         fields = [
             'id', 'momento', 'orden', 'paso',
-            'producto', 'producto_nombre', 'producto_texto', 'nota',
+            'producto', 'producto_nombre', 'producto_texto', 'nota', 'dias',
         ]
         extra_kwargs = {'producto': {'required': False, 'allow_null': True}}
+
+    def validate_dias(self, value):
+        # Los siete días es lo mismo que "todos los días": se guarda vacío para
+        # que haya una sola forma de decirlo.
+        dias = sorted(set(value))
+        return [] if len(dias) == 7 else dias
 
 
 class RutinaCuidadoSerializer(serializers.ModelSerializer):
@@ -240,6 +255,7 @@ class RutinaCuidadoSerializer(serializers.ModelSerializer):
     cliente_nombre = serializers.CharField(source='cliente.nombre_completo', read_only=True)
     creado_por_nombre = serializers.SerializerMethodField()
     items = RutinaItemStaffSerializer(many=True, required=False)
+    constancia = serializers.SerializerMethodField()
 
     class Meta:
         model = RutinaCuidado
@@ -253,12 +269,19 @@ class RutinaCuidadoSerializer(serializers.ModelSerializer):
             'rutina_nocturna_productos',
             'items',
             'activa',
+            'constancia',
             'creado_por',
             'creado_por_nombre',
             'creado_en',
             'actualizado_en',
         ]
         read_only_fields = ['id', 'creado_por', 'creado_en', 'actualizado_en']
+
+    def get_constancia(self, obj):
+        """Cuánto hizo la rutina en la última semana. Solo la activa: es la que ve."""
+        if not obj.activa:
+            return None
+        return rutina_diaria.constancia(obj.cliente)
 
     def get_creado_por_nombre(self, obj):
         """
@@ -270,11 +293,30 @@ class RutinaCuidadoSerializer(serializers.ModelSerializer):
         return None
 
     def _sync_items(self, rutina, items_data):
-        """Reemplaza los items de la rutina (replace-all)."""
-        rutina.items.all().delete()
-        RutinaItem.objects.bulk_create([
-            RutinaItem(rutina=rutina, **item) for item in items_data
-        ])
+        """
+        Deja la rutina con exactamente estos items.
+
+        Los que traen el ``id`` de un paso de esta rutina se actualizan en el
+        lugar; el resto se crea, y los que no vinieron se borran. Borrar todo y
+        recrear sería más simple, pero cada edición le borraría a la clienta lo
+        que ya tildó hoy.
+        """
+        existentes = {item.id: item for item in rutina.items.all()}
+        conservados = set()
+        nuevos = []
+        for data in items_data:
+            data = dict(data)
+            item = existentes.get(data.pop('id', None))
+            if item is None or item.id in conservados:
+                nuevos.append(RutinaItem(rutina=rutina, **data))
+                continue
+            for attr, value in data.items():
+                setattr(item, attr, value)
+            item.save()
+            conservados.add(item.id)
+
+        rutina.items.exclude(id__in=conservados).delete()
+        RutinaItem.objects.bulk_create(nuevos)
 
     def create(self, validated_data):
         """Crea la rutina, sus items y asigna el usuario creador."""

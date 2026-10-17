@@ -1,5 +1,5 @@
 import api from './api'
-import type { Cliente, PlanTratamiento, RutinaCuidado, NotaCliente, PaginatedResponse, DuplicadoGrupo, SegmentoApp } from '@/types/models'
+import type { Cliente, PlanTratamiento, RutinaCuidado, MomentoRutina, NotaCliente, PaginatedResponse, DuplicadoGrupo, SegmentoApp } from '@/types/models'
 
 /**
  * Cliente Services - API calls for patient tracking system
@@ -125,6 +125,15 @@ export const updateRutinaCuidado = async (id: number, data: Partial<RutinaCuidad
 
 export const deleteRutinaCuidado = async (id: number) => {
   await api.delete(`/clientes/rutinas-cuidado/${id}/`)
+}
+
+/** Manda ya el recordatorio de rutina al teléfono de la clienta (para demos). */
+export const enviarRecordatorioRutina = async (id: number, momento: MomentoRutina) => {
+  const response = await api.post<{ enviados: number; momento: MomentoRutina }>(
+    `/clientes/rutinas-cuidado/${id}/recordatorio-prueba/`,
+    { momento },
+  )
+  return response.data
 }
 
 // ==================== NOTAS DE CLIENTE ====================

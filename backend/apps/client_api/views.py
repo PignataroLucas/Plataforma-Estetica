@@ -11,6 +11,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.clientes import rutina_diaria
 from apps.clientes.cuenta_app import eliminar_cuenta_app
 from apps.clientes.models import (
     Cliente,
@@ -411,19 +412,14 @@ class MiRutinaView(ClienteScopeMixin, APIView):
             return self.sin_vinculacion()
 
         cliente = vinc.cliente
-        rutina = (
-            RutinaCuidado.objects
-            .filter(cliente=cliente, activa=True)
-            .prefetch_related('items__producto__categoria')
-            .order_by('-creado_en')
-            .first()
-        )
+        rutina = _rutina_activa(cliente)
         plan = (
             PlanTratamiento.objects
             .filter(cliente=cliente)
             .order_by('-creado_en')
             .first()
         )
+        hoy = timezone.localdate()
 
         return Response({
             'centro': {
@@ -431,9 +427,58 @@ class MiRutinaView(ClienteScopeMixin, APIView):
                 'nombre': cliente.centro_estetica.nombre,
             },
             'cliente': {'id': cliente.id, 'nombre': cliente.nombre_completo},
-            'rutina': RutinaAppSerializer(rutina).data if rutina else None,
+            'rutina': RutinaAppSerializer(rutina, context={'hoy': hoy}).data if rutina else None,
             'plan': PlanAppSerializer(plan).data if plan else None,
+            'hoy': rutina_diaria.estado_del_dia(rutina, hoy) if rutina else None,
         })
+
+
+def _rutina_activa(cliente):
+    """La rutina que ve la clienta: la activa más nueva, con lo que pinta la app."""
+    return (
+        RutinaCuidado.objects
+        .filter(cliente=cliente, activa=True)
+        .select_related('cliente')
+        .prefetch_related('items__producto__categoria')
+        .order_by('-creado_en')
+        .first()
+    )
+
+
+class MiRutinaPasoView(ClienteScopeMixin, APIView):
+    """
+    POST   /api/client/mi-rutina/pasos/<id>/hecho/ — marca el paso como hecho hoy.
+    DELETE /api/client/mi-rutina/pasos/<id>/hecho/ — lo desmarca.
+
+    Las dos son idempotentes y devuelven el estado del día completo (``hoy``),
+    así la app pinta el progreso y la racha con la respuesta, sin otra consulta.
+    El paso tiene que ser de la rutina activa de la clienta: cualquier otro id
+    responde 404, sea de otra rutina suya o de otra persona.
+    """
+
+    def post(self, request, item_id):
+        return self._marcar(request, item_id, hecho=True)
+
+    def delete(self, request, item_id):
+        return self._marcar(request, item_id, hecho=False)
+
+    def _marcar(self, request, item_id, *, hecho):
+        vinc = self.get_vinculacion(request)
+        if vinc is None:
+            return self.sin_vinculacion()
+
+        rutina = _rutina_activa(vinc.cliente)
+        item = next((i for i in rutina.items.all() if i.id == item_id), None) if rutina else None
+        if item is None:
+            return Response({'detail': 'Ese paso no es de tu rutina.'}, status=status.HTTP_404_NOT_FOUND)
+
+        hoy = timezone.localdate()
+        try:
+            rutina_diaria.marcar_paso(rutina, item, hecho, fecha=hoy)
+        except rutina_diaria.PasoInvalido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'hoy': rutina_diaria.estado_del_dia(rutina, hoy)})
 
 
 class PushRegisterView(ClienteScopeMixin, APIView):

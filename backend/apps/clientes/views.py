@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -6,7 +7,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.empleados.permissions import IsAdmin
-from .models import Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, NotaCliente, SegmentoApp
+from .models import (
+    Cliente, HistorialCliente, PlanTratamiento, RutinaCuidado, RutinaItem, NotaCliente, SegmentoApp
+)
 from .serializers import (
     ClienteSerializer,
     ClienteDuplicadoSerializer,
@@ -242,6 +245,38 @@ class RutinaCuidadoViewSet(viewsets.ModelViewSet):
                 cliente__centro_estetica=user.centro_estetica
             ).select_related('cliente', 'creado_por').prefetch_related('items__producto')
         return RutinaCuidado.objects.none()
+
+    @action(detail=True, methods=['post'], url_path='recordatorio-prueba')
+    def recordatorio_prueba(self, request, pk=None):
+        """
+        POST /api/rutinas-cuidado/{id}/recordatorio-prueba/
+
+        Manda ahora el recordatorio de rutina al teléfono de la clienta, para
+        mostrar cómo llega sin esperar a las 9 o a las 21. ``momento`` es
+        ``DIURNA`` o ``NOCTURNA``; sin él, se elige por la hora del día.
+        """
+        from apps.notificaciones.disparadores import enviar_recordatorio_de_prueba
+
+        rutina = self.get_object()
+        momento = request.data.get('momento') or (
+            RutinaItem.Momento.DIURNA if timezone.localtime().hour < 15
+            else RutinaItem.Momento.NOCTURNA
+        )
+        if momento not in RutinaItem.Momento.values:
+            raise ValidationError({'momento': 'Tiene que ser DIURNA o NOCTURNA.'})
+
+        nombre = 'mañana' if momento == RutinaItem.Momento.DIURNA else 'noche'
+        if not any(item.momento == momento for item in rutina.items.all()):
+            raise ValidationError({'detail': f'Esta rutina no tiene pasos de la {nombre}.'})
+        if not rutina.cliente.vinculaciones.exists():
+            raise ValidationError({'detail': 'La clienta todavía no tiene cuenta en la app.'})
+
+        avisos = enviar_recordatorio_de_prueba(rutina, momento)
+        if not avisos:
+            raise ValidationError({
+                'detail': 'No se envió: la clienta tiene apagados los avisos de "Mi rutina".'
+            })
+        return Response({'enviados': len(avisos), 'momento': momento})
 
 
 class NotaClienteViewSet(viewsets.ModelViewSet):

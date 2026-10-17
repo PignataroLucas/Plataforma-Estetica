@@ -533,6 +533,14 @@ class RutinaItem(models.Model):
         help_text="Nombre del producto si no está en el catálogo",
     )
     nota = models.CharField(max_length=300, blank=True, help_text="Indicación adicional")
+    dias = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Días de la semana en que va el paso, como en date.weekday() "
+            "(0 = lunes … 6 = domingo). Vacío = todos los días."
+        ),
+    )
 
     class Meta:
         verbose_name = 'Ítem de rutina'
@@ -540,8 +548,71 @@ class RutinaItem(models.Model):
         ordering = ['momento', 'orden', 'id']
 
     def __str__(self):
-        etiqueta = self.paso or self.producto_texto or (self.producto.nombre if self.producto else '')
-        return f"{self.get_momento_display()} · {etiqueta}"
+        return f"{self.get_momento_display()} · {self.etiqueta}"
+
+    @property
+    def etiqueta(self) -> str:
+        """Cómo se nombra el paso: el texto del paso, o el producto si no hay."""
+        return self.paso or self.producto_texto or (self.producto.nombre if self.producto else '')
+
+    def va_el(self, fecha) -> bool:
+        """¿Este paso toca en esa fecha?"""
+        return not self.dias or fecha.weekday() in self.dias
+
+
+class RutinaPasoHecho(models.Model):
+    """
+    Un paso de la rutina que la clienta marcó como hecho un día.
+
+    Cuelga del ítem con CASCADE: si el staff saca el paso de la rutina, su
+    historial de tildes deja de tener sentido. Lo que sobrevive a los cambios de
+    rutina es ``RutinaDiaCumplido``, que es de donde sale la racha.
+    """
+    item = models.ForeignKey(RutinaItem, on_delete=models.CASCADE, related_name='hechos')
+    fecha = models.DateField(help_text="Día local en que se hizo")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Paso de rutina hecho'
+        verbose_name_plural = 'Pasos de rutina hechos'
+        constraints = [
+            models.UniqueConstraint(fields=['item', 'fecha'], name='uniq_rutina_paso_hecho_por_dia'),
+        ]
+
+    def __str__(self):
+        return f"{self.item} · {self.fecha:%d/%m/%Y}"
+
+
+class RutinaDiaCumplido(models.Model):
+    """
+    La clienta completó todos los pasos de un momento (mañana o noche) un día.
+
+    Se guarda al momento de completar, con los pasos que tocaban **ese** día, en
+    vez de recalcularlo después: si mañana el staff cambia la rutina, la racha de
+    la semana pasada no puede cambiar con ella. Es de la ficha y no de la rutina
+    por el mismo motivo: una rutina nueva no reinicia la constancia.
+    """
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name='rutina_cumplimientos',
+    )
+    fecha = models.DateField(help_text="Día local")
+    momento = models.CharField(max_length=10, choices=RutinaItem.Momento.choices)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Rutina cumplida'
+        verbose_name_plural = 'Rutinas cumplidas'
+        ordering = ['-fecha', 'momento']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cliente', 'fecha', 'momento'], name='uniq_rutina_cumplida_por_momento',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.cliente} · {self.fecha:%d/%m/%Y} · {self.get_momento_display()}"
 
 
 class NotaCliente(models.Model):

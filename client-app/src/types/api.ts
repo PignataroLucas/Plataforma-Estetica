@@ -179,6 +179,10 @@ export interface RutinaItem {
   producto: ProductoPublico | null;
   producto_texto: string;
   nota: string;
+  /** Días en que va (0 = lunes … 6 = domingo). Vacío = todos los días. */
+  dias: number[];
+  /** Si toca hoy. Lo resuelve el backend con el día del centro. */
+  va_hoy: boolean;
 }
 
 export interface RutinaApp {
@@ -203,12 +207,34 @@ export interface PlanApp {
   actualizado_en: string;
 }
 
+/** Avance de un momento (mañana o noche) en el día. */
+export interface MomentoDelDia {
+  /** Pasos que tocan hoy en este momento. */
+  total: number;
+  hechos: number;
+  cumplido: boolean;
+}
+
+/** El check-in del día: qué tildó, cómo va cada momento y su constancia. */
+export interface RutinaHoy {
+  /** Día del centro, `YYYY-MM-DD`. */
+  fecha: string;
+  pasos_hechos: number[];
+  momentos: Record<MomentoRutina, MomentoDelDia>;
+  /** Lunes a domingo de la semana de `fecha`. */
+  semana: { fecha: string; cumplido: boolean }[];
+  /** Días seguidos con la rutina de la mañana o la de la noche cumplida. */
+  racha: number;
+}
+
 /** Respuesta de GET /api/client/mi-rutina/. */
 export interface MiRutina {
   centro: { id: number; nombre: string };
   cliente: { id: number; nombre: string };
   rutina: RutinaApp | null;
   plan: PlanApp | null;
+  /** `null` si no tiene rutina activa. */
+  hoy: RutinaHoy | null;
 }
 
 /* ------------------------------------------------------------------ *

@@ -239,12 +239,24 @@ class ClienteTokenRefreshSerializer(TokenRefreshSerializer):
 # ------------------------------------------------------------------ #
 
 class RutinaItemAppSerializer(serializers.ModelSerializer):
-    """Paso de rutina para la app; incluye el producto del catálogo si está linkeado."""
+    """
+    Paso de rutina para la app; incluye el producto del catálogo si está linkeado.
+
+    ``va_hoy`` se resuelve acá y no en la app: "hoy" es el día del centro, no el
+    del reloj del teléfono.
+    """
     producto = ProductoPublicoSerializer(read_only=True)
+    va_hoy = serializers.SerializerMethodField()
 
     class Meta:
         model = RutinaItem
-        fields = ['id', 'momento', 'orden', 'paso', 'producto', 'producto_texto', 'nota']
+        fields = [
+            'id', 'momento', 'orden', 'paso', 'producto', 'producto_texto', 'nota',
+            'dias', 'va_hoy',
+        ]
+
+    def get_va_hoy(self, obj):
+        return obj.va_el(self.context.get('hoy') or timezone.localdate())
 
 
 class RutinaAppSerializer(serializers.ModelSerializer):

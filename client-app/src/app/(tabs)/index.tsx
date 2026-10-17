@@ -92,7 +92,7 @@ export default function Inicio() {
           />
         ) : null}
 
-        {rutina ? <RutinaTeaser rutina={rutina} /> : null}
+        {rutina ? <RutinaTeaser rutina={rutina} hoy={miRutinaQuery.data?.hoy ?? null} /> : null}
 
         {categorias.length > 0 ? (
           <View>

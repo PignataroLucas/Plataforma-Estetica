@@ -1,9 +1,32 @@
 import { useState, useEffect } from 'react'
-import type { MomentoRutina, RutinaCuidado, RutinaItem, ProductoList } from '@/types/models'
-import { getRutinasCuidado, createRutinaCuidado, updateRutinaCuidado, deleteRutinaCuidado } from '@/services/clienteService'
+import toast from 'react-hot-toast'
+import type { ConstanciaRutina, MomentoRutina, RutinaCuidado, RutinaItem, ProductoList } from '@/types/models'
+import {
+  getRutinasCuidado,
+  createRutinaCuidado,
+  updateRutinaCuidado,
+  deleteRutinaCuidado,
+  enviarRecordatorioRutina,
+} from '@/services/clienteService'
 import api from '@/services/api'
 import { Button } from '@/components/ui'
 import { formatDateArgentina } from '@/utils/dateUtils'
+
+// Índices como date.weekday() en el backend: 0 = lunes … 6 = domingo.
+const DIAS_CORTOS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+const DIAS_LARGOS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+/** "Martes y viernes", "Solo los domingos"; vacío = todos los días. */
+const describirDias = (dias?: number[]) => {
+  if (!dias || dias.length === 0) return 'Todos los días'
+  const nombres = [...dias].sort((a, b) => a - b).map((d) => DIAS_LARGOS[d])
+  if (nombres.length === 1) {
+    const dia = nombres[0]
+    return `Solo los ${dia.endsWith('s') ? dia : `${dia}s`}`
+  }
+  const texto = `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
+}
 
 interface RutinasCuidadoProps {
   clienteId: number
@@ -28,6 +51,7 @@ const nuevoItem = (momento: MomentoRutina, orden: number): RutinaItem => ({
   producto: null,
   producto_texto: '',
   nota: '',
+  dias: [],
 })
 
 export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
@@ -89,6 +113,15 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
     }))
   }
 
+  const toggleDia = (index: number, dia: number) => {
+    const actuales = formData.items[index].dias ?? []
+    const dias = actuales.includes(dia)
+      ? actuales.filter((d) => d !== dia)
+      : [...actuales, dia].sort((a, b) => a - b)
+    // Marcar los siete es lo mismo que "todos los días".
+    updateItem(index, { dias: dias.length === 7 ? [] : dias })
+  }
+
   const removeItem = (index: number) => {
     setFormData((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }))
   }
@@ -131,12 +164,16 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
       cliente: rutina.cliente,
       activa: rutina.activa,
       items: (rutina.items ?? []).map((it) => ({
+        // Con el id, guardar actualiza el mismo paso en vez de recrearlo: así no
+        // se pierde lo que la clienta ya tildó hoy en la app.
+        id: it.id,
         momento: it.momento,
         orden: it.orden,
         paso: it.paso ?? '',
         producto: it.producto ?? null,
         producto_texto: it.producto_texto ?? '',
         nota: it.nota ?? '',
+        dias: it.dias ?? [],
       })),
     })
     setShowForm(true)
@@ -160,6 +197,21 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
     } catch (error) {
       console.error('Error updating routine:', error)
       alert('Error al actualizar la rutina')
+    }
+  }
+
+  const [enviando, setEnviando] = useState<string | null>(null)
+
+  const handleProbarRecordatorio = async (rutina: RutinaCuidado, momento: MomentoRutina) => {
+    setEnviando(`${rutina.id}:${momento}`)
+    try {
+      await enviarRecordatorioRutina(rutina.id, momento)
+      toast.success('Recordatorio enviado al teléfono de la clienta')
+    } catch (error) {
+      const detalle = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+      toast.error(detalle ?? 'No se pudo enviar el recordatorio')
+    } finally {
+      setEnviando(null)
     }
   }
 
@@ -269,6 +321,31 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </div>
+
+                      <div className="pl-7 flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-gray-500 mr-1">Días:</span>
+                        {DIAS_CORTOS.map((letra, dia) => {
+                          const activo = (item.dias ?? []).includes(dia)
+                          return (
+                            <button
+                              key={dia}
+                              type="button"
+                              onClick={() => toggleDia(index, dia)}
+                              aria-pressed={activo}
+                              aria-label={DIAS_LARGOS[dia]}
+                              title={DIAS_LARGOS[dia]}
+                              className={`w-7 h-7 rounded-full text-xs font-medium border transition-colors ${
+                                activo
+                                  ? 'bg-primary-600 text-white border-primary-600'
+                                  : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
+                              }`}
+                            >
+                              {letra}
+                            </button>
+                          )
+                        })}
+                        <span className="text-xs text-gray-400 ml-1">{describirDias(item.dias)}</span>
+                      </div>
                     </div>
                   ))}
 
@@ -354,6 +431,28 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
                 </div>
               </div>
 
+              {rutina.activa && (
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-green-200">
+                  {rutina.constancia ? <Constancia constancia={rutina.constancia} /> : <span />}
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-500">Probar recordatorio:</span>
+                    {(['DIURNA', 'NOCTURNA'] as MomentoRutina[])
+                      .filter((m) => (rutina.items ?? []).some((i) => i.momento === m))
+                      .map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => handleProbarRecordatorio(rutina, m)}
+                          disabled={enviando !== null}
+                          className="px-3 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:border-primary-400 disabled:opacity-50"
+                        >
+                          {enviando === `${rutina.id}:${m}` ? 'Enviando…' : m === 'DIURNA' ? 'Mañana' : 'Noche'}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Routine Content */}
               {rutina.items && rutina.items.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -370,6 +469,11 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
                           {items.map((item, i) => (
                             <li key={item.id ?? i} className="text-sm text-gray-800">
                               <span className="font-medium">{i + 1}. {item.paso}</span>
+                              {item.dias && item.dias.length > 0 && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-xs">
+                                  {describirDias(item.dias)}
+                                </span>
+                              )}
                               {(item.producto || item.producto_texto) && (
                                 <span className="block text-xs text-gray-500 ml-4">
                                   🏷️ {item.producto_nombre || productoNombre(item.producto) || item.producto_texto}
@@ -392,6 +496,30 @@ export default function RutinasCuidado({ clienteId }: RutinasCuidadoProps) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Cuánto hizo la clienta la rutina en la app en la última semana. */
+function Constancia({ constancia }: { constancia: ConstanciaRutina }) {
+  const { cumplidos, dias, ultimos, racha } = constancia
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <div className="flex gap-1" aria-hidden="true">
+        {ultimos.map((ok, i) => (
+          <span key={i} className={`w-2.5 h-2.5 rounded-full ${ok ? 'bg-green-600' : 'bg-gray-300'}`} />
+        ))}
+      </div>
+      <span className="text-gray-700">
+        {cumplidos === 0 ? (
+          'Todavía no marcó la rutina en la app esta semana'
+        ) : (
+          <>
+            Hizo la rutina <strong>{cumplidos} de los últimos {dias} días</strong>
+            {racha > 1 && ` · ${racha} días seguidos`}
+          </>
+        )}
+      </span>
     </div>
   )
 }
