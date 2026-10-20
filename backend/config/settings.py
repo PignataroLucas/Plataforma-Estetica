@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'apps.analytics',
     'apps.client_api',  # API para la app mobile de clientes
     'apps.public_api',  # API pública sin autenticación (info centro, catálogo)
+    'apps.legales',  # Política de privacidad: páginas públicas y aceptaciones
 ]
 
 MIDDLEWARE = [

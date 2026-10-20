@@ -8,6 +8,7 @@ import { PreferenciasNotificaciones } from '@/components/perfil/PreferenciasNoti
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { abrirDocumento } from '@/services/legales';
 import { useAuthStore } from '@/stores/auth';
 import { colors, fonts, radius, spacing } from '@/theme/ame';
 
@@ -61,9 +62,16 @@ export default function Perfil() {
           {/* Discreto a propósito: tiene que estar a la vista (lo pide Google
               Play), no ser lo primero que se toca. */}
           <Pressable
+            onPress={() => abrirDocumento('/legales/privacidad/')}
+            hitSlop={8}
+            style={styles.linkPie}
+            accessibilityRole="link">
+            <AppText variant="meta">Política de privacidad</AppText>
+          </Pressable>
+          <Pressable
             onPress={() => router.push('/eliminar-cuenta')}
             hitSlop={8}
-            style={styles.eliminar}
+            style={styles.linkPie}
             accessibilityRole="button">
             <AppText variant="meta" color={colors.danger}>
               Eliminar mi cuenta
@@ -106,5 +114,5 @@ const styles = StyleSheet.create({
   },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.line },
   rowText: { gap: 2 },
-  eliminar: { alignSelf: 'center', paddingVertical: spacing.sm },
+  linkPie: { alignSelf: 'center', paddingVertical: spacing.sm },
 });

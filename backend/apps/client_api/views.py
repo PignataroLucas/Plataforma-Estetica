@@ -22,6 +22,8 @@ from apps.clientes.models import (
     VinculacionCliente,
 )
 from apps.integraciones.compra import CompraInvalida, preparar_compra, resolver_items
+from apps.legales import documentos as legales
+from apps.legales.services import aceptar as aceptar_legal
 from apps.integraciones.tiendanube import TiendanubeError
 from apps.notificaciones.correo import CorreoNoEnviado, enviar_correo
 from apps.notificaciones.models import DispositivoPush, PreferenciaNotificacion
@@ -41,6 +43,7 @@ from apps.turnos.services import (
 
 from .authentication import ClienteJWTAuthentication
 from .serializers import (
+    AceptarLegalSerializer,
     ClienteTokenRefreshSerializer,
     OlvideMiClaveSerializer,
     RestablecerClaveSerializer,
@@ -151,6 +154,9 @@ class RegistroView(APIView):
                     metodo_vinculacion=VinculacionCliente.Metodo.REGISTRO_NUEVO,
                 )
 
+            # La casilla del formulario: el serializer ya rechazó el registro sin ella.
+            aceptar_legal(usuario, legales.PRIVACIDAD)
+
         tokens = tokens_para_usuario_cliente(usuario)
         return Response(
             {**tokens, 'usuario': PerfilSerializer(usuario).data},
@@ -242,6 +248,23 @@ class PerfilView(ClienteScopeMixin, APIView):
         serializer.is_valid(raise_exception=True)
         eliminar_cuenta_app(request.user)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AceptarLegalView(ClienteScopeMixin, APIView):
+    """
+    POST /api/client/legales/aceptar/ — la cuenta acepta un documento en su
+    versión vigente. Lo usan las cuentas creadas antes de que existiera la
+    casilla, y todas cuando el documento cambia. Devuelve el perfil actualizado.
+    """
+
+    def post(self, request):
+        serializer = AceptarLegalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aceptar_legal(request.user, serializer.validated_data['_documento'])
+        usuario = UsuarioCliente.objects.prefetch_related(
+            'vinculaciones__cliente__centro_estetica'
+        ).get(pk=request.user.pk)
+        return Response(PerfilSerializer(usuario).data)
 
 
 class OlvideMiClaveView(APIView):

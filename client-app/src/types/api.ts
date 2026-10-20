@@ -149,8 +149,23 @@ export interface Perfil {
   email_verificado: boolean;
   creado_en: string;
   vinculaciones: VinculacionResumen[];
+  /**
+   * Documentos que la cuenta tiene que aceptar antes de seguir. Si no está
+   * vacío, la app muestra la pantalla de aceptación en vez de la app.
+   */
+  legales_pendientes: LegalPendiente[];
   // Los push tokens no viven en el perfil: una cuenta puede tener varios
   // teléfonos y se manejan aparte (ver `services/push.ts`).
+}
+
+/** Un documento legal pendiente de aceptar, en su versión vigente. */
+export interface LegalPendiente {
+  documento: string;
+  titulo: string;
+  /** Fecha de la versión (YYYY-MM-DD). Viaja de vuelta al aceptar. */
+  version: string;
+  /** Ruta de la página pública, relativa al host del backend. */
+  ruta: string;
 }
 
 /** Par de tokens JWT de cliente (claim token_use='cliente'). */
@@ -338,4 +353,6 @@ export interface RegistroPayload {
   apellido?: string;
   telefono?: string;
   centro?: number;
+  /** La casilla de la política de privacidad. Sin ella el backend no crea la cuenta. */
+  acepta_privacidad: boolean;
 }

@@ -451,14 +451,19 @@ antes de publicar.
 Google pide completar todo esto antes de publicar en cualquier pista, incluida la
 cerrada:
 
-- **Política de privacidad publicada.** El borrador está en
-  `POLITICA_DE_PRIVACIDAD.md`, en revisión de AME y de un abogado. Va en
-  `ameesencial.com.ar` junto con la página *Eliminación de la cuenta*: Google
-  pide las dos URLs.
+- **Política de privacidad publicada.** La publica el backend, desde
+  `backend/apps/legales/documentos/`. Las dos URLs que pide Google:
+  - `https://plataforma-estetica-production.up.railway.app/legales/privacidad/`
+  - `https://plataforma-estetica-production.up.railway.app/legales/eliminar-cuenta/`
+
+  **Antes de cargarlas en Play Console hay que completar lo que está entre
+  corchetes** (responsable, CUIT, mail, plazos), que hoy se ve tal cual en la
+  página. Sigue en revisión de AME y de un abogado.
 - **Borrar la cuenta desde la app:** hecho y en producción.
-- **Link a la política desde Perfil,** cuando tenga URL.
-- **Pendiente de la revisión legal:** si hace falta aceptar la política al
-  registrarse. Hoy la app no lo pide.
+- **Aceptar la política:** hecho. Casilla obligatoria al registrarse, pantalla
+  de aceptación para las cuentas que ya existían, y link desde Perfil. Cuando la
+  política cambie de fondo, se sube `PRIVACIDAD.version` en
+  `apps/legales/documentos.py` y la app la vuelve a pedir.
 - **Datos sensibles de la ficha (17/10/2026):** la política ya nombra los datos de
   salud (cáncer, embarazo, marcapasos, alergias, medicación…). Las fotos de la
   ficha, las de antes y después y el documento de identidad se sacaron del
@@ -469,11 +474,13 @@ cerrada:
     la AAIP;
   - el **plazo de conservación** de la ficha.
 
-  La lista completa está en la nota al principio de `POLITICA_DE_PRIVACIDAD.md`.
+  La lista completa está en la nota al principio de
+  `backend/apps/legales/documentos/politica_privacidad.md`.
 - **Términos y condiciones:** Google no los exige, pero con compras y turnos
   conviene tenerlos (cancelaciones, devoluciones, descuento de la app). Se
-  redactan con el abogado junto con la política, y si se publican van en el
-  mismo lugar y con el mismo link desde Perfil.
+  redactan con el abogado junto con la política. Se suman como otro documento en
+  `apps/legales/documentos.py`, y la casilla y la pantalla de aceptación los
+  piden solos.
 - **Seguridad de los datos:** declarar cuenta (email, nombre, teléfono), turnos,
   compras, notificaciones y Analytics (actividad en la app e identificadores de
   la instalación). Los datos de salud de la ficha **no** los recolecta la app
@@ -563,5 +570,5 @@ borra a los 14 días.
 - `COMPRA_EN_APP_SPEC.md` — el porqué de cada decisión del bloque 1. Las trampas
   del §6 valen la pena antes de tocar precios.
 - `APP_MOBILE_ROADMAP.md` §0 — el estado real de la app y qué falta en features.
-- `POLITICA_DE_PRIVACIDAD.md` — el borrador de la política y de la página de
-  borrado de cuenta, para los bloques 4 y 8.
+- `backend/apps/legales/documentos/` — la política de privacidad y la página de
+  borrado de cuenta, para los bloques 4 y 8. El backend las publica tal cual.

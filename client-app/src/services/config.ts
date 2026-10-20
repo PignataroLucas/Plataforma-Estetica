@@ -35,5 +35,15 @@ export function resolveMediaUrl(path: string | null | undefined): string | null 
   return /^https?:\/\//.test(path) ? path : `${MEDIA_BASE_URL}${path}`;
 }
 
+/**
+ * Página pública del backend que no es API, como la política de privacidad.
+ * Vive en el mismo host: las sirve `backend/apps/legales`.
+ */
+export function urlDelSitio(ruta: string): string {
+  return `${MEDIA_BASE_URL}${ruta}`;
+}
+
+export const URL_POLITICA_PRIVACIDAD = urlDelSitio('/legales/privacidad/');
+
 /** Centro por defecto en dev. En producción lo define el onboarding (QR del centro). */
 export const DEFAULT_CENTRO_ID = 1;

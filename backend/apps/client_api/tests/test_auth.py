@@ -59,6 +59,7 @@ class ClientAuthTests(APITestCase):
     def test_registro_con_codigo_valido(self):
         codigo = CodigoInvitacion.objects.create(cliente=self.cliente_a)
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'maria@mail.com', 'password': 'ClaveSegura123', 'codigo': codigo.codigo,
         }, format='json')
 
@@ -81,6 +82,7 @@ class ClientAuthTests(APITestCase):
         codigo.marcar_usado(otro)
 
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'nueva@mail.com', 'password': 'ClaveSegura123', 'codigo': codigo.codigo,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -91,12 +93,14 @@ class ClientAuthTests(APITestCase):
             cliente=self.cliente_a, expira_en=timezone.now() - timedelta(hours=1)
         )
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'nueva@mail.com', 'password': 'ClaveSegura123', 'codigo': codigo.codigo,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_registro_codigo_inexistente(self):
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'nueva@mail.com', 'password': 'ClaveSegura123', 'codigo': 'XXX-YYYY-ZZZZ',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -105,6 +109,7 @@ class ClientAuthTests(APITestCase):
 
     def test_registro_nuevo_con_centro(self):
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'nuevo@mail.com', 'password': 'ClaveSegura123',
             'nombre': 'Ana', 'apellido': 'Gomez', 'centro': self.centro_a.id,
         }, format='json')
@@ -118,6 +123,7 @@ class ClientAuthTests(APITestCase):
 
     def test_registro_nuevo_sin_centro_falla(self):
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'nuevo@mail.com', 'password': 'ClaveSegura123',
             'nombre': 'Ana', 'apellido': 'Gomez',
         }, format='json')
@@ -126,6 +132,7 @@ class ClientAuthTests(APITestCase):
     def test_email_duplicado_case_insensitive(self):
         UsuarioCliente.objects.create_user(email='dup@mail.com', password='x123ABCdef')
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'DUP@mail.com', 'password': 'ClaveSegura123',
             'nombre': 'A', 'apellido': 'B', 'centro': self.centro_a.id,
         }, format='json')
@@ -134,6 +141,7 @@ class ClientAuthTests(APITestCase):
     def test_registro_nuevo_no_expone_otro_centro(self):
         """El auto-registro crea ficha SOLO en el centro indicado."""
         resp = self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': 'multi@mail.com', 'password': 'ClaveSegura123',
             'nombre': 'Ana', 'apellido': 'Gomez', 'centro': self.centro_a.id,
         }, format='json')
