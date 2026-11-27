@@ -16,6 +16,7 @@ import {
   registro as registroReq,
 } from '@/services/auth';
 import { analytics } from '@/services/analytics';
+import { aceptarLegal } from '@/services/legales';
 import { configureHttpAuth } from '@/services/http';
 import { darDeBajaDispositivo, olvidarDispositivo } from '@/services/push';
 import { limpiarCacheDeDatos } from '@/services/queryClient';
@@ -59,6 +60,12 @@ interface AuthState {
    * ejemplo, contraseña equivocada) sin tocar la sesión, para mostrarlo en el form.
    */
   eliminarCuenta: (password: string) => Promise<void>;
+  /**
+   * Acepta los documentos legales pendientes del perfil. Propaga `ApiError`: si
+   * uno cambió mientras la pantalla estaba abierta, el perfil se refresca con la
+   * versión nueva para que la lea.
+   */
+  aceptarLegales: () => Promise<void>;
   /** La pantalla de transición terminó: se puede mostrar la app. */
   terminarEntrada: () => void;
 }
@@ -150,6 +157,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // teléfono se encuentra con el pedido de la anterior.
     vaciarCarrito();
     await Promise.all([deleteItem(ACCESS_KEY), deleteItem(REFRESH_KEY)]);
+  },
+
+  aceptarLegales: async () => {
+    const pendientes = get().usuario?.legales_pendientes ?? [];
+    try {
+      let usuario = get().usuario;
+      for (const doc of pendientes) {
+        usuario = await aceptarLegal(doc.documento, doc.version);
+      }
+      if (usuario) set({ usuario });
+    } catch (error) {
+      set({ usuario: await getPerfil() });
+      throw error;
+    }
   },
 
   eliminarCuenta: async (password) => {

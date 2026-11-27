@@ -24,7 +24,6 @@ class CentroEstetica(models.Model):
 
     # Configuración
     # El logo lo muestra la app de clientas, así que va al bucket público.
-    # Ojo: `Usuario.foto` (más abajo) NO, es foto de una persona identificable.
     logo = models.ImageField(
         upload_to='logos/', storage=storage_publico, null=True, blank=True
     )
@@ -157,7 +156,7 @@ class Usuario(AbstractUser):
     telefono = models.CharField(max_length=20, blank=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
     direccion = models.CharField(max_length=300, blank=True)
-    foto = models.ImageField(upload_to='usuarios/', null=True, blank=True)
+    # Sin foto, a propósito (se sacó el 17/10/2026): no se usaba.
 
     # Rol y permisos
     rol = models.CharField(

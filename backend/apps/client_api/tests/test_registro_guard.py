@@ -38,6 +38,7 @@ class RegistroGuardTests(APITestCase):
 
     def _post(self, email, telefono):
         return self.client.post(reverse('client-registro'), {
+            'acepta_privacidad': True,
             'email': email, 'password': 'ClaveSegura123',
             'nombre': 'Maria', 'apellido': 'Lopez',
             'telefono': telefono, 'centro': self.centro.id,

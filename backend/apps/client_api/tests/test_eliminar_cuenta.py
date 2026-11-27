@@ -177,4 +177,5 @@ def test_cada_relacion_de_la_cuenta_tiene_decidido_que_pasa_en_la_baja():
         ('notificaciones.DispositivoPush', 'usuario_cliente', 'CASCADE'),
         ('notificaciones.PreferenciaNotificacion', 'usuario_cliente', 'CASCADE'),
         ('notificaciones.Aviso', 'usuario_cliente', 'CASCADE'),
+        ('legales.AceptacionLegal', 'usuario_cliente', 'CASCADE'),
     }

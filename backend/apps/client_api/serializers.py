@@ -17,6 +17,8 @@ from apps.clientes.models import (
 )
 from apps.clientes.utils import normalizar_telefono
 from apps.empleados.models import CentroEstetica
+from apps.legales import documentos as legales
+from apps.legales.services import pendientes as legales_pendientes
 from apps.notificaciones.eventos import Categoria
 from apps.notificaciones.models import DispositivoPush
 from apps.public_api.serializers import ProductoPublicoSerializer, ServicioPublicoSerializer
@@ -51,15 +53,31 @@ class VinculacionResumenSerializer(serializers.ModelSerializer):
 
 class PerfilSerializer(serializers.ModelSerializer):
     vinculaciones = VinculacionResumenSerializer(many=True, read_only=True)
+    legales_pendientes = serializers.SerializerMethodField()
 
     class Meta:
         model = UsuarioCliente
         fields = [
             'id', 'email', 'nombre', 'apellido',
             'email_verificado', 'creado_en',
-            'vinculaciones',
+            'vinculaciones', 'legales_pendientes',
         ]
         read_only_fields = ['id', 'email', 'email_verificado', 'creado_en']
+
+    def get_legales_pendientes(self, usuario):
+        """
+        Lo que la cuenta tiene que aceptar antes de seguir. Si no está vacío, la
+        app muestra la pantalla de aceptación en vez de la app.
+        """
+        return [
+            {
+                'documento': d.clave,
+                'titulo': d.titulo,
+                'version': d.version.isoformat(),
+                'ruta': d.ruta,
+            }
+            for d in legales_pendientes(usuario)
+        ]
 
 
 class RegistroSerializer(serializers.Serializer):
@@ -77,6 +95,15 @@ class RegistroSerializer(serializers.Serializer):
     apellido = serializers.CharField(required=False, allow_blank=True)
     telefono = serializers.CharField(required=False, allow_blank=True)
     centro = serializers.IntegerField(required=False)
+    # El consentimiento: sin la casilla tildada no hay cuenta.
+    acepta_privacidad = serializers.BooleanField(
+        error_messages={'required': 'Tenés que aceptar la política de privacidad.'},
+    )
+
+    def validate_acepta_privacidad(self, value):
+        if not value:
+            raise serializers.ValidationError('Tenés que aceptar la política de privacidad.')
+        return value
 
     def validate_email(self, value):
         value = value.strip().lower()
@@ -222,6 +249,27 @@ class EliminarCuentaSerializer(serializers.Serializer):
         if not self.context['usuario'].check_password(value):
             raise serializers.ValidationError('La contraseña no es correcta.')
         return value
+
+
+class AceptarLegalSerializer(serializers.Serializer):
+    """
+    Acepta un documento en una versión. La versión viaja para que nadie acepte
+    sin querer una que ya no es la vigente: si el documento cambió mientras la
+    pantalla estaba abierta, tiene que leer la nueva.
+    """
+    documento = serializers.CharField()
+    version = serializers.DateField()
+
+    def validate(self, attrs):
+        documento = legales.por_clave(attrs['documento'])
+        if documento is None:
+            raise serializers.ValidationError({'documento': 'Documento desconocido.'})
+        if attrs['version'] != documento.version:
+            raise serializers.ValidationError(
+                {'version': 'El documento cambió. Volvé a abrirlo para leer la versión vigente.'}
+            )
+        attrs['_documento'] = documento
+        return attrs
 
 
 class ClienteTokenRefreshSerializer(TokenRefreshSerializer):

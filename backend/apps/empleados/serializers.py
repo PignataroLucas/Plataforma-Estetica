@@ -39,7 +39,7 @@ class UsuarioDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'nombre_completo',
             'centro_estetica', 'sucursal', 'sucursal_data', 'telefono',
-            'fecha_nacimiento', 'direccion', 'foto', 'rol', 'rol_display',
+            'fecha_nacimiento', 'direccion', 'rol', 'rol_display',
             'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo',
             'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos',
             'creado_en', 'actualizado_en'
@@ -70,7 +70,7 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'password', 'password2',
             'first_name', 'last_name', 'sucursal', 'telefono',
-            'fecha_nacimiento', 'direccion', 'foto', 'rol',
+            'fecha_nacimiento', 'direccion', 'rol',
             'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo',
             'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos'
         ]
@@ -109,7 +109,7 @@ class UsuarioUpdateSerializer(serializers.ModelSerializer):
         model = Usuario
         fields = [
             'id', 'email', 'first_name', 'last_name', 'sucursal', 'telefono',
-            'fecha_nacimiento', 'direccion', 'foto', 'rol',
+            'fecha_nacimiento', 'direccion', 'rol',
             'fecha_ingreso', 'especialidades', 'sueldo_mensual', 'activo',
             'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos'
         ]
@@ -127,7 +127,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'nombre_completo',
             'centro_estetica', 'sucursal', 'telefono', 'fecha_nacimiento',
-            'direccion', 'foto', 'rol', 'fecha_ingreso', 'especialidades',
+            'direccion', 'rol', 'fecha_ingreso', 'especialidades',
             'sueldo_mensual', 'activo',
             'horario_inicio', 'horario_fin', 'dias_laborales', 'intervalo_minutos',
             'creado_en', 'actualizado_en'

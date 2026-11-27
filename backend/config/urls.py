@@ -47,6 +47,9 @@ urlpatterns = [
     path('api/empleados/', include('apps.empleados.urls')),
     path('api/notificaciones/', include('apps.notificaciones.urls')),
     path('api/analytics/', include('apps.analytics.urls')),
+
+    # Páginas públicas (no API): las enlazan la app y Google Play
+    path('legales/', include('apps.legales.urls')),
 ]
 
 # Serve media files in development

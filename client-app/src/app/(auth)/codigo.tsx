@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable } from 'react-native';
 
+import { AceptaPolitica } from '@/components/auth/AceptaPolitica';
 import { AuthScaffold } from '@/components/auth/AuthScaffold';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +11,7 @@ import { useAuthStore } from '@/stores/auth';
 import { colors } from '@/theme/ame';
 import { toFormErrors } from '@/utils/errors';
 
-const RENDERED = ['codigo', 'email', 'password'];
+const RENDERED = ['codigo', 'email', 'password', 'acepta_privacidad'];
 
 export default function Codigo() {
   const registrar = useAuthStore((s) => s.registrar);
@@ -18,6 +19,7 @@ export default function Codigo() {
   const [codigo, setCodigo] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acepta, setAcepta] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [general, setGeneral] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,12 +32,18 @@ export default function Codigo() {
     if (!codigo.trim()) locales.codigo = 'Ingresá tu código de invitación';
     if (!email.trim()) locales.email = 'Ingresá tu email';
     if (!password) locales.password = 'Elegí una contraseña';
+    if (!acepta) locales.acepta_privacidad = 'Para crear la cuenta tenés que aceptar la política';
     setErrors(locales);
     if (Object.keys(locales).length) return;
 
     setLoading(true);
     try {
-      await registrar({ email: email.trim(), password, codigo: codigo.trim() });
+      await registrar({
+        email: email.trim(),
+        password,
+        codigo: codigo.trim(),
+        acepta_privacidad: acepta,
+      });
       // El gate de auth (Stack.Protected) redirige a las tabs automáticamente.
     } catch (e) {
       const f = toFormErrors(e, RENDERED);
@@ -95,6 +103,7 @@ export default function Codigo() {
         returnKeyType="done"
         onSubmitEditing={submit}
       />
+      <AceptaPolitica value={acepta} onChange={setAcepta} error={errors.acepta_privacidad} />
       <Button label="Activar mi cuenta" onPress={submit} loading={loading} />
     </AuthScaffold>
   );

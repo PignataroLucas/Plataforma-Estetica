@@ -67,9 +67,6 @@ class ClienteSerializer(serializers.ModelSerializer):
             'ciudad',
             'provincia',
             'codigo_postal',
-            # Documento
-            'tipo_documento',
-            'numero_documento',
             # A) Datos del paciente (tracking)
             'motivo_consulta',
             'objetivo_principal',
@@ -109,7 +106,6 @@ class ClienteSerializer(serializers.ModelSerializer):
             'diagnostico_corporal',
             # Preferencias y marketing
             'preferencias',
-            'foto',
             'acepta_promociones',
             'acepta_whatsapp',
             # App
@@ -167,8 +163,6 @@ class HistorialClienteSerializer(serializers.ModelSerializer):
             'fecha',
             'observaciones',
             'resultado',
-            'foto_antes',
-            'foto_despues',
             'creado_en',
             'actualizado_en',
         ]

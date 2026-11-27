@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ titulo }} — AME esencial</title>
+  <style>
+    :root { --fondo: #F5F0EA; --tinta: #1A1712; --suave: #9C8E7F; --linea: #D5C4B9; --tarjeta: #FCFAF6; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--fondo); color: var(--tinta);
+      font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+    .marca { color: var(--suave); letter-spacing: .12em; font-size: 12px; text-transform: uppercase; }
+    h1, h2 { font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif; font-weight: 500; line-height: 1.2; }
+    h1 { font-size: 34px; margin: 8px 0 4px; }
+    h2 { font-size: 23px; margin: 32px 0 8px; }
+    ul { padding-left: 20px; }
+    li { margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; background: var(--tarjeta); font-size: 14px; }
+    th, td { border: 1px solid var(--linea); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #EBE0CE; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="marca">AME esencial</div>
+    {{ contenido|safe }}
+  </main>
+</body>
+</html>

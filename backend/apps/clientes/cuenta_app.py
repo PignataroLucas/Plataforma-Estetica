@@ -7,8 +7,8 @@ cosas distintas que conviven en la misma persona:
 
 - **La cuenta de la app** (``UsuarioCliente``) es de la clienta: el login, los
   teléfonos registrados para push, sus preferencias de avisos, los avisos que se
-  le mandaron, sus códigos de recuperación y los vínculos con cada centro. Todo
-  eso se borra.
+  le mandaron, sus códigos de recuperación, las constancias de que aceptó la
+  política de privacidad y los vínculos con cada centro. Todo eso se borra.
 - **La ficha del CRM** (``Cliente``) es del centro: el historial de tratamientos,
   los turnos, los pagos, la rutina. Existía antes de la app y el centro la
   necesita para seguir atendiéndola. **No se toca.** La política de privacidad lo

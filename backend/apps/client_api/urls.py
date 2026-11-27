@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AceptarLegalView,
     CancelarTurnoView,
     ClienteTokenRefreshView,
     DescuentoAppView,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('auth/password/olvide/', OlvideMiClaveView.as_view(), name='client-olvide-clave'),
     path('auth/password/restablecer/', RestablecerClaveView.as_view(), name='client-restablecer-clave'),
     path('perfil/', PerfilView.as_view(), name='client-perfil'),
+    path('legales/aceptar/', AceptarLegalView.as_view(), name='client-aceptar-legal'),
     path('mi-rutina/', MiRutinaView.as_view(), name='client-mi-rutina'),
     path('mi-rutina/pasos/<int:item_id>/hecho/', MiRutinaPasoView.as_view(),
          name='client-mi-rutina-paso-hecho'),

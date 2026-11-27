@@ -58,7 +58,6 @@ export interface Usuario {
   telefono: string
   fecha_nacimiento?: string
   direccion: string
-  foto?: string
   rol: Rol
   fecha_ingreso?: string
   especialidades: string
@@ -109,9 +108,6 @@ export interface Cliente {
   ciudad: string
   provincia: string
   codigo_postal: string
-  // Documento
-  tipo_documento: 'DNI' | 'PASAPORTE' | 'OTRO'
-  numero_documento: string
   // A) Datos del paciente (tracking)
   motivo_consulta?: string
   objetivo_principal?: string
@@ -157,7 +153,6 @@ export interface Cliente {
   segmento_app_nombre?: string | null
   /** Descuento que le corresponde de verdad, ya resuelta la caída al general. */
   descuento_app?: string
-  foto?: string
   acepta_promociones: boolean
   acepta_whatsapp: boolean
   // Estado
@@ -781,8 +776,6 @@ export interface HistorialCliente {
   fecha: string
   observaciones: string
   resultado: string
-  foto_antes?: string
-  foto_despues?: string
   creado_en: string
   actualizado_en: string
 }

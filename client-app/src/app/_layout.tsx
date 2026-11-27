@@ -33,6 +33,8 @@ export default function RootLayout() {
   });
 
   const status = useAuthStore((s) => s.status);
+  // `?? 0`: un backend sin el campo todavía no pide nada.
+  const legalesPendientes = useAuthStore((s) => (s.usuario?.legales_pendientes?.length ?? 0) > 0);
   const hydrate = useAuthStore((s) => s.hydrate);
 
   // Al arrancar, cargamos la sesión persistida y validamos el token.
@@ -55,7 +57,10 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <View style={styles.page}>
           <View style={styles.shell}>
-            <RootNavigator authenticated={status === 'authenticated'} />
+            <RootNavigator
+              authenticated={status === 'authenticated'}
+              legalesPendientes={legalesPendientes}
+            />
             {/* Va acá, último y dentro del shell, para quedar por encima de las
                 tabs y tapar el montaje de Inicio. */}
             <TransicionEntrada />
@@ -70,8 +75,17 @@ export default function RootLayout() {
  * Gate de navegación. `Stack.Protected` deja accesible solo el grupo cuyo guard
  * es true; al cambiar de sesión, expo-router redirige automáticamente al grupo
  * disponible (tabs si hay sesión, bienvenida/auth si no).
+ *
+ * Con sesión pero sin la política aceptada en su versión vigente, lo único
+ * accesible es la pantalla para aceptarla: no se usa la app sin consentimiento.
  */
-function RootNavigator({ authenticated }: { authenticated: boolean }) {
+function RootNavigator({
+  authenticated,
+  legalesPendientes,
+}: {
+  authenticated: boolean;
+  legalesPendientes: boolean;
+}) {
   // Va acá y no en RootLayout porque necesita el QueryClientProvider ya montado,
   // y porque para navegar el Stack tiene que existir.
   usePushNotifications();
@@ -79,7 +93,7 @@ function RootNavigator({ authenticated }: { authenticated: boolean }) {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={authenticated}>
+      <Stack.Protected guard={authenticated && !legalesPendientes}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="mi-rutina" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="servicios" options={{ animation: 'slide_from_right' }} />
@@ -87,6 +101,9 @@ function RootNavigator({ authenticated }: { authenticated: boolean }) {
         <Stack.Screen name="carrito" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="checkout" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="eliminar-cuenta" options={{ animation: 'slide_from_right' }} />
+      </Stack.Protected>
+      <Stack.Protected guard={authenticated && legalesPendientes}>
+        <Stack.Screen name="aceptar-politica" />
       </Stack.Protected>
       <Stack.Protected guard={!authenticated}>
         <Stack.Screen name="(auth)" />
