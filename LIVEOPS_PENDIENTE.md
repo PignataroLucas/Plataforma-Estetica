@@ -434,9 +434,13 @@ prender el día que el backend mande el token.
 con `Guia cuenta Google Play - AME.pdf`. Lucas entra como **Administrador**.
 
 **17/10/2026:** está lista la guía de una página para las testers (`Guia para
-testers - AME esencial.pdf`, en Descargas). Falta confirmar en qué quedó la
-cuenta y si los testers se cargan por lista de mails o por un Grupo de Google
-(recomendado para 12-15 personas que se suman de a poco).
+testers - AME esencial.pdf`, en Descargas). Falta decidir si los testers se
+cargan por lista de mails o por un Grupo de Google (recomendado para 12-15
+personas que se suman de a poco).
+
+**27/11/2026:** la cuenta está **aprobada** y Lucas es administrador. El
+abogado dio el visto bueno a la política. Las páginas legales todavía dan 404 en
+producción porque `Mobile/Main` no se mergeó a `main` (ver 8.2).
 
 ### 8.1 La cuenta
 
@@ -457,8 +461,15 @@ cerrada:
   - `https://plataforma-estetica-production.up.railway.app/legales/eliminar-cuenta/`
 
   **Antes de cargarlas en Play Console hay que completar lo que está entre
-  corchetes** (responsable, CUIT, mail, plazos), que hoy se ve tal cual en la
-  página. Sigue en revisión de AME y de un abogado.
+  corchetes** (responsable, domicilio, mail, plazos), que hoy se ve tal cual en
+  la página. El abogado ya la aprobó (27/11/2026). El CUIT se puede sacar; el
+  nombre, el domicilio y el mail no: la Ley 25.326 (artículo 6) obliga a
+  informar la identidad y el domicilio del responsable, y Google pide un
+  contacto de privacidad y una forma de pedir la baja de la cuenta sin tener la
+  app instalada, que es el mail.
+
+  **Las dos URLs dan 404 hasta que `Mobile/Main` se mergee a `main`**
+  (verificado el 27/11/2026): la app `legales` todavía no está desplegada.
 - **Borrar la cuenta desde la app:** hecho y en producción.
 - **Aceptar la política:** hecho. Casilla obligatoria al registrarse, pantalla
   de aceptación para las cuentas que ya existían, y link desde Perfil. Cuando la

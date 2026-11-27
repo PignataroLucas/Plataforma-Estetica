@@ -21,6 +21,11 @@ drf-spectacular==0.26.5
 # Caching & Task Queue
 redis==5.0.1
 celery==5.3.4
+# Fijado a mano: celery acepta cualquier kombu <6.0, y kombu 5.7.0 exige
+# redis-py >= 6.1. Sin esto, una instalación limpia (la CI o un deploy de
+# Railway) trae 5.7.0 y todo `.delay()` falla, incluido guardar un turno.
+# Subirlo junto con redis, no por separado.
+kombu==5.6.2
 django-redis==5.4.0
 
 # Environment Variables
